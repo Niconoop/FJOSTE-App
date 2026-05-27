@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Play, Square, Settings, Key, Clock, MessageSquare, Plus, Trash2, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
+import { Bot, Play, Square, Settings, Key, Clock, MessageSquare, Plus, Trash2, ShieldAlert, Volume2, VolumeX, Truck, Coffee } from 'lucide-react';
 import { toast } from 'sonner';
 
 const AfkBot = () => {
   const [running, setRunning] = useState(false);
   const [hotkey, setHotkey] = useState(() => localStorage.getItem('afk_hotkey') || 'F9');
   const [intervalSec, setIntervalSec] = useState(() => Number(localStorage.getItem('afk_interval')) || 60);
-  const [texts, setTexts] = useState<string[]>(() => {
-    const saved = localStorage.getItem('afk_texts');
-    return saved ? JSON.parse(saved) : ['/fix', 'Bin kurz AFK', 'Folge dem Konvoi!'];
+  const [activeTab, setActiveTab] = useState<'driving' | 'paused'>('driving');
+  const [drivingTexts, setDrivingTexts] = useState<string[]>(() => {
+    const saved = localStorage.getItem('afk_driving_texts');
+    if (saved) return JSON.parse(saved);
+    const old = localStorage.getItem('afk_texts');
+    return old ? JSON.parse(old) : ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
+  });
+  const [pausedTexts, setPausedTexts] = useState<string[]>(() => {
+    const saved = localStorage.getItem('afk_paused_texts');
+    if (saved) return JSON.parse(saved);
+    const old = localStorage.getItem('afk_texts');
+    return old ? JSON.parse(old) : ['Bin kurz AFK', 'Pause...', '/fix'];
   });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('afk_sound_enabled') !== 'false');
   const [newText, setNewText] = useState('');
@@ -17,14 +26,16 @@ const AfkBot = () => {
     // Save settings to localStorage
     localStorage.setItem('afk_hotkey', hotkey);
     localStorage.setItem('afk_interval', intervalSec.toString());
-    localStorage.setItem('afk_texts', JSON.stringify(texts));
+    localStorage.setItem('afk_driving_texts', JSON.stringify(drivingTexts));
+    localStorage.setItem('afk_paused_texts', JSON.stringify(pausedTexts));
     localStorage.setItem('afk_sound_enabled', soundEnabled.toString());
 
     const ipc = window.require ? window.require('electron').ipcRenderer : null;
     if (ipc) {
       ipc.send('afk-configure', {
         interval: intervalSec * 1000,
-        texts: texts,
+        drivingTexts: drivingTexts,
+        pausedTexts: pausedTexts,
         hotkey: hotkey
       });
 
@@ -39,7 +50,7 @@ const AfkBot = () => {
 
       return () => ipc.removeListener('afk-status-changed', handleStatusChange);
     }
-  }, [intervalSec, texts, hotkey, soundEnabled]);
+  }, [intervalSec, drivingTexts, pausedTexts, hotkey, soundEnabled]);
 
   const toggleBot = () => {
     const ipc = window.require ? window.require('electron').ipcRenderer : null;
@@ -48,13 +59,23 @@ const AfkBot = () => {
 
   const addText = () => {
     if (!newText.trim()) return;
-    setTexts([...texts, newText.trim()]);
+    if (activeTab === 'driving') {
+      setDrivingTexts([...drivingTexts, newText.trim()]);
+    } else {
+      setPausedTexts([...pausedTexts, newText.trim()]);
+    }
     setNewText('');
   };
 
   const removeText = (idx: number) => {
-    setTexts(texts.filter((_, i) => i !== idx));
+    if (activeTab === 'driving') {
+      setDrivingTexts(drivingTexts.filter((_, i) => i !== idx));
+    } else {
+      setPausedTexts(pausedTexts.filter((_, i) => i !== idx));
+    }
   };
+
+  const currentTexts = activeTab === 'driving' ? drivingTexts : pausedTexts;
 
   return (
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
@@ -175,10 +196,37 @@ const AfkBot = () => {
           </div>
 
           <div className="space-y-4 pt-4 border-t border-white/5">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-              <MessageSquare size={12} /> Nachrichten-Pool
-            </label>
-            <p className="text-[10px] text-slate-400">Der Bot wählt bei jedem Intervall zufällig eine dieser Nachrichten aus.</p>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                <MessageSquare size={12} /> Nachrichten-Pools
+              </label>
+            </div>
+            
+            {/* Tabs */}
+            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+              <button
+                type="button"
+                onClick={() => setActiveTab('driving')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'driving' ? 'bg-primary text-black shadow-lg shadow-primary/10' : 'text-slate-400 hover:text-white'}`}
+              >
+                <Truck size={12} />
+                Beim Fahren
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('paused')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'paused' ? 'bg-primary text-black shadow-lg shadow-primary/10' : 'text-slate-400 hover:text-white'}`}
+              >
+                <Coffee size={12} />
+                Pause / Stand
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-400">
+              {activeTab === 'driving' 
+                ? 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn du fährst (Geschwindigkeit > 1 km/h).' 
+                : 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn dein Lkw steht oder das Spiel pausiert ist.'}
+            </p>
             
             <div className="flex gap-2">
               <input
@@ -187,7 +235,7 @@ const AfkBot = () => {
                 onChange={e => setNewText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addText()}
                 className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/50 outline-none"
-                placeholder="Neue Nachricht..."
+                placeholder={activeTab === 'driving' ? "Neue Fahr-Nachricht..." : "Neue Stand-Nachricht..."}
               />
               <button onClick={addText} className="bg-primary/20 text-primary border border-primary/30 px-4 rounded-xl hover:bg-primary hover:text-black transition-all">
                 <Plus size={18} />
@@ -195,7 +243,7 @@ const AfkBot = () => {
             </div>
 
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-              {texts.map((t, idx) => (
+              {currentTexts.map((t, idx) => (
                 <div key={idx} className="flex items-center justify-between bg-black/40 border border-white/5 p-3 rounded-xl group hover:border-white/10 transition-colors">
                   <span className="text-sm font-medium text-slate-300">{t}</span>
                   <button onClick={() => removeText(idx)} className="text-slate-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
@@ -203,7 +251,7 @@ const AfkBot = () => {
                   </button>
                 </div>
               ))}
-              {texts.length === 0 && (
+              {currentTexts.length === 0 && (
                 <div className="text-center py-6 text-slate-500 text-xs italic">
                   Keine Nachrichten definiert.
                 </div>

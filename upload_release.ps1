@@ -63,21 +63,23 @@ try {
     write-warning "Git-Tag konnte nicht erstellt/gepusht werden. Eventuell existiert es bereits."
 }
 
-# 4. Extract release notes from CHANGELOG.md if available
+# 4. Extract the latest changelog entry from CHANGELOG.md
 $releaseBody = ""
 $changelogPath = "../CHANGELOG.md"
 if (Test-Path $changelogPath) {
-    $lines = Get-Content $changelogPath
+    $lines = Get-Content -Encoding UTF8 $changelogPath
     $started = $false
     $changelogLines = @()
     foreach ($line in $lines) {
-        # Matches '## [1.1.0]' or '## 1.1.0'
-        if ($line -match "^##\s*\[?$([regex]::Escape($version))\]?") {
-            $started = $true
-            continue
-        }
-        if ($started -and ($line -match "^##\s")) {
-            break
+        # Match the first header starting with ## (the latest version entry)
+        if ($line -match "^##\s") {
+            if (-not $started) {
+                $started = $true
+                continue
+            } else {
+                # We reached the second ## header, so stop
+                break
+            }
         }
         if ($started) {
             $changelogLines += $line
@@ -95,7 +97,7 @@ if (-not $releaseBody) {
 # 5. Create Release on GitHub
 write-host ""
 write-host "[2/3] Erstelle GitHub-Release v$version..."
-$body = @{
+$bodyJson = @{
     tag_name = "v$version"
     target_commitish = "main"
     name = "v$version"
@@ -103,6 +105,9 @@ $body = @{
     draft = $false
     prerelease = $false
 } | ConvertTo-Json
+
+# Convert JSON to a UTF-8 byte array to prevent PowerShell 5.1 from mangling German characters (umlauts/eszett)
+$bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($bodyJson)
 
 # Check if release already exists, delete it if so to allow clean re-upload
 try {
@@ -116,7 +121,7 @@ try {
 } catch {}
 
 # Post new release
-$response = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $body -ContentType "application/json"
+$response = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Method Post -Headers $headers -Body $bodyBytes -ContentType "application/json; charset=utf-8"
 $uploadUrl = $response.upload_url -replace '\{\?name,label\}', ''
 write-host "[OK] Release v$version auf GitHub erstellt."
 

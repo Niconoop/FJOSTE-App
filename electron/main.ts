@@ -860,7 +860,17 @@ ipcMain.handle('telemetry-status', () => telemetryData);
 // Anti AFK Bot
 let afkIntervalId: NodeJS.Timeout | null = null;
 let afkStartTimeout: NodeJS.Timeout | null = null;
-let afkConfig = { interval: 60000, texts: [""] };
+let afkConfig: {
+  interval: number;
+  drivingTexts: string[];
+  pausedTexts: string[];
+  hotkey?: string;
+} = {
+  interval: 60000,
+  drivingTexts: [],
+  pausedTexts: [],
+  hotkey: "F9"
+};
 let isAfkRunning = false;
 
 function playBotSound(type: 'start' | 'stop') {
@@ -869,9 +879,23 @@ function playBotSound(type: 'start' | 'stop') {
 }
 
 function runAfkTask() {
-  if (afkConfig.texts.length === 0) return;
-  const text = afkConfig.texts[Math.floor(Math.random() * afkConfig.texts.length)];
-  console.log(`🤖 AFK-Bot: Sende Nachricht... "${text}"`);
+  if (telemetryData && telemetryData.paused) {
+    console.log("🤖 AFK-Bot: Übersprungen, da das Spiel pausiert ist.");
+    return;
+  }
+
+  const isDriving = telemetryData && 
+                    telemetryData.gameVersion > 0 &&
+                    Math.round(telemetryData.speed || 0) > 1;
+
+  let pool = isDriving ? afkConfig.drivingTexts : afkConfig.pausedTexts;
+  if (!pool || pool.length === 0) {
+    pool = isDriving ? afkConfig.pausedTexts : afkConfig.drivingTexts;
+  }
+  if (!pool || pool.length === 0) return;
+
+  const text = pool[Math.floor(Math.random() * pool.length)];
+  console.log(`🤖 AFK-Bot: Sende Nachricht... "${text}" (Fahren: ${!!isDriving})`);
 
   const psScript = `
  Add-Type @"
