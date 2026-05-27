@@ -1,0 +1,97 @@
+{
+  "name": "FJOSTE-APP",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Custom telemetry tracker for ETS2 and ATS.",
+  "author": "Ally",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "set NODE_OPTIONS=--no-deprecation && vite",
+    "build": "set NODE_OPTIONS=--no-deprecation && vite build",
+    "preview": "set NODE_OPTIONS=--no-deprecation && vite preview",
+    "dist": "set NODE_OPTIONS=--no-deprecation && vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.fjostegroup.tracker",
+    "productName": "FJOSTE App",
+    "compression": "maximum",
+    "asar": true,
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "dist",
+      "dist-electron",
+      "package.json",
+      "!**/*.md",
+      "!**/*.map",
+      "!**/tsconfig*.json"
+    ],
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true,
+      "artifactName": "${productName} Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/logo.png"
+    }
+  },
+  "dependencies": {
+    "discord-rpc": "^4.0.1"
+  },
+  "devDependencies": {
+    "date-fns": "^4.1.0",
+    "maplibre-gl": "^5.24.0",
+    "pmtiles": "^4.4.1",
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/discord-rpc": "^4.0.10",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "axios": "^1.16.0",
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "framer-motion": "^12.38.0",
+    "globals": "^17.5.0",
+    "lucide-react": "^1.14.0",
+    "postcss": "^8.5.14",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-is": "^19.2.5",
+    "react-router-dom": "^7.15.0",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "tailwindcss": "^4.2.4",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.10",
+    "vite-plugin-electron": "^0.29.1"
+  }
+}

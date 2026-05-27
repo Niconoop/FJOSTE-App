@@ -1,0 +1,446 @@
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #f8fafc;
+  --card: rgba(10, 10, 10, 0.95);
+  --border: rgba(43, 161, 185, 0.2);
+  --primary: #2ba1b9;
+  --glass-card-bg: rgba(0, 0, 0, 0.95);
+  --shadow-color: rgba(0, 0, 0, 0.8);
+}
+
+
+:root.light {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --border: rgba(43, 161, 185, 0.35);
+  --primary: #1a7f96;
+  --glass-card-bg: rgba(255, 255, 255, 0.95);
+  --shadow-color: rgba(15, 23, 42, 0.18);
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --font-unbounded: "Unbounded", sans-serif;
+  --font-outfit: "Outfit", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground font-outfit antialiased overflow-x-hidden;
+    margin: 0;
+    -webkit-app-region: no-drag; /* Disable dragging by default */
+  }
+
+  .drag {
+    -webkit-app-region: drag; /* Enable dragging for specific areas */
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag; /* Ensure buttons/inputs are clickable */
+  }
+  
+  button, a, input, select, textarea {
+    -webkit-app-region: no-drag;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-unbounded;
+  }
+}
+
+@utility glass-card {
+  background: var(--glass-card-bg) !important;
+  border: 2px solid var(--border) !important;
+  backdrop-filter: blur(100px);
+  border-radius: 24px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 25px 60px -12px var(--shadow-color);
+}
+
+@utility glass {
+  background: var(--card) !important;
+  border: 2px solid var(--border) !important;
+  backdrop-filter: blur(14px);
+  border-radius: 12px;
+}
+
+@utility nav-pill {
+  @apply px-4 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 text-slate-400 hover:text-white hover:bg-white/5;
+}
+
+@utility hover-glow {
+  @apply transition-all duration-300 hover:border-primary hover:shadow-[0_0_20px_rgba(43,161,185,0.2)] hover:-translate-y-1;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.nav-pill.active {
+  @apply bg-primary/15 text-primary;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/30 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary/50;
+}
+
+/* Animations */
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+.animate-blob {
+  animation: blob 15s infinite alternate;
+}
+
+/* --- Premium Light Mode Overrides --- */
+.light {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+.light body {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+
+/* Map bg-black, bg-[#000000], bg-[#0a0a0a], bg-[#050507], bg-slate-950, etc. to var(--card) */
+.light .bg-black,
+.light .bg-\[\#000000\],
+.light .bg-\[\#0a0a0a\],
+.light .bg-\[\#050507\],
+.light .bg-slate-950,
+.light .bg-slate-900,
+.light .bg-\[\#010101\],
+.light .\!bg-\[\#000000\],
+.light .\!bg-black {
+  background-color: #ffffff !important;
+}
+
+/* Text color overrides */
+.light .text-white,
+.light .text-slate-200,
+.light .text-slate-100 {
+  color: var(--foreground) !important;
+}
+
+.light .text-slate-400 {
+  color: #475569 !important;
+}
+
+.light .text-slate-300 {
+  color: #334155 !important;
+}
+
+.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.light .text-slate-600 {
+  color: #475569 !important;
+}
+
+.light .text-slate-700 {
+  color: #334155 !important;
+}
+
+/* Transparent white text colors mapping in light mode */
+.light .text-white\/10 { color: rgba(15, 23, 42, 0.1) !important; }
+.light .text-white\/20 { color: rgba(15, 23, 42, 0.2) !important; }
+.light .text-white\/30 { color: rgba(15, 23, 42, 0.3) !important; }
+.light .text-white\/40 { color: rgba(15, 23, 42, 0.4) !important; }
+.light .text-white\/50 { color: rgba(15, 23, 42, 0.5) !important; }
+.light .text-white\/60 { color: rgba(15, 23, 42, 0.6) !important; }
+.light .text-white\/70 { color: rgba(15, 23, 42, 0.7) !important; }
+.light .text-white\/80 { color: rgba(15, 23, 42, 0.8) !important; }
+.light .text-white\/90 { color: rgba(15, 23, 42, 0.9) !important; }
+
+/* Force standard dark inputs / calendars to light */
+.light .\[color-scheme\:dark\] {
+  color-scheme: light !important;
+}
+
+/* Borders */
+.light .border-white\/10,
+.light .border-white\/5,
+.light .border-slate-800,
+.light .border-\[\#2ba1b9\]\/20,
+.light .border-slate-800\/50 {
+  border-color: var(--border) !important;
+}
+
+/* Navigation & Interactive Elements */
+.light .nav-pill:hover {
+  color: var(--foreground) !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.light .nav-pill.active {
+  background-color: rgba(26, 127, 150, 0.15) !important;
+  color: var(--primary) !important;
+}
+
+.light .hover\:text-white:hover {
+  color: var(--foreground) !important;
+}
+
+/* Inputs & Form Fields */
+.light input:not([type="checkbox"]):not([type="radio"]), 
+.light select, 
+.light textarea,
+.light .glass-input {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: var(--foreground) !important;
+}
+
+.light input:focus,
+.light select:focus,
+.light textarea:focus,
+.light .glass-input:focus {
+  border-color: var(--primary) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  outline: none;
+}
+
+.light input::-webkit-calendar-picker-indicator {
+  filter: invert(0) !important;
+}
+
+/* Cards & Modals */
+.light .bg-white\/\[0\.03\],
+.light .bg-white\/\[0\.04\],
+.light .bg-white\/\[0\.05\],
+.light .bg-slate-800 {
+  background-color: rgba(0, 0, 0, 0.06) !important; /* Slightly darker for nice contrast as inactive state or avatar background */
+}
+
+/* Custom Scrollbar for Light Mode */
+.light ::-webkit-scrollbar-track {
+  background: var(--background) !important;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(26, 127, 150, 0.3) !important;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 127, 150, 0.5) !important;
+}
+
+/* Custom Overrides for Calendar & Overlay Settings in Light Mode */
+.light .bg-black\/60,
+.light .\!bg-black\/60,
+.light .\!bg-black\/40,
+.light .bg-black\/95,
+.light .bg-black\/90,
+.light .\!bg-black\/95,
+.light .\!bg-black\/90 {
+  background-color: var(--card) !important;
+}
+
+
+/* Light mode: make high opacity black overlays transparent */
+.light .bg-black\/80,
+.light .bg-black\/95 {
+  background-color: transparent !important;
+}
+
+.light [class*="bg-black"] {
+  background-color: var(--background) !important;
+}
+
+/* Ensure all bg-black opacity utilities become transparent in Light mode */
+.light [class*="bg-black/"] {
+  background-color: transparent !important;
+}
+
+.light .bg-black,
+.light .\!bg-black {
+  background-color: var(--background) !important;
+}
+
+/* Light mode - override slate dark backgrounds */
+.light .bg-slate-800,
+.light .bg-slate-900,
+.light .bg-slate-950 {
+  background-color: var(--background) !important;
+}
+
+
+/* Light mode - ensure body and html have white background */
+.light body,
+.light html {
+  background-color: var(--background) !important;
+}
+
+.light .bg-black\/40 {
+  background-color: transparent !important;
+}
+.light .bg-black\/20,
+.light .bg-black\/80 {
+  background-color: transparent !important;
+}
+
+.light .bg-white\/\[0\.02\] {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+.light .bg-white\/\[0\.01\] {
+  background-color: rgba(0, 0, 0, 0.01) !important;
+}
+
+.light .hover\:bg-black\/60:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+.light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Specific overrides for Calendar Days to preserve inverted contrasts */
+.light .glass-card .bg-black\/20 {
+  background-color: var(--card) !important;
+}
+.light .glass-card .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+.light .bg-slate-900,
+.light .bg-slate-950,
+.light .bg-\[\#000000\] {
+  background-color: var(--card) !important;
+}
+
+.light .bg-white\/5,
+.light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Light Mode Backdrop for fixed Modals */
+.light .fixed.bg-black\/90,
+.light .fixed.bg-black\/80,
+.light .fixed.bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+/* Globales Erzwingen des Light Modes für alle nativeren DateTime Inputs */
+.light input[type="time"],
+.light input[type="date"],
+.light input[type="datetime-local"] {
+  color-scheme: light !important;
+}
+
+/* Hover-Effekte auf helle Ränder */
+.light .hover\:border-white\/20:hover {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Premium Image & Gradient Overrides für kleine Kalender-Event-Kärtchen */
+.light .group.rounded-lg.overflow-hidden .bg-gradient-to-t {
+  background-image: linear-gradient(to top, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.35), transparent) !important;
+}
+.light .group.rounded-lg.overflow-hidden {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Weekend & Weekday styling in Calendar for both Dark & Light Modes */
+.calendar-weekday {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+.calendar-weekend {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.light .calendar-weekday {
+  background-color: var(--card) !important;
+}
+.light .calendar-weekend {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Light mode toggle switches override */
+.light .switch-toggle {
+  background-color: rgba(0, 0, 0, 0.15) !important;
+}
+.light .switch-toggle.bg-primary {
+  background-color: var(--primary) !important;
+}
+
+/* Custom stronger shadows for Tailwind utility classes in Light Mode */
+.light .shadow-sm {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+}
+.light .shadow-md {
+  box-shadow: 0 4px 8px -1px rgba(15, 23, 42, 0.14), 0 2px 4px -2px rgba(15, 23, 42, 0.1) !important;
+}
+.light .shadow-lg {
+  box-shadow: 0 10px 20px -3px rgba(15, 23, 42, 0.16), 0 4px 8px -4px rgba(15, 23, 42, 0.12) !important;
+}
+.light .shadow-xl {
+  box-shadow: 0 20px 30px -5px rgba(15, 23, 42, 0.22), 0 8px 12px -6px rgba(15, 23, 42, 0.15) !important;
+}
+.light .shadow-2xl {
+  box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.28) !important;
+}
+
+/* Glass card shadows override for Light Mode to ensure consistent density */
+.light .glass-card,
+.light [class*="glass-card"] {
+  box-shadow: 0 20px 35px -10px rgba(15, 23, 42, 0.18), 0 10px 20px -5px rgba(15, 23, 42, 0.12) !important;
+}
+
+/* Background Animated Blobs */
+.bg-blob-1 {
+  background: radial-gradient(circle, rgba(34, 209, 238, 0.08) 0%, transparent 70%) !important;
+  filter: blur(80px);
+}
+.bg-blob-2 {
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.06) 0%, transparent 70%) !important;
+  filter: blur(90px);
+}
+.bg-blob-3 {
+  background: radial-gradient(circle, rgba(34, 209, 238, 0.05) 0%, transparent 70%) !important;
+  filter: blur(70px);
+}
+
+/* Light Mode Overrides for Blobs (increased opacity and slightly reduced blur to make them prominent) */
+.light .bg-blob-1 {
+  background: radial-gradient(circle, rgba(43, 161, 185, 0.22) 0%, transparent 75%) !important;
+  filter: blur(65px);
+}
+.light .bg-blob-2 {
+  background: radial-gradient(circle, rgba(26, 127, 150, 0.20) 0%, transparent 75%) !important;
+  filter: blur(75px);
+}
+.light .bg-blob-3 {
+  background: radial-gradient(circle, rgba(43, 161, 185, 0.18) 0%, transparent 75%) !important;
+  filter: blur(55px);
+}
+
+
+

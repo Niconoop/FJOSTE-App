@@ -1,0 +1,161 @@
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { UserPlus, Loader2, User as UserIcon, Lock, Hash, X, Minus, Square } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { toast } from 'sonner';
+
+const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { register } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await register(username, password, inviteCode);
+      toast.success('Account erstellt! Willkommen!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Registrierung fehlgeschlagen. Prüfe deinen Einladungscode.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen relative flex items-center justify-center p-6 bg-[#000000]">
+      {/* Window Controls */}
+      <div className="absolute top-0 left-0 right-0 h-16 drag z-20 flex justify-end items-center px-6">
+        <div className="flex items-center gap-1 no-drag">
+          <button
+            onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch (e) { } }}
+            className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+            title="Minimieren"
+          >
+            <Minus size={18} />
+          </button>
+          <button
+            onClick={() => { try { window.require('electron').ipcRenderer.send('window-maximize') } catch (e) { } }}
+            className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+            title="Vollbild"
+          >
+            <Square size={16} />
+          </button>
+          <button
+            onClick={() => { try { window.require('electron').ipcRenderer.send('window-close') } catch (e) { } }}
+            className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+            title="Schließen"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+
+      <AnimatedBackground />
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative z-10 w-full max-w-md"
+      >
+        <div className="text-center mb-10">
+          <img src="logo.png" alt="FJOSTE Logo" className="w-40 h-40 object-contain mx-auto mb-6 drop-shadow-[0_0_40px_rgba(43,161,185,0.6)]" />
+          <h1 className="font-unbounded text-3xl font-black text-white uppercase tracking-tighter italic">Registrieren</h1>
+          <p className="text-slate-500 font-medium mt-2">Du brauchst einen Einladungscode</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="glass-card !p-8 space-y-6">
+          <div className="space-y-4">
+            {/* Invite Code */}
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1 mb-2 block">
+                Einladungscode
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
+                  <Hash size={18} />
+                </div>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white font-mono tracking-[0.3em] text-center uppercase focus:outline-none focus:border-primary/50 focus:bg-white/[0.05] transition-all placeholder:normal-case placeholder:tracking-normal"
+                  placeholder="8-stelliger Code"
+                  maxLength={8}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Username */}
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1 mb-2 block">
+                Benutzername
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
+                  <UserIcon size={18} />
+                </div>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white focus:outline-none focus:border-primary/50 focus:bg-white/[0.05] transition-all"
+                  placeholder="Benutzername wählen"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1 mb-2 block">
+                Passwort
+              </label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
+                  <Lock size={18} />
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-black border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white focus:outline-none focus:border-primary/50 focus:bg-white/[0.05] transition-all"
+                  placeholder="Passwort wählen"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-primary hover:bg-primary/90 text-black font-black uppercase tracking-widest py-4 rounded-2xl shadow-[0_0_20px_rgba(43,161,185,0.3)] transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isSubmitting
+              ? <Loader2 size={24} className="animate-spin mx-auto" />
+              : <div className="flex items-center justify-center gap-2"><UserPlus size={20} /> Account erstellen</div>
+            }
+          </button>
+
+          <p className="text-center text-xs text-slate-500 font-medium">
+            Bereits registriert?{' '}
+            <button
+              type="button"
+              onClick={onSwitchToLogin}
+              className="text-primary hover:underline"
+            >
+              Anmelden
+            </button>
+          </p>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+export default Register;
