@@ -1227,7 +1227,7 @@ function downloadAndApplyUpdate(url: string, event: any) {
       }
 
       try {
-        const psCommand = `Start-Sleep -Seconds 2; Copy-Item -Path '${tempUpdateExe}' -Destination '${currentExe}' -Force; Start-Process '${currentExe}'`;
+        const psCommand = `$pid = ${process.pid}; for ($i=0; $i -lt 25; $i++) { if (!(Get-Process -Id $pid -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 200 }; if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }; for ($i=0; $i -lt 5; $i++) { try { Copy-Item -Path '${tempUpdateExe.replace(/'/g, "''")}' -Destination '${currentExe.replace(/'/g, "''")}' -Force -ErrorAction Stop; break } catch { Start-Sleep -Seconds 1 } }; Start-Process '${currentExe.replace(/'/g, "''")}'`;
         const child = spawn('powershell', ['-Command', psCommand], {
           detached: true,
           stdio: 'ignore'
@@ -1272,7 +1272,7 @@ ipcMain.on('install-app-update', async (event) => {
     res.on('end', () => {
       try {
         const release = JSON.parse(data);
-        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe'));
+        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
 
         if (!asset) {
           event.sender.send('install-update-progress', { progress: 0, status: 'Keine .exe Datei im neuesten Release gefunden.', error: true });

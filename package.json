@@ -1,9 +1,9 @@
 {
   "name": "FJOSTE-APP",
   "private": true,
-  "version": "1.2.0",
-  "description": "Custom telemetry tracker for ETS2 and ATS.",
-  "author": "Ally",
+  "version": "1.2.1",
+  "description": "Job Tracker und DriversHUB der FJOSTE Group",
+  "author": "FJOSTE",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
