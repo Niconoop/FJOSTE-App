@@ -1,7 +1,7 @@
 {
   "name": "FJOSTE-APP",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Custom telemetry tracker for ETS2 and ATS.",
   "author": "Ally",
   "type": "module",
