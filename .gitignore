@@ -26,3 +26,6 @@ dist-ssr
 # Build output directories
 dist-app/
 dist-electron/
+
+# Local credentials
+.github_token
