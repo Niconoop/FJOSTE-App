@@ -63,14 +63,43 @@ try {
     write-warning "Git-Tag konnte nicht erstellt/gepusht werden. Eventuell existiert es bereits."
 }
 
-# 4. Create Release on GitHub
+# 4. Extract release notes from CHANGELOG.md if available
+$releaseBody = ""
+$changelogPath = "../CHANGELOG.md"
+if (Test-Path $changelogPath) {
+    $lines = Get-Content $changelogPath
+    $started = $false
+    $changelogLines = @()
+    foreach ($line in $lines) {
+        # Matches '## [1.1.0]' or '## 1.1.0'
+        if ($line -match "^##\s*\[?$([regex]::Escape($version))\]?") {
+            $started = $true
+            continue
+        }
+        if ($started -and ($line -match "^##\s")) {
+            break
+        }
+        if ($started) {
+            $changelogLines += $line
+        }
+    }
+    if ($changelogLines.Count -gt 0) {
+        $releaseBody = ($changelogLines -join "`n").Trim()
+    }
+}
+
+if (-not $releaseBody) {
+    $releaseBody = "Release fuer Version v$version. Automatisch hochgeladen durch das FJOSTE Upload Tool."
+}
+
+# 5. Create Release on GitHub
 write-host ""
 write-host "[2/3] Erstelle GitHub-Release v$version..."
 $body = @{
     tag_name = "v$version"
     target_commitish = "main"
     name = "v$version"
-    body = "Release fuer Version v$version. Automatisch hochgeladen durch das FJOSTE Upload Tool."
+    body = $releaseBody
     draft = $false
     prerelease = $false
 } | ConvertTo-Json
