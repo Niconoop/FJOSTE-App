@@ -348,7 +348,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
                       </div>
                     )}
                     <div className={`space-y-1 ${isOwn ? "items-end" : "items-start"}`}>
-                      {!isOwn && <p className="text-[10px] font-black text-primary uppercase tracking-widest ml-1">{msg.username}</p>}
+                      {!isOwn && (<p className="text-[10px] font-black text-primary uppercase tracking-widest ml-1 flex items-center gap-1">{msg.username} <span className="text-[9px] font-normal text-slate-400 uppercase">({users.find(u => u.id === msg.user_id)?.role?.name ?? users.find(u => u.id === msg.user_id)?.role ?? ''})</span></p>)}
                       <div className={`px-4 py-2.5 rounded-2xl text-sm relative transition-all ${isOwn ? "bg-primary text-black font-bold shadow-[0_5px_15px_rgba(34,209,238,0.2)] rounded-tr-none" : "bg-[#000000] border-2 border-[#2ba1b9]/20 text-slate-200 rounded-tl-none hover:border-[#2ba1b9]/60"}`}>
                         {msg.content}
                         <div className={`flex items-center gap-2 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
