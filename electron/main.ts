@@ -1167,15 +1167,17 @@ ipcMain.handle('check-app-update', async () => {
 });
 
 function downloadAndApplyUpdate(url: string, event: any) {
-  const tempUpdateExe = path.join(app.getPath('temp'), 'FJOSTE-Tracker-Update.exe');
+  const isPortable = app.isPackaged && !!process.env.PORTABLE_EXECUTABLE_FILE;
+  const tempFileName = isPortable ? 'FJOSTE-Tracker-Update.exe' : 'FJOSTE-Tracker-Setup.exe';
+  const tempUpdatePath = path.join(app.getPath('temp'), tempFileName);
 
-  if (fs.existsSync(tempUpdateExe)) {
+  if (fs.existsSync(tempUpdatePath)) {
     try {
-      fs.unlinkSync(tempUpdateExe);
+      fs.unlinkSync(tempUpdatePath);
     } catch (e) {}
   }
 
-  const file = fs.createWriteStream(tempUpdateExe, { highWaterMark: 1024 * 1024 });
+  const file = fs.createWriteStream(tempUpdatePath, { highWaterMark: 1024 * 1024 });
   const options = {
     headers: {
       'User-Agent': 'FJOSTE-App',
@@ -1217,8 +1219,6 @@ function downloadAndApplyUpdate(url: string, event: any) {
 
       event.sender.send('install-update-progress', { progress: 95, status: 'Bereite Anwendung vor...' });
 
-      const currentExe = app.getPath('exe');
-
       if (!app.isPackaged) {
         setTimeout(() => {
           event.sender.send('install-update-progress', { progress: 100, status: 'Erfolgreich! (Dev-Mode Simulation)', success: true });
@@ -1226,26 +1226,46 @@ function downloadAndApplyUpdate(url: string, event: any) {
         return;
       }
 
-      try {
-        const psCommand = `$pid = ${process.pid}; for ($i=0; $i -lt 25; $i++) { if (!(Get-Process -Id $pid -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 200 }; if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }; for ($i=0; $i -lt 5; $i++) { try { Copy-Item -Path '${tempUpdateExe.replace(/'/g, "''")}' -Destination '${currentExe.replace(/'/g, "''")}' -Force -ErrorAction Stop; break } catch { Start-Sleep -Seconds 1 } }; Start-Process '${currentExe.replace(/'/g, "''")}'`;
-        const child = spawn('powershell', ['-Command', psCommand], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        child.unref();
+      if (isPortable) {
+        try {
+          const portableExe = process.env.PORTABLE_EXECUTABLE_FILE!;
+          const psCommand = `$pid = ${process.pid}; for ($i=0; $i -lt 25; $i++) { if (!(Get-Process -Id $pid -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 200 }; if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }; for ($i=0; $i -lt 10; $i++) { try { Copy-Item -Path '${tempUpdatePath.replace(/'/g, "''")}' -Destination '${portableExe.replace(/'/g, "''")}' -Force -ErrorAction Stop; break } catch { Start-Sleep -Seconds 1 } }; Start-Process '${portableExe.replace(/'/g, "''")}'`;
+          const child = spawn('powershell', ['-Command', psCommand], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          child.unref();
 
-        event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+          event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
 
-        setTimeout(() => {
-          app.quit();
-        }, 1000);
-      } catch (err: any) {
-        console.error('Failed to run update script:', err);
-        event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
+          setTimeout(() => {
+            app.quit();
+          }, 1000);
+        } catch (err: any) {
+          console.error('Failed to run update script:', err);
+          event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
+        }
+      } else {
+        try {
+          const child = spawn(tempUpdatePath, ['/S', '--force-run'], {
+            detached: true,
+            stdio: 'ignore'
+          });
+          child.unref();
+
+          event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+
+          setTimeout(() => {
+            app.quit();
+          }, 1000);
+        } catch (err: any) {
+          console.error('Failed to run installer:', err);
+          event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Starten des Installers: ${err.message}`, error: true });
+        }
       }
     });
   }).on('error', (err) => {
-    try { fs.unlinkSync(tempUpdateExe); } catch (e) {}
+    try { fs.unlinkSync(tempUpdatePath); } catch (e) {}
     event.sender.send('install-update-progress', { progress: 0, status: `Download Fehler: ${err.message}`, error: true });
   });
 }
@@ -1272,10 +1292,17 @@ ipcMain.on('install-app-update', async (event) => {
     res.on('end', () => {
       try {
         const release = JSON.parse(data);
-        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
+        const isPortable = app.isPackaged && !!process.env.PORTABLE_EXECUTABLE_FILE;
+
+        let asset;
+        if (isPortable) {
+          asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
+        } else {
+          asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && a.name.includes('Setup'));
+        }
 
         if (!asset) {
-          event.sender.send('install-update-progress', { progress: 0, status: 'Keine .exe Datei im neuesten Release gefunden.', error: true });
+          event.sender.send('install-update-progress', { progress: 0, status: 'Keine passende .exe Datei im neuesten Release gefunden.', error: true });
           return;
         }
 
