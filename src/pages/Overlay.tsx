@@ -3,7 +3,7 @@ import { Lock, Unlock, Calendar, Users, Package } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import axios from 'axios';
-import { API_URL } from '../config';
+import { API_URL, getAvatarUrl } from '../config';
 
 interface Telemetry {
   connected: boolean;
@@ -32,7 +32,7 @@ interface Telemetry {
 }
 
 interface Settings {
-  style: 'neon' | 'retro' | 'minimal';
+  style: 'neon' | 'carbon' | 'minimal';
   layoutType: 'vertical' | 'horizontal' | 'grid';
   showLogo: boolean;
   showMainHud: boolean;
@@ -65,6 +65,7 @@ interface OnlineDriver {
   speed: number;
   destination: string;
   city: string;
+  avatar_url?: string;
 }
 
 interface NextEvent {
@@ -191,7 +192,7 @@ const OverlayPage: React.FC = () => {
   const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
 
-  // Absolute forced transparency on body, html, and root elements
+  // Absolute forced transparency on body, html, and root elements, and prevent right-click context menu
   useEffect(() => {
     document.documentElement.classList.add('is-overlay');
     document.documentElement.classList.remove('light');
@@ -205,6 +206,14 @@ const OverlayPage: React.FC = () => {
         el.style.setProperty('background-image', 'none', 'important');
       }
     });
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
   }, []);
 
   // IPC listeners for settings and lock updates
@@ -262,7 +271,8 @@ const OverlayPage: React.FC = () => {
               online: !!live?.online,
               speed: live?.speed || 0,
               destination: live?.job?.destination || live?.dest || 'Auf Achse',
-              city: live?.live_location?.city || live?.source || ''
+              city: live?.live_location?.city || live?.source || '',
+              avatar_url: u.avatar_url || live?.avatar_url
             };
           })
           .filter((d: any) => d.online);
@@ -281,24 +291,38 @@ const OverlayPage: React.FC = () => {
 
     const fetchEvent = async () => {
       try {
-        const res = await axios.get(`${API_URL}/trucky/events`);
-        const all = Array.isArray(res.data) ? res.data : [];
+        const [res1, res2] = await Promise.all([
+          axios.get(`${API_URL}/trucky/events`).catch(() => ({ data: [] })),
+          axios.get(`${API_URL}/events/custom`).catch(() => ({ data: [] }))
+        ]);
+        const all = [
+          ...(Array.isArray(res1.data) ? res1.data : []),
+          ...(Array.isArray(res2.data) ? res2.data : [])
+        ];
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
         const upcoming = all
-          .filter((e: any) => new Date(e.start_date) >= new Date())
+          .filter((e: any) => e.start_date && new Date(e.start_date) >= startOfToday)
           .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
         
         if (upcoming.length > 0) {
           const e = upcoming[0];
           setNextEvent({
-            title: typeof e.title === 'object' ? e.title.name : e.title,
+            title: typeof e.title === 'object' ? (e.title.name || '') : (e.title || ''),
             date: new Date(e.start_date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr',
-            server: e.server || 'TruckersMP'
+            server: typeof e.server === 'object' ? (e.server.name || 'TruckersMP') : (e.server || 'TruckersMP')
           });
+        } else {
+          setNextEvent(null);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error(e);
+      }
     };
 
     fetchEvent();
+    const interval = setInterval(fetchEvent, 60000);
+    return () => clearInterval(interval);
   }, [settings.showEvent]);
 
   const handleDragEnd = (widget: string, _event: any, info: PanInfo) => {
@@ -329,20 +353,20 @@ const OverlayPage: React.FC = () => {
   // UI styling classes based on theme selection
   const getThemeClasses = () => {
     switch (settings.style) {
-      case 'retro':
+      case 'carbon':
         return {
-          card: 'border border-green-500 rounded-none font-mono text-green-500 select-none shadow-[0_0_15px_rgba(34,197,94,0.1)] relative overflow-hidden',
-          textMuted: 'text-green-600',
-          textActive: 'text-green-400',
-          primaryAccent: 'bg-green-500',
-          borderAccent: 'border-green-500',
-          barBg: 'bg-green-950 border border-green-700',
-          barFill: 'bg-green-500 shadow-[0_0_6px_#22c55e]',
-          glow: 'shadow-[0_0_10px_#22c55e]'
+          card: 'backdrop-blur-[35px] backdrop-saturate-[130%] border border-amber-500/20 rounded-3xl text-slate-200 select-none shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden',
+          textMuted: 'text-slate-500',
+          textActive: 'text-amber-400 font-bold drop-shadow-[0_0_6px_rgba(245,158,11,0.35)]',
+          primaryAccent: 'bg-amber-500',
+          borderAccent: 'border-amber-500/20',
+          barBg: 'bg-black/30 border border-white/5',
+          barFill: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-[0_0_10px_rgba(245,158,11,0.4)]',
+          glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)]'
         };
       case 'minimal':
         return {
-          card: 'backdrop-blur-xl border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl',
+          card: 'backdrop-blur-[35px] backdrop-saturate-[130%] border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-white',
           primaryAccent: 'bg-white',
@@ -354,7 +378,7 @@ const OverlayPage: React.FC = () => {
       case 'neon':
       default:
         return {
-          card: 'backdrop-blur-[40px] border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative',
+          card: 'backdrop-blur-[45px] backdrop-saturate-[140%] border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-[#22D1EE]',
           primaryAccent: 'bg-primary',
@@ -393,15 +417,11 @@ const OverlayPage: React.FC = () => {
 
   const renderLogo = () => (
     <div className="flex-1 flex items-center justify-center p-2">
-      {settings.style === 'retro' ? (
-        <span className="font-black text-xs uppercase tracking-widest text-green-500 text-center leading-tight">FJOSTE</span>
-      ) : (
-        <img 
-          src="logo.png" 
-          alt="FJOSTE" 
-          className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]" 
-        />
-      )}
+      <img 
+        src="logo.png" 
+        alt="FJOSTE" 
+        className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]" 
+      />
     </div>
   );
 
@@ -559,20 +579,31 @@ const OverlayPage: React.FC = () => {
       );
     }
     return (
-      <div className="flex-1 p-3 flex flex-col gap-1.5 min-w-0 h-full">
+      <div className="flex-1 p-3 flex flex-col gap-1.5 min-w-0">
         <div className="flex items-center justify-between border-b border-white/5 pb-1">
           <span className="text-white font-bold uppercase tracking-widest text-[8px] flex items-center gap-1"><Users size={10} /> Fahrer Online ({onlineDrivers.length})</span>
         </div>
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1">
-          {onlineDrivers.map((d, i) => (
-            <div key={i} className="flex items-center justify-between gap-4 p-1 hover:bg-white/[0.02] rounded-lg text-[9px]">
-              <span className="font-bold text-slate-300 truncate">{d.name}</span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[8px] text-primary">{d.city}</span>
-                <span className="text-emerald-400 font-bold italic">{Math.round(d.speed)} km/h</span>
+        <div className="space-y-1">
+          {onlineDrivers.map((d, i) => {
+            const avatar = getAvatarUrl(d.avatar_url);
+            return (
+              <div key={i} className="flex items-center justify-between gap-4 p-1 hover:bg-white/[0.02] rounded-lg text-[9px]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-5 h-5 rounded-full bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center border border-white/10">
+                    {avatar ? (
+                      <img src={avatar} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <span className="text-[8px] font-bold text-slate-400">{d.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <span className="font-bold text-slate-300 truncate">{d.name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[8px] text-primary">{d.city}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -620,10 +651,7 @@ const OverlayPage: React.FC = () => {
         }} />
       )}
 
-      {/* Retro scanline effect */}
-      {settings.style === 'retro' && !hideWidgets && (
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-green-500/[0.02] to-transparent bg-[length:100%_4px] z-50 animate-[scanline_10s_infinite_linear]" />
-      )}
+      {/* Aurora style is purely CSS-driven via absolute positioned pseudo elements */}
 
       {/* Setup Mode Info Banner */}
       {!isLocked && (
@@ -642,7 +670,7 @@ const OverlayPage: React.FC = () => {
         const isEnabled = 
           widget === 'logo' ? settings.showLogo :
           widget === 'mainHud' ? settings.showMainHud :
-          widget === 'event' ? settings.showEvent :
+          widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
           settings.showDrivers;
 
         if (!isEnabled) return null;
@@ -660,7 +688,7 @@ const OverlayPage: React.FC = () => {
           dimensions = 'w-72 h-16';
         } else if (widget === 'drivers') {
           content = renderDrivers();
-          dimensions = 'w-80 h-48 flex flex-col';
+          dimensions = 'w-48 h-auto flex flex-col';
         }
 
         const widgetX = positions[widget]?.x !== undefined ? positions[widget].x : 40;
@@ -694,6 +722,10 @@ const OverlayPage: React.FC = () => {
                 backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
               }}
             >
+              {/* Acrylic Noise Overlay */}
+              <div className="acrylic-noise" />
+              {/* Carbon Fiber Pattern Overlay */}
+              {settings.style === 'carbon' && <div className="carbon-pattern" />}
               {/* Grab handle overlay (only visible when unlocked) */}
               {!isLocked && (
                 <div className="absolute inset-0 bg-primary/[0.02] border border-[#22D1EE]/20 rounded-[inherit] pointer-events-none group-hover:border-[#22D1EE]/40 transition-colors" />
@@ -705,9 +737,27 @@ const OverlayPage: React.FC = () => {
       })}
 
       <style>{`
-        @keyframes scanline {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 100%; }
+        .acrylic-noise {
+          position: absolute;
+          inset: 0;
+          z-index: -5;
+          opacity: 0.022;
+          pointer-events: none;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+        .carbon-pattern {
+          position: absolute;
+          inset: 0;
+          z-index: -4;
+          opacity: 0.08;
+          pointer-events: none;
+          background-color: #000;
+          background-image: 
+            linear-gradient(45deg, #111 25%, transparent 25%), 
+            linear-gradient(-45deg, #111 25%, transparent 25%), 
+            linear-gradient(45deg, transparent 75%, #111 75%), 
+            linear-gradient(-45deg, transparent 75%, #111 75%);
+          background-size: 8px 8px;
         }
         .no-scrollbar::-webkit-scrollbar {
           display: none;

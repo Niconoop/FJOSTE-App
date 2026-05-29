@@ -186,7 +186,6 @@ function App() {
             toast(event.title || 'System-Meldung', {
                description: event.content || '',
                duration: 5000,
-               className: 'custom-toast toast-resumed',
                className: 'custom-toast toast-resumed glass-card',
              });
           } else if (event.type === 'start' || event.type === 'delivered') {

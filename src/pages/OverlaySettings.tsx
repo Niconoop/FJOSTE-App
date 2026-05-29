@@ -4,7 +4,7 @@ import { Monitor, Lock, Unlock, Sliders, Layout, SlidersHorizontal, ArrowUp, Arr
 import { toast } from 'sonner';
 
 interface OverlaySettingsType {
-  style: 'neon' | 'retro' | 'minimal';
+  style: 'neon' | 'carbon' | 'minimal';
   layoutType: 'vertical' | 'horizontal' | 'grid';
   showLogo: boolean;
   showMainHud: boolean;
@@ -284,21 +284,21 @@ const OverlaySettings = () => {
                 </div>
               </button>
 
-              {/* Retro preset */}
+              {/* Carbon preset */}
               <button
-                onClick={() => updateSetting('style', 'retro')}
-                className={`flex flex-col text-left p-5 rounded-2xl border transition-all relative overflow-hidden group ${settings.style === 'retro'
-                    ? 'border-green-500 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
+                onClick={() => updateSetting('style', 'carbon')}
+                className={`flex flex-col text-left p-5 rounded-2xl border transition-all relative overflow-hidden group ${settings.style === 'carbon'
+                    ? 'border-amber-500 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
                     : 'border-white/5 bg-black/40 hover:border-white/10'
                   }`}
               >
-                <div className="absolute top-0 right-0 w-12 h-12 bg-green-500/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Terminal</span>
-                <span className="text-sm font-bold text-white mb-2">Retro Digital</span>
-                <p className="text-[10px] text-slate-400 leading-normal mb-4">Monochromer Green-Screen, scharfe Ecken, Monospace Schriftart und feine Scanlines.</p>
-                <div className="mt-auto flex items-center gap-1.5 text-[9px] font-bold text-green-400">
-                  {settings.style === 'retro' ? <Check size={12} /> : null}
-                  {settings.style === 'retro' ? 'Ausgewählt' : 'Aktivieren'}
+                <div className="absolute top-0 right-0 w-12 h-12 bg-amber-500/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Motorsport</span>
+                <span className="text-sm font-bold text-white mb-2">Carbon Tech</span>
+                <p className="text-[10px] text-slate-400 leading-normal mb-4">Sportliches Rennsport-Design mit dunkler Carbonfaser-Optik, mattiertem Glas und bernsteinfarbenen Akzenten.</p>
+                <div className="mt-auto flex items-center gap-1.5 text-[9px] font-bold text-amber-400">
+                  {settings.style === 'carbon' ? <Check size={12} /> : null}
+                  {settings.style === 'carbon' ? 'Ausgewählt' : 'Aktivieren'}
                 </div>
               </button>
 
@@ -369,6 +369,37 @@ const OverlaySettings = () => {
                 <div className="flex justify-between text-[9px] text-slate-500 font-bold uppercase">
                   <span>10% (Transparent)</span>
                   <span>100% (Solid)</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5">
+                <h3 className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Sichtbarkeit</h3>
+                <div className="space-y-3">
+                  {[
+                    { key: 'showLogo', label: 'FJOSTE Firmenlogo' },
+                    { key: 'showMainHud', label: 'Haupt-HUD (Telemetriedaten)' },
+                    { key: 'showEvent', label: 'Nächstes Event-Widget' },
+                    { key: 'showDrivers', label: 'Online-Fahrer Liste' }
+                  ].map(item => {
+                    const active = settings[item.key as keyof OverlaySettingsType] as boolean;
+                    return (
+                      <label
+                        key={item.key}
+                        className="flex items-center justify-between cursor-pointer group"
+                      >
+                        <span className="text-xs text-slate-300 group-hover:text-white transition-colors">{item.label}</span>
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => updateSetting(item.key as any, !active)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-primary/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary peer-checked:after:bg-white peer-checked:after:border-white" />
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </div>

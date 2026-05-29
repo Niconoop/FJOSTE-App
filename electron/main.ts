@@ -114,7 +114,7 @@ function loadSettings() {
       eventW = saved.eventW || 280;
       eventH = saved.eventH || 90;
 
-      isOverlayLocked = saved.isOverlayLocked !== undefined ? saved.isOverlayLocked : true;
+      isOverlayLocked = true; // Always locked on app start
       isOverlayActive = saved.isOverlayActive !== undefined ? saved.isOverlayActive : false;
       if (saved.overlaySettings !== undefined) {
         overlaySettings = saved.overlaySettings;
@@ -201,6 +201,9 @@ ipcMain.on('window-maximize', () => {
 
 ipcMain.on('job-notification', (_, data) => {
   win?.webContents.send('job-notification', data);
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('job-notification', data);
+  }
 });
 
 
@@ -815,12 +818,34 @@ ipcMain.on('set-auth-token', (_, token) => {
 
 
 
+function registerOverlayShortcut() {
+  if (!globalShortcut.isRegistered('CommandOrControl+Shift+L')) {
+    try {
+      globalShortcut.register('CommandOrControl+Shift+L', () => {
+        isOverlayLocked = !isOverlayLocked;
+        saveSettings();
+        if (overlayWin && !overlayWin.isDestroyed()) {
+          overlayWin.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
+          overlayWin.webContents.send('overlay-lock-changed', isOverlayLocked);
+          updateOverlayWindowVisibility(telemetryData);
+          if (!isOverlayLocked && isOverlayActive) {
+            overlayWin.show();
+            overlayWin.focus();
+          }
+        }
+      });
+      console.log('⌨️ Shortcut: Globaler Hotkey registriert');
+    } catch (e) {
+      console.error('Failed to register global shortcut:', e);
+    }
+  }
+}
+
 function updateOverlayStatus() {
-  const isOpen = !!(overlayWin || logoWin || driversWin || eventWin);
+  const isOpen = isOverlayActive || !!(logoWin || driversWin || eventWin);
   win?.webContents.send('overlay-status-changed', isOpen);
   
   if (!isOpen) {
-    isOverlayActive = false;
     try {
       globalShortcut.unregister('CommandOrControl+Shift+L');
     } catch (e) { }
@@ -829,6 +854,14 @@ function updateOverlayStatus() {
 
 function updateOverlayWindowVisibility(data: any) {
   if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  // If overlay is disabled globally, keep it hidden
+  if (!isOverlayActive) {
+    if (overlayWin.isVisible()) {
+      overlayWin.hide();
+    }
+    return;
+  }
 
   // If overlay is not locked (Setup Mode), always show
   if (!isOverlayLocked) {
@@ -917,21 +950,7 @@ function createSingleOverlayWindow() {
   });
 
   // Register hotkey if not already registered
-  if (!globalShortcut.isRegistered('CommandOrControl+Shift+L')) {
-    try {
-      globalShortcut.register('CommandOrControl+Shift+L', () => {
-        isOverlayLocked = !isOverlayLocked;
-        saveSettings();
-        if (overlayWin) {
-          overlayWin.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
-          overlayWin.webContents.send('overlay-lock-changed', isOverlayLocked);
-          updateOverlayWindowVisibility(telemetryData);
-        }
-      });
-    } catch (e) {
-      console.error('Failed to register global shortcut:', e);
-    }
-  }
+  registerOverlayShortcut();
 
   overlayWin.on('closed', () => {
     overlayWin = null;
@@ -943,12 +962,20 @@ function createSingleOverlayWindow() {
 
 function syncOverlayWindows() {
   if (!isOverlayActive) {
-    if (overlayWin) overlayWin.close();
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      overlayWin.hide();
+    }
+    updateOverlayStatus();
     return;
   }
 
-  if (!overlayWin) {
+  registerOverlayShortcut();
+
+  if (!overlayWin || overlayWin.isDestroyed()) {
     createSingleOverlayWindow();
+  } else {
+    updateOverlayWindowVisibility(telemetryData);
+    updateOverlayStatus();
   }
 }
 
@@ -956,6 +983,7 @@ ipcMain.on('overlay-toggle', () => {
   isOverlayActive = !isOverlayActive;
   saveSettings();
   syncOverlayWindows();
+  updateOverlayStatus();
 });
 
 ipcMain.handle('overlay-status', () => {
@@ -969,10 +997,14 @@ ipcMain.handle('overlay-lock-status', () => {
 ipcMain.on('overlay-lock', (_, locked: boolean) => {
   isOverlayLocked = locked;
   saveSettings();
-  if (overlayWin) {
+  if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setIgnoreMouseEvents(locked, { forward: true });
     overlayWin.webContents.send('overlay-lock-changed', locked);
     updateOverlayWindowVisibility(telemetryData);
+    if (!locked && isOverlayActive) {
+      overlayWin.show();
+      overlayWin.focus();
+    }
   }
 });
 

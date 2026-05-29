@@ -48,16 +48,18 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
       setDashboard({ ...data, totalRevenue, totalKm, totalJobs });
     }).catch(() => {});
     Promise.all([
-      apiService.getEvents(),
-      apiService.getCustomEvents()
+      apiService.getEvents().catch(() => ({ data: [] })),
+      apiService.getCustomEvents().catch(() => ({ data: [] }))
     ]).then(([res1, res2]) => {
       const all = [
         ...(Array.isArray(res1.data) ? res1.data : []),
         ...(Array.isArray(res2.data) ? res2.data : [])
       ];
-      // Sortiere nach Datum (aufsteigend) und nimm nur zukünftige
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      // Sortiere nach Datum (aufsteigend) und nimm alle ab heute
       const sorted = all
-        .filter(e => new Date(e.start_date) >= new Date())
+        .filter(e => e.start_date && new Date(e.start_date) >= startOfToday)
         .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
       setEvents(sorted.slice(0, 4));
     }).catch(() => {});

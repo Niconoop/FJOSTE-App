@@ -10,14 +10,13 @@ createRoot(document.getElementById('root')!).render(
     <AuthProvider>
       <App />
       <Toaster
-        theme="dark"
         position="top-center"
         toastOptions={{
           style: {
-            background: 'rgba(10, 10, 10, 0.95)',
+            background: 'var(--glass-card-bg)',
             backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            color: '#f8fafc',
+            border: '2px solid var(--border)',
+            color: 'var(--foreground)',
           },
           className: 'glass-card',
         }}

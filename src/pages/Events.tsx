@@ -80,16 +80,14 @@ const EventCard = ({ event, participants, isJoined, canDelete, onDelete, onJoin,
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-              {!isPast && (
-                isJoined ? (
-                  <button onClick={() => handle(onLeave)} disabled={acting} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
-                    {acting ? <Loader2 size={16} className="animate-spin" /> : <UserMinus size={18} />}
-                  </button>
-                ) : (
-                  <button onClick={() => handle(onJoin)} disabled={acting} className="p-2 text-primary hover:bg-primary/10 rounded-xl transition-all">
-                    {acting ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={18} />}
-                  </button>
-                )
+              {isJoined ? (
+                <button onClick={() => handle(onLeave)} disabled={acting} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
+                  {acting ? <Loader2 size={16} className="animate-spin" /> : <UserMinus size={18} />}
+                </button>
+              ) : (
+                <button onClick={() => handle(onJoin)} disabled={acting} className="p-2 text-primary hover:bg-primary/10 rounded-xl transition-all">
+                  {acting ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={18} />}
+                </button>
               )}
               {canDelete && event.is_custom && expanded && (
                 <button onClick={(e) => { e.stopPropagation(); onDelete(event.id); }} className="p-2 text-slate-600 hover:text-red-500 transition-all">
@@ -152,6 +150,28 @@ const EventCard = ({ event, participants, isJoined, canDelete, onDelete, onJoin,
                     ))}
                  </div>
                </div>
+
+              <div className="pt-4 border-t border-white/5">
+                {isJoined ? (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handle(onLeave); }} 
+                    disabled={acting} 
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
+                  >
+                    {acting ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={14} />}
+                    Vom Event abmelden
+                  </button>
+                ) : (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handle(onJoin); }} 
+                    disabled={acting} 
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
+                  >
+                    {acting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                    Am Event teilnehmen
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -192,9 +212,9 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
     try {
       const h = { Authorization: `Bearer ${token}` };
       const [tr, cu, rs] = await Promise.all([
-        axios.get(`${API_URL}/trucky/events`, { headers: h }),
-        axios.get(`${API_URL}/events/custom`, { headers: h }),
-        axios.get(`${API_URL}/events/rsvps`, { headers: h }),
+        axios.get(`${API_URL}/trucky/events`, { headers: h }).catch(() => ({ data: [] })),
+        axios.get(`${API_URL}/events/custom`, { headers: h }).catch(() => ({ data: [] })),
+        axios.get(`${API_URL}/events/rsvps`, { headers: h }).catch(() => ({ data: {} })),
       ]);
       const all = [...(Array.isArray(tr.data) ? tr.data : []), ...(Array.isArray(cu.data) ? cu.data : [])];
       setEvents(all.sort((a, b) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime()));

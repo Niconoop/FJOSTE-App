@@ -335,7 +335,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
                     {!isOwn && (
                       <div className="w-8 h-8 rounded-full bg-black border border-white/5 overflow-hidden shrink-0 mt-1">
                         {(() => {
-                          const msgAvatar = msg.avatar_url || users.find(u => u.id === msg.user_id)?.avatar_url;
+                          const msgAvatar = users.find(u => u.id === msg.user_id)?.avatar_url || msg.avatar_url;
                           const finalUrl = getAvatarUrlLocal(msgAvatar);
                           return finalUrl ? (
                             <img src={finalUrl} className="w-full h-full object-cover" />
