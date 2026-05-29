@@ -16,28 +16,59 @@ app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('disable-speech-api');
 app.commandLine.appendSwitch('disable-voice-input');
 app.commandLine.appendSwitch('disable-notifications');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
 
-let win: BrowserWindow | null
-let overlayWin: BrowserWindow | null = null
+let win: BrowserWindow | null;
+let overlayWin: BrowserWindow | null = null;
+let logoWin: BrowserWindow | null = null;
+let driversWin: BrowserWindow | null = null;
+let eventWin: BrowserWindow | null = null;
+
+function safeSend(winInstance: BrowserWindow | null, channel: string, ...args: any[]) {
+  if (winInstance && !winInstance.isDestroyed() && winInstance.webContents && !winInstance.webContents.isDestroyed()) {
+    try {
+      winInstance.webContents.send(channel, ...args);
+    } catch (e) {
+      console.error(`Failed to send to window:`, e);
+    }
+  }
+}
+
+let overlayX: number | null = null;
+let overlayY: number | null = null;
+let overlayW = 380;
+let overlayH = 120;
+
+let logoX: number | null = null;
+let logoY: number | null = null;
+let logoW = 140;
+let logoH = 80;
+
+let driversX: number | null = null;
+let driversY: number | null = null;
+let driversW = 320;
+let driversH = 200;
+
+let eventX: number | null = null;
+let eventY: number | null = null;
+let eventW = 280;
+let eventH = 90;
+
+let isOverlayLocked = true;
+let isOverlayActive = false;
+
+let overlaySettings: any = {
+  showLogo: true,
+  showMainHud: true,
+  showDrivers: true,
+  showEvent: true
+};
+
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'overlay-settings.json');
 
-let overlaySettings = {
-  showSpeed: true,
-  showFuel: true,
-  showLimit: true,
-  showDamage: true,
-  showRest: true,
-  showGear: true,
-  showCargo: true,
-  showArrival: true,
-  layout: 'card',
-  position: 'top-left',
-  opacity: 100
-};
-let isOverlayActive = true;
 let isRpcActive = true;
 let currentUsername: string | null = null;
 
@@ -59,11 +90,35 @@ function loadSettings() {
     if (fs.existsSync(SETTINGS_PATH)) {
       const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
       const saved = JSON.parse(data);
-      overlaySettings = { ...overlaySettings, ...saved.overlaySettings };
       isRpcActive = saved.isRpcActive !== undefined ? saved.isRpcActive : isRpcActive;
-      isOverlayActive = saved.isOverlayActive !== undefined ? saved.isOverlayActive : isOverlayActive;
       currentJobId = saved.currentJobId || null;
       lastJobDetails = saved.lastJobDetails || null;
+      
+      overlayX = saved.overlayX !== undefined ? saved.overlayX : null;
+      overlayY = saved.overlayY !== undefined ? saved.overlayY : null;
+      overlayW = saved.overlayW || 380;
+      overlayH = saved.overlayH || 120;
+
+      logoX = saved.logoX !== undefined ? saved.logoX : null;
+      logoY = saved.logoY !== undefined ? saved.logoY : null;
+      logoW = saved.logoW || 140;
+      logoH = saved.logoH || 80;
+
+      driversX = saved.driversX !== undefined ? saved.driversX : null;
+      driversY = saved.driversY !== undefined ? saved.driversY : null;
+      driversW = saved.driversW || 320;
+      driversH = saved.driversH || 200;
+
+      eventX = saved.eventX !== undefined ? saved.eventX : null;
+      eventY = saved.eventY !== undefined ? saved.eventY : null;
+      eventW = saved.eventW || 280;
+      eventH = saved.eventH || 90;
+
+      isOverlayLocked = saved.isOverlayLocked !== undefined ? saved.isOverlayLocked : true;
+      isOverlayActive = saved.isOverlayActive !== undefined ? saved.isOverlayActive : false;
+      if (saved.overlaySettings !== undefined) {
+        overlaySettings = saved.overlaySettings;
+      }
       console.log('📦 Settings: Einstellungen geladen');
     }
   } catch (e) {
@@ -74,11 +129,28 @@ function loadSettings() {
 function saveSettings() {
   try {
     const data = {
-      overlaySettings,
       isRpcActive,
-      isOverlayActive,
       currentJobId,
-      lastJobDetails
+      lastJobDetails,
+      overlayX,
+      overlayY,
+      overlayW,
+      overlayH,
+      logoX,
+      logoY,
+      logoW,
+      logoH,
+      driversX,
+      driversY,
+      driversW,
+      driversH,
+      eventX,
+      eventY,
+      eventW,
+      eventH,
+      isOverlayLocked,
+      isOverlayActive,
+      overlaySettings
     };
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
   } catch (e) {
@@ -120,58 +192,6 @@ function createWindow() {
   });
 }
 
-function createOverlayWindow() {
-  if (overlayWin) return;
-
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.bounds;
-
-  overlayWin = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      backgroundThrottling: false,
-      spellcheck: false
-    },
-    resizable: false,
-    hasShadow: false,
-    focusable: false,
-    paintWhenInitiallyHidden: true,
-    show: false,
-  });
-
-  overlayWin.setIgnoreMouseEvents(true);
-
-  if (process.env.VITE_DEV_SERVER_URL) {
-    overlayWin.loadURL(`${process.env.VITE_DEV_SERVER_URL}#overlay`);
-  } else {
-    overlayWin.loadFile(path.join(process.env.DIST, 'index.html'), { hash: 'overlay' });
-  }
-
-  overlayWin.webContents.on('did-finish-load', () => {
-    // Don't set window opacity here, it's handled in the React component background
-  });
-
-  overlayWin.on('closed', () => {
-    overlayWin = null;
-  });
-
-  if (isOverlayActive) {
-    overlayWin.show();
-    overlayWin.setAlwaysOnTop(true, 'screen-saver');
-  } else {
-    overlayWin.hide();
-  }
-}
-
 ipcMain.on('window-close', () => app.quit())
 ipcMain.on('window-minimize', () => win?.minimize())
 ipcMain.on('window-maximize', () => {
@@ -179,54 +199,8 @@ ipcMain.on('window-maximize', () => {
   else win?.maximize()
 })
 
-ipcMain.on('toggle-overlay', () => {
-  isOverlayActive = !isOverlayActive;
-  saveSettings();
-  
-  if (isOverlayActive) {
-    if (!overlayWin) {
-      createOverlayWindow();
-    } else {
-      overlayWin.showInactive();
-    }
-  } else {
-    overlayWin?.hide();
-  }
-  
-  win?.webContents.send('overlay-status-changed', isOverlayActive);
-});
-
-ipcMain.handle('overlay-status', () => isOverlayActive);
-ipcMain.handle('get-overlay-settings', () => overlaySettings);
-
-ipcMain.on('update-overlay-settings', (_, newSettings) => {
-  overlaySettings = { ...overlaySettings, ...newSettings };
-  saveSettings();
-  overlayWin?.webContents.send('overlay-settings-changed', overlaySettings);
-  win?.webContents.send('overlay-settings-changed', overlaySettings);
-});
-
-ipcMain.on('resize-overlay', (_, width, height) => {
-  if (overlayWin) {
-    const newWidth = Math.ceil(width) + 150;
-    const newHeight = Math.ceil(height) + 150;
-    overlayWin.setSize(newWidth, newHeight);
-  }
-});
-
-
-ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
-  const webContents = event.sender;
-  const win = BrowserWindow.fromWebContents(webContents);
-  win?.setIgnoreMouseEvents(ignore, options);
-});
-
 ipcMain.on('job-notification', (_, data) => {
   win?.webContents.send('job-notification', data);
-  overlayWin?.webContents.send('job-notification', data);
-});
-ipcMain.on('clear-notifications', () => {
-  overlayWin?.webContents.send('clear-notifications');
 });
 
 
@@ -235,6 +209,8 @@ const clientId = '1447245757232058510';
 let rpc: any = null;
 let isRpcConnected = false;
 let telemetryData: any = null;
+let lastTelemetryUpdate = 0;
+const TELEMETRY_UPDATE_INTERVAL = 40; // ms
 let currentCity: string | null = null;
 
 function updateRpc() {
@@ -264,10 +240,10 @@ function updateRpc() {
     const isMultiplayer = telemetryData.multiplayerTimeOffset && telemetryData.multiplayerTimeOffset !== 0;
     if (isMultiplayer) {
       const title = (telemetryData.activeTitle || "").toLowerCase();
-      const isTruckersMP = title.includes('truckersmp') || 
-                          title.includes('euro truck simulator 2 multiplayer') ||
-                          title.includes('ets2mp') ||
-                          title.includes('atsmp');
+      const isTruckersMP = title.includes('truckersmp') ||
+        title.includes('euro truck simulator 2 multiplayer') ||
+        title.includes('ets2mp') ||
+        title.includes('atsmp');
       if (isTruckersMP) {
         const parsedServer = getTruckersMPActiveServer(telemetryData.gameType === 2 ? "ATS" : "ETS2");
         serverName = parsedServer || "TruckersMP";
@@ -381,7 +357,7 @@ async function stopRpc() {
   win?.webContents.send('rpc-status-changed', false);
 }
 
-ipcMain.on('rpc-toggle', async (_, enabled) => {
+ipcMain.handle('rpc-toggle', async (_, enabled) => {
   isRpcActive = enabled;
   saveSettings();
   if (enabled) {
@@ -389,11 +365,12 @@ ipcMain.on('rpc-toggle', async (_, enabled) => {
   } else {
     await stopRpc();
   }
+  // Notify renderer of status change
+  win?.webContents.send('rpc-status-changed', isRpcActive);
+  return isRpcActive;
 });
 
-ipcMain.on('rpc-get-status', (event) => {
-  event.reply('rpc-status', isRpcActive);
-});
+ipcMain.handle('rpc-get-status', () => isRpcActive);
 
 ipcMain.handle('rpc-status', () => isRpcConnected);
 
@@ -413,6 +390,9 @@ const rpcInterval = setInterval(updateRpc, 15000);
 
 // Telemetry Polling
 const telemetryScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 Add-Type -TypeDefinition @"
 using System;
 using System.IO;
@@ -545,7 +525,7 @@ while($true) {
     } catch {
         Write-Output '{"error":"ps_error"}'
     }
-    Start-Sleep -Milliseconds 1000
+    Start-Sleep -Milliseconds 40
 }
 `;
 
@@ -566,48 +546,23 @@ function startTelemetryBridge() {
 
   telemetryProcess.stdout.setEncoding('utf8');
 
+  let stdoutBuffer = '';
   telemetryProcess.stdout.on('data', (data: any) => {
-    const chunk = data.toString();
-    const lines = chunk.split('\n');
+    stdoutBuffer += data.toString();
+    let boundary = stdoutBuffer.indexOf('\n');
+    while (boundary !== -1) {
+      const line = stdoutBuffer.substring(0, boundary).trim();
+      stdoutBuffer = stdoutBuffer.substring(boundary + 1);
+      boundary = stdoutBuffer.indexOf('\n');
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+      if (!line) continue;
       try {
-        const parsed = JSON.parse(line.trim());
-
-        const title = (parsed.activeTitle || "").toLowerCase();
-        const isGameActive = title.includes('euro truck simulator 2') ||
-          title.includes('american truck simulator') ||
-          title.includes('truckersmp');
-        const isPluginActive = (parsed.gameVersion > 0) || (parsed.connected === true);
-
-        const shouldShow = isOverlayActive && isGameActive && isPluginActive;
-
-        if (shouldShow) {
-          if (!overlayWin) {
-            console.log('🖥️ Overlay: Erstelle Fenster (Spiel aktiv)');
-            createOverlayWindow();
-          } else if (!overlayWin.isVisible()) {
-            console.log('🖥️ Overlay: Zeige Fenster (Spiel im Vordergrund)');
-            overlayWin.show();
-            overlayWin.setAlwaysOnTop(true, 'screen-saver');
-          }
-        } else if (overlayWin) {
-          if (!isPluginActive) {
-            console.log('🖥️ Overlay: Schließe Fenster (Spiel beendet)');
-            overlayWin.close();
-            overlayWin = null;
-          } else if (overlayWin.isVisible()) {
-            console.log('🖥️ Overlay: Verstecke Fenster (Spiel im Hintergrund)');
-            overlayWin.hide();
-          }
-        }
-
+        const parsed = JSON.parse(line);
         // Send updates if data changed
-        if (JSON.stringify(parsed) !== JSON.stringify(telemetryData)) {
-          const prev = telemetryData;
-          win?.webContents.send('telemetry-update', parsed);
-          overlayWin?.webContents.send('telemetry-update', parsed);
+        if (Date.now() - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL || JSON.stringify(parsed) !== JSON.stringify(telemetryData)) {
+          lastTelemetryUpdate = Date.now();
+          safeSend(win, 'telemetry-update', parsed);
+          safeSend(overlayWin, 'telemetry-update', parsed);
         }
 
         // Standalone Tracking Logic - Runs every tick (internal 5s throttle)
@@ -617,8 +572,15 @@ function startTelemetryBridge() {
         }
         handleTrackingLogic(parsed, telemetryData);
         telemetryData = parsed;
-      } catch (e) { }
+        updateOverlayWindowVisibility(parsed);
+      } catch (e: any) {
+        console.error('❌ Telemetry: Fehler beim Parsen der Zeile:', e.message, 'Inhalt:', line);
+      }
     }
+  });
+
+  telemetryProcess.stderr.on('data', (data: any) => {
+    console.error('❌ Telemetry PowerShell Error:', data.toString());
   });
 
   telemetryProcess.on('exit', () => {
@@ -636,7 +598,7 @@ function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
 
     const files = fs.readdirSync(logsDir)
       .filter(f => f.startsWith('client_') && f.endsWith('.log'));
-    
+
     if (files.length === 0) return null;
 
     // Sort by modification time desc to get the newest log
@@ -651,7 +613,7 @@ function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
     const newestFile = path.join(logsDir, files[0]);
     const content = fs.readFileSync(newestFile, 'utf8');
     const lines = content.split('\n');
-    
+
     // Scan backwards for the latest server connection log line
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i];
@@ -701,10 +663,10 @@ async function handleTrackingLogic(current: any, prev: any) {
     const isMultiplayer = current.multiplayerTimeOffset && current.multiplayerTimeOffset !== 0;
     if (isMultiplayer) {
       const title = (current.activeTitle || "").toLowerCase();
-      const isTruckersMP = title.includes('truckersmp') || 
-                          title.includes('euro truck simulator 2 multiplayer') ||
-                          title.includes('ets2mp') ||
-                          title.includes('atsmp');
+      const isTruckersMP = title.includes('truckersmp') ||
+        title.includes('euro truck simulator 2 multiplayer') ||
+        title.includes('ets2mp') ||
+        title.includes('atsmp');
       if (isTruckersMP) {
         const parsedServer = getTruckersMPActiveServer(current.gameType === 2 ? "ATS" : "ETS2");
         serverName = parsedServer || "TruckersMP";
@@ -749,12 +711,12 @@ async function handleTrackingLogic(current: any, prev: any) {
   if (isJobActive && jobDetails !== lastJobDetails) {
     currentJobId = crypto.randomUUID();
     lastJobDetails = jobDetails;
-    
+
     // Reset Job Stats
     jobStartFuel = current.fuel || 0;
     jobTotalSpeed = 0;
     jobSpeedTicks = 0;
-    
+
     saveSettings(); // Persist new job state
 
     console.log(`🚚 Job Start erkannt: ${cargo} nach ${current.dest}`);
@@ -852,6 +814,201 @@ ipcMain.on('set-auth-token', (_, token) => {
 });
 
 
+
+function updateOverlayStatus() {
+  const isOpen = !!(overlayWin || logoWin || driversWin || eventWin);
+  win?.webContents.send('overlay-status-changed', isOpen);
+  
+  if (!isOpen) {
+    isOverlayActive = false;
+    try {
+      globalShortcut.unregister('CommandOrControl+Shift+L');
+    } catch (e) { }
+  }
+}
+
+function updateOverlayWindowVisibility(data: any) {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  // If overlay is not locked (Setup Mode), always show
+  if (!isOverlayLocked) {
+    if (!overlayWin.isVisible()) {
+      overlayWin.showInactive();
+    }
+    return;
+  }
+
+  // Check telemetry-based visibility criteria
+  if (!data || !data.connected || data.gameVersion === 0) {
+    if (overlayWin.isVisible()) {
+      overlayWin.hide();
+    }
+    return;
+  }
+
+  const activeTitle = (data.activeTitle || '').toLowerCase();
+  const isGameActive = 
+    activeTitle.includes('euro truck simulator 2') || 
+    activeTitle.includes('american truck simulator') || 
+    activeTitle.includes('truckersmp');
+
+  if (isGameActive) {
+    if (!overlayWin.isVisible()) {
+      overlayWin.showInactive();
+    }
+  } else {
+    if (overlayWin.isVisible()) {
+      overlayWin.hide();
+    }
+  }
+}
+
+function createSingleOverlayWindow() {
+  if (overlayWin) {
+    overlayWin.focus();
+    return;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+
+  overlayWin = new BrowserWindow({
+    width: width,
+    height: height,
+    x: 0,
+    y: 0,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    show: false, // Start hidden to prevent startup DWM composition lag
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: false, // Ensure page doesn't lag when game is in focus
+    },
+  });
+
+  overlayWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`🖥️ [Overlay Console] ${message} (at ${sourceId}:${line})`);
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    overlayWin.loadURL(`${process.env.VITE_DEV_SERVER_URL}#overlay-main`);
+  } else {
+    overlayWin.loadFile(path.join(process.env.DIST, 'index.html'), { hash: 'overlay-main' });
+  }
+
+  overlayWin.webContents.on('did-finish-load', () => {
+    overlayWin?.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
+    overlayWin?.webContents.send('overlay-lock-changed', isOverlayLocked);
+    overlayWin?.webContents.send('overlay-settings-updated', overlaySettings);
+    if (telemetryData) {
+      overlayWin?.webContents.send('telemetry-update', telemetryData);
+    }
+  });
+
+  overlayWin.once('ready-to-show', () => {
+    updateOverlayWindowVisibility(telemetryData);
+  });
+
+  // Register hotkey if not already registered
+  if (!globalShortcut.isRegistered('CommandOrControl+Shift+L')) {
+    try {
+      globalShortcut.register('CommandOrControl+Shift+L', () => {
+        isOverlayLocked = !isOverlayLocked;
+        saveSettings();
+        if (overlayWin) {
+          overlayWin.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
+          overlayWin.webContents.send('overlay-lock-changed', isOverlayLocked);
+          updateOverlayWindowVisibility(telemetryData);
+        }
+      });
+    } catch (e) {
+      console.error('Failed to register global shortcut:', e);
+    }
+  }
+
+  overlayWin.on('closed', () => {
+    overlayWin = null;
+    updateOverlayStatus();
+  });
+
+  updateOverlayStatus();
+}
+
+function syncOverlayWindows() {
+  if (!isOverlayActive) {
+    if (overlayWin) overlayWin.close();
+    return;
+  }
+
+  if (!overlayWin) {
+    createSingleOverlayWindow();
+  }
+}
+
+ipcMain.on('overlay-toggle', () => {
+  isOverlayActive = !isOverlayActive;
+  saveSettings();
+  syncOverlayWindows();
+});
+
+ipcMain.handle('overlay-status', () => {
+  return isOverlayActive;
+});
+
+ipcMain.handle('overlay-lock-status', () => {
+  return isOverlayLocked;
+});
+
+ipcMain.on('overlay-lock', (_, locked: boolean) => {
+  isOverlayLocked = locked;
+  saveSettings();
+  if (overlayWin) {
+    overlayWin.setIgnoreMouseEvents(locked, { forward: true });
+    overlayWin.webContents.send('overlay-lock-changed', locked);
+    updateOverlayWindowVisibility(telemetryData);
+  }
+});
+
+ipcMain.on('overlay-settings-changed', (_, settings) => {
+  overlaySettings = settings;
+  saveSettings();
+
+  overlayWin?.webContents.send('overlay-settings-updated', settings);
+
+  if (isOverlayActive) {
+    syncOverlayWindows();
+  }
+});
+
+ipcMain.on('overlay-reset-positions', () => {
+  safeSend(overlayWin, 'overlay-positions-reset');
+});
+
+ipcMain.on('overlay-resize', (_, type, w, h) => {
+  let targetWin: BrowserWindow | null = null;
+  if (type === 'main') targetWin = overlayWin;
+  else if (type === 'logo') targetWin = logoWin;
+  else if (type === 'drivers') targetWin = driversWin;
+  else if (type === 'event') targetWin = eventWin;
+
+  if (targetWin) {
+    targetWin.setSize(w, h);
+    if (type === 'main') { overlayW = w; overlayH = h; }
+    else if (type === 'logo') { logoW = w; logoH = h; }
+    else if (type === 'drivers') { driversW = w; driversH = h; }
+    else if (type === 'event') { eventW = w; eventH = h; }
+    saveSettings();
+  }
+});
+
+
 // Start bridge once
 startTelemetryBridge();
 
@@ -884,9 +1041,9 @@ function runAfkTask() {
     return;
   }
 
-  const isDriving = telemetryData && 
-                    telemetryData.gameVersion > 0 &&
-                    Math.round(telemetryData.speed || 0) > 1;
+  const isDriving = telemetryData &&
+    telemetryData.gameVersion > 0 &&
+    Math.round(telemetryData.speed || 0) > 1;
 
   let pool = isDriving ? afkConfig.drivingTexts : afkConfig.pausedTexts;
   if (!pool || pool.length === 0) {
@@ -975,10 +1132,18 @@ function toggleAfkBot() {
   win?.webContents.send('afk-status-changed', isAfkRunning);
 }
 
+let lastAfkHotkey: string | null = null;
 ipcMain.on('afk-configure', (e, config) => {
   afkConfig = config;
-  globalShortcut.unregisterAll();
-  if (config.hotkey) try { globalShortcut.register(config.hotkey, toggleAfkBot); } catch (e) { }
+  if (lastAfkHotkey) {
+    try { globalShortcut.unregister(lastAfkHotkey); } catch(e){}
+  }
+  if (config.hotkey) {
+    try {
+      globalShortcut.register(config.hotkey, toggleAfkBot);
+      lastAfkHotkey = config.hotkey;
+    } catch (e) { }
+  }
 });
 
 ipcMain.on('afk-toggle', () => toggleAfkBot());
@@ -1167,14 +1332,12 @@ ipcMain.handle('check-app-update', async () => {
 });
 
 function downloadAndApplyUpdate(url: string, event: any) {
-  const isPortable = app.isPackaged && !!process.env.PORTABLE_EXECUTABLE_FILE;
-  const tempFileName = isPortable ? 'FJOSTE-Tracker-Update.exe' : 'FJOSTE-Tracker-Setup.exe';
-  const tempUpdatePath = path.join(app.getPath('temp'), tempFileName);
+  const tempUpdatePath = path.join(app.getPath('temp'), 'FJOSTE-Tracker-Update.exe');
 
   if (fs.existsSync(tempUpdatePath)) {
     try {
       fs.unlinkSync(tempUpdatePath);
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const file = fs.createWriteStream(tempUpdatePath, { highWaterMark: 1024 * 1024 });
@@ -1226,46 +1389,44 @@ function downloadAndApplyUpdate(url: string, event: any) {
         return;
       }
 
-      if (isPortable) {
-        try {
-          const portableExe = process.env.PORTABLE_EXECUTABLE_FILE!;
-          const psCommand = `$pid = ${process.pid}; for ($i=0; $i -lt 25; $i++) { if (!(Get-Process -Id $pid -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 200 }; if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }; for ($i=0; $i -lt 10; $i++) { try { Copy-Item -Path '${tempUpdatePath.replace(/'/g, "''")}' -Destination '${portableExe.replace(/'/g, "''")}' -Force -ErrorAction Stop; break } catch { Start-Sleep -Seconds 1 } }; Start-Process '${portableExe.replace(/'/g, "''")}'`;
-          const child = spawn('powershell', ['-Command', psCommand], {
-            detached: true,
-            stdio: 'ignore'
-          });
-          child.unref();
+      try {
+        const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
+        const exeName = path.basename(targetExe);
+        const updateBatPath = path.join(app.getPath('temp'), 'fjoste_update.bat');
 
-          event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+        const batContent = `@echo off\r\n` +
+          `timeout /t 2 /nobreak > NUL\r\n` +
+          `taskkill /f /im "${exeName}" > NUL 2>&1\r\n` +
+          `:loop\r\n` +
+          `copy /Y "${tempUpdatePath}" "${targetExe}" > NUL\r\n` +
+          `if %errorlevel% neq 0 (\r\n` +
+          `  timeout /t 1 /nobreak > NUL\r\n` +
+          `  goto loop\r\n` +
+          `)\r\n` +
+          `start "" "${targetExe}"\r\n` +
+          `del "%~f0"\r\n`;
 
-          setTimeout(() => {
-            app.quit();
-          }, 1000);
-        } catch (err: any) {
-          console.error('Failed to run update script:', err);
-          event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
-        }
-      } else {
-        try {
-          const child = spawn(tempUpdatePath, ['/S', '--force-run'], {
-            detached: true,
-            stdio: 'ignore'
-          });
-          child.unref();
+        fs.writeFileSync(updateBatPath, batContent, 'utf8');
 
-          event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+        const child = spawn('cmd.exe', ['/c', updateBatPath], {
+          detached: true,
+          windowsHide: true,
+          stdio: 'ignore'
+        });
+        child.unref();
 
-          setTimeout(() => {
-            app.quit();
-          }, 1000);
-        } catch (err: any) {
-          console.error('Failed to run installer:', err);
-          event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Starten des Installers: ${err.message}`, error: true });
-        }
+        event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+
+        setTimeout(() => {
+          app.quit();
+        }, 1000);
+      } catch (err: any) {
+        console.error('Failed to run update script:', err);
+        event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
       }
     });
   }).on('error', (err) => {
-    try { fs.unlinkSync(tempUpdatePath); } catch (e) {}
+    try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
     event.sender.send('install-update-progress', { progress: 0, status: `Download Fehler: ${err.message}`, error: true });
   });
 }
@@ -1292,17 +1453,10 @@ ipcMain.on('install-app-update', async (event) => {
     res.on('end', () => {
       try {
         const release = JSON.parse(data);
-        const isPortable = app.isPackaged && !!process.env.PORTABLE_EXECUTABLE_FILE;
-
-        let asset;
-        if (isPortable) {
-          asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
-        } else {
-          asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && a.name.includes('Setup'));
-        }
+        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
 
         if (!asset) {
-          event.sender.send('install-update-progress', { progress: 0, status: 'Keine passende .exe Datei im neuesten Release gefunden.', error: true });
+          event.sender.send('install-update-progress', { progress: 0, status: 'Keine .exe Datei im neuesten Release gefunden.', error: true });
           return;
         }
 
@@ -1320,6 +1474,9 @@ ipcMain.on('install-app-update', async (event) => {
 
 app.whenReady().then(() => {
   createWindow();
+  if (isOverlayActive) {
+    syncOverlayWindows();
+  }
 })
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -1336,11 +1493,11 @@ app.on('will-quit', () => {
       if (telemetryProcess.pid) {
         exec(`taskkill /pid ${telemetryProcess.pid} /f /t`);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
-  
+
   // Kill RPC
   if (rpc) {
-    try { rpc.destroy(); } catch (e) {}
+    try { rpc.destroy(); } catch (e) { }
   }
 })

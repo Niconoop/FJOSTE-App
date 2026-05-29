@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, MapPin } from 'lucide-react';
+import { Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, MapPin, Monitor } from 'lucide-react';
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
 
@@ -221,6 +221,21 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
           <div>
             <h2 className="font-unbounded text-xs font-bold text-white group-hover:text-primary transition-colors uppercase tracking-wider">Live Karte</h2>
             <p className="text-[10px] text-slate-500 font-medium mt-0.5">Fahrer in Echtzeit auf der Route verfolgen</p>
+          </div>
+        </div>
+        <ArrowRight className="w-4 h-4 text-primary group-hover:translate-x-1 transition-transform duration-300" />
+      </div>
+
+      {/* Overlay Banner */}
+      <div 
+        onClick={() => onNavigate('overlay-settings')}
+        className="glass-card hover-glow flex items-center justify-between !py-4 group cursor-pointer"
+      >
+        <div className="flex items-center gap-3">
+          <Monitor className="w-5 h-5 text-primary group-hover:scale-110 transition-transform duration-300" />
+          <div>
+            <h2 className="font-unbounded text-xs font-bold text-white group-hover:text-primary transition-colors uppercase tracking-wider">ETS2 In-Game Overlay</h2>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Transparentes, modulares Telemetrie-Overlay direkt im Spiel anzeigen und anpassen</p>
           </div>
         </div>
         <ArrowRight className="w-4 h-4 text-primary group-hover:translate-x-1 transition-transform duration-300" />

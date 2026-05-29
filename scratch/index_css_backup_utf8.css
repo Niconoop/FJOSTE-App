@@ -1,25 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
 @import "tailwindcss";
-
-/* Custom toast styling for job notifications */
-.custom-toast {
-  backdrop-filter: blur(12px);
-  background: rgba(10, 10, 10, 0.9) !important;
-  border-radius: 24px !important;
-  border: 2px solid transparent;
-  color: #f8fafc !important;
-  padding: 0.75rem 1rem !important;
-}
-.toast-start {
-  border-color: #22c55e !important; /* emerald */
-}
-.toast-cancelled {
-  border-color: #ef4444 !important; /* red */
-}
-.toast-resumed {
-  border-color: transparent !important;
-}
 
 :root {
   --background: #000000;
@@ -31,6 +12,7 @@
   --shadow-color: rgba(0, 0, 0, 0.8);
 }
 
+
 :root.light {
   --background: #ffffff;
   --foreground: #0f172a;
@@ -40,7 +22,6 @@
   --glass-card-bg: rgba(255, 255, 255, 0.95);
   --shadow-color: rgba(15, 23, 42, 0.18);
 }
-
 
 @theme {
   --color-background: var(--background);
@@ -54,33 +35,22 @@
   body {
     @apply bg-background text-foreground font-outfit antialiased overflow-x-hidden;
     margin: 0;
-    -webkit-app-region: no-drag;
+    -webkit-app-region: no-drag; /* Disable dragging by default */
   }
 
-
-
   .drag {
-    -webkit-app-region: drag;
+    -webkit-app-region: drag; /* Enable dragging for specific areas */
   }
 
   .no-drag {
+    -webkit-app-region: no-drag; /* Ensure buttons/inputs are clickable */
+  }
+  
+  button, a, input, select, textarea {
     -webkit-app-region: no-drag;
   }
 
-  button,
-  a,
-  input,
-  select,
-  textarea {
-    -webkit-app-region: no-drag;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
+  h1, h2, h3, h4, h5, h6 {
     @apply font-unbounded;
   }
 }
@@ -107,18 +77,11 @@
 }
 
 @utility hover-glow {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  &:hover {
-    border-color: var(--primary);
-    box-shadow: 0 0 20px rgba(43, 161, 185, 0.2);
-    transform: translateY(-4px);
-  }
+  @apply transition-all duration-300 hover:border-primary hover:shadow-[0_0_20px_rgba(43,161,185,0.2)] hover:-translate-y-1;
 }
 
 @utility no-scrollbar {
   scrollbar-width: none;
-
   &::-webkit-scrollbar {
     display: none;
   }
@@ -132,54 +95,25 @@
 ::-webkit-scrollbar {
   width: 6px;
 }
-
 ::-webkit-scrollbar-track {
   @apply bg-background;
 }
-
 ::-webkit-scrollbar-thumb {
   @apply bg-primary/30 rounded-full;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-primary/50;
 }
 
 /* Animations */
 @keyframes blob {
-
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
 .animate-blob {
   animation: blob 15s infinite alternate;
-}
-
-/* Background Animated Blobs */
-.bg-blob-1 {
-  background: radial-gradient(circle, rgba(34, 209, 238, 0.08) 0%, transparent 70%) !important;
-  filter: blur(80px);
-}
-
-.bg-blob-2 {
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.06) 0%, transparent 70%) !important;
-  filter: blur(90px);
-}
-
-.bg-blob-3 {
-  background: radial-gradient(circle, rgba(34, 209, 238, 0.05) 0%, transparent 70%) !important;
-  filter: blur(70px);
 }
 
 /* --- Premium Light Mode Overrides --- */
@@ -411,19 +345,19 @@
   backdrop-filter: blur(10px) !important;
 }
 
-/* Globales Erzwingen des Light Modes für alle nativeren DateTime Inputs */
+/* Globales Erzwingen des Light Modes f├╝r alle nativeren DateTime Inputs */
 .light input[type="time"],
 .light input[type="date"],
 .light input[type="datetime-local"] {
   color-scheme: light !important;
 }
 
-/* Hover-Effekte auf helle Ränder */
+/* Hover-Effekte auf helle R├ñnder */
 .light .hover\:border-white\/20:hover {
   border-color: rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Premium Image & Gradient Overrides für kleine Kalender-Event-Kärtchen */
+/* Premium Image & Gradient Overrides f├╝r kleine Kalender-Event-K├ñrtchen */
 .light .group.rounded-lg.overflow-hidden .bg-gradient-to-t {
   background-image: linear-gradient(to top, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.35), transparent) !important;
 }
@@ -508,26 +442,5 @@
   filter: blur(55px);
 }
 
-/* Force transparent overlay - even in light mode */
-html.is-overlay,
-html.is-overlay.is-overlay,
-html.is-overlay body,
-html.is-overlay.is-overlay body,
-html.is-overlay #root,
-html.is-overlay.is-overlay #root,
-html.is-overlay div#root,
-html.is-overlay.is-overlay div#root,
-html.light.is-overlay,
-html.light.is-overlay.is-overlay,
-html.light.is-overlay body,
-html.light.is-overlay.is-overlay body,
-html.light.is-overlay #root,
-html.light.is-overlay.is-overlay #root,
-html.light.is-overlay div#root,
-html.light.is-overlay.is-overlay div#root,
-body.is-overlay-body {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-}
+
 

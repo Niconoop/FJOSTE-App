@@ -9,16 +9,17 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
       <App />
-      <Toaster 
-        theme="dark" 
-        position="bottom-right"
+      <Toaster
+        theme="dark"
+        position="top-center"
         toastOptions={{
           style: {
             background: 'rgba(10, 10, 10, 0.95)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
-            color: '#F8FAFC',
+            color: '#f8fafc',
           },
+          className: 'glass-card',
         }}
       />
     </AuthProvider>

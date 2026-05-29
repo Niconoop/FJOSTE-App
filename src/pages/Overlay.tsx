@@ -1,601 +1,724 @@
-import { useEffect, useState, useRef, useLayoutEffect } from 'react';
-import { Gauge, Fuel, MapPin, Unlock, Clock, ShieldAlert, Package, Navigation, Timer, Map, Weight, Truck, Bell, Info, Users, Banknote, Calendar, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Lock, Unlock, Calendar, Users, Package } from 'lucide-react';
+import { motion } from 'framer-motion';
+import type { PanInfo } from 'framer-motion';
 import axios from 'axios';
-import { API_URL, getAvatarUrl } from '../config';
-import { motion, AnimatePresence } from 'framer-motion';
+import { API_URL } from '../config';
 
+interface Telemetry {
+  connected: boolean;
+  gameVersion: number;
+  speed: number;
+  speedLimit: number;
+  cruiseControl: number;
+  gear: number;
+  rpm: number;
+  fuel: number;
+  fuelRange: number;
+  cargo: string;
+  cargoMass: number;
+  source: string;
+  dest: string;
+  navDistance: number;
+  navTime: number;
+  income: number;
+  brand: string;
+  model: string;
+  wearTruck: number;
+  wearCargo: number;
+  paused: boolean;
+  activeTitle?: string;
+  gameType?: number;
+}
 
-const Overlay = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [telemetry, setTelemetry] = useState<any>(null);
-  const [settings, setSettings] = useState<any>({
-    showSpeed: true,
-    showFuel: true,
-    showLimit: true,
-    showDamage: true,
-    showRest: true,
-    showGear: true,
-    showCargo: true,
-    showArrival: true,
-    showDrivers: true,
-    layout: 'card',
-    position: 'top-left'
-  });
+interface Settings {
+  style: 'neon' | 'retro' | 'minimal';
+  layoutType: 'vertical' | 'horizontal' | 'grid';
+  showLogo: boolean;
+  showMainHud: boolean;
+  showDrivers: boolean;
+  showEvent: boolean;
+  widgetOrder: string[];
+  zoom: number;
+  bgOpacity: number;
+  showGear: boolean;
+  showSpeed: boolean;
+  showFuel: boolean;
+  showRemainingDistance: boolean;
+  showETA: boolean;
+  showCargo: boolean;
+  showIncome: boolean;
+}
 
-  const [onlineDrivers, setOnlineDrivers] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
-  const [clock, setClock] = useState(new Date());
-  const [popups, setPopups] = useState<any[]>([]);
-  const [isLocked, setIsLocked] = useState(true);
-  const [prevOnlineDrivers, setPrevOnlineDrivers] = useState<any[]>([]);
-  const [notifiedEvents, setNotifiedEvents] = useState<Set<number>>(new Set());
+interface Position {
+  x: number;
+  y: number;
+}
 
-  const addPopup = (data: any) => {
-    const id = Date.now() + Math.random();
-    setPopups(prev => [...prev, { id, ...data }]);
-    setTimeout(() => {
-      setPopups(prev => prev.filter(p => p.id !== id));
-    }, data.duration || 8000);
-  };
+interface Positions {
+  [key: string]: Position;
+}
 
+interface OnlineDriver {
+  name: string;
+  online: boolean;
+  speed: number;
+  destination: string;
+  city: string;
+}
 
+interface NextEvent {
+  title: string;
+  date: string;
+  server: string;
+}
+
+// Hook to batch telemetry updates via requestAnimationFrame
+function useTelemetry(initialTelemetry: Telemetry): Telemetry {
+  const [telemetry, setTelemetry] = useState<Telemetry>(initialTelemetry);
+  const pendingRef = useRef<Telemetry | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    document.documentElement.classList.remove('light');
-    document.body.style.background = 'transparent';
-    document.body.style.backgroundColor = 'transparent';
-    document.body.style.overflow = 'hidden';
-
-    const { ipcRenderer } = window.require('electron');
-    ipcRenderer.invoke('telemetry-status').then(setTelemetry);
-    ipcRenderer.invoke('get-overlay-settings').then(setSettings);
-
-    const teleListener = (_: any, data: any) => setTelemetry(data);
-    const settingsListener = (_: any, s: any) => setSettings(s);
-
-    const jobListener = (_: any, data: any) => {
-      const id = data.id || Date.now();
-      setPopups(prev => [...prev, { id, ...data }]);
-
-      // Keep chat/system notifications longer (15s) than job events (8s)
-      const duration = (data.type === 'system' || data.type === 'chat' || data.type === 'chat_group') ? 15000 : 8000;
-
-      setTimeout(() => {
-        setPopups(prev => prev.filter(p => p.id !== id));
-      }, duration);
-    };
-
-    const clearListener = () => {
-      setPopups([]);
-    };
-
-    ipcRenderer.on('telemetry-update', teleListener);
-    ipcRenderer.on('overlay-settings-changed', settingsListener);
-    ipcRenderer.on('job-notification', jobListener);
-    ipcRenderer.on('clear-notifications', clearListener);
-
-    const fetchDrivers = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/trucky/live-map`);
-        const data = Array.isArray(res.data) ? res.data : [];
-        setOnlineDrivers(data.filter((d: any) => d.online));
-      } catch (err) {
-        console.error("Failed to fetch drivers", err);
-      }
-    };
-
-    fetchDrivers();
-    const driverInterval = setInterval(fetchDrivers, 60000);
-
-    const fetchEvents = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/events`);
-        setEvents(Array.isArray(res.data) ? res.data.filter((e: any) => new Date(e.start_at) > new Date()) : []);
-      } catch (err) { }
-    };
-    fetchEvents();
-    const eventInterval = setInterval(fetchEvents, 300000);
-
-    const fetchCities = async () => {
-      try {
-        const res = await axios.get('/ets2_cities.json');
-        setCities(res.data);
-      } catch (err) { }
-    };
-    fetchCities();
-
-    const clockInterval = setInterval(() => setClock(new Date()), 1000);
-
-    return () => {
-      ipcRenderer.removeListener('telemetry-update', teleListener);
-      ipcRenderer.removeListener('overlay-settings-changed', settingsListener);
-      ipcRenderer.removeListener('job-notification', jobListener);
-      ipcRenderer.removeListener('clear-notifications', clearListener);
-      clearInterval(driverInterval);
-      clearInterval(eventInterval);
-      clearInterval(clockInterval);
-    };
+    try {
+      const { ipcRenderer } = window.require('electron');
+      const listener = (_: any, data: Telemetry) => {
+        pendingRef.current = data;
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            if (pendingRef.current) {
+              setTelemetry(pendingRef.current);
+            }
+            pendingRef.current = null;
+            rafRef.current = null;
+          });
+        }
+      };
+      ipcRenderer.on('telemetry-update', listener);
+      return () => {
+        ipcRenderer.removeListener('telemetry-update', listener);
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      };
+    } catch (e) {
+      // Fallback: no Electron IPC (e.g., during dev preview)
+    }
   }, []);
 
-  // Notification: Driver Online Nearby
-  useEffect(() => {
-    if (!telemetry || !hasData || onlineDrivers.length === 0) return;
-    
-    // Find newly online drivers
-    const newlyOnline = onlineDrivers.filter(d => 
-        d.online && !prevOnlineDrivers.find(p => p.id === d.id)
-    );
-    
-    newlyOnline.forEach(driver => {
-        const loc = driver.live_location;
-        if (loc && loc.x != null && loc.z != null) {
-            const dx = telemetry.posX - loc.x;
-            const dz = telemetry.posZ - loc.z;
-            const dist = Math.sqrt(dx*dx + dz*dz);
-            
-            // 20km radius (game units)
-            if (dist < 20000) {
-                addPopup({
-                    type: 'system',
-                    title: 'Fahrer in der Nähe!',
-                    content: `${driver.username || driver.name} ist gerade online gegangen.`,
-                    duration: 10000
-                });
-            }
-        }
-    });
-    
-    setPrevOnlineDrivers(onlineDrivers);
-  }, [onlineDrivers, telemetry?.posX, telemetry?.posZ]);
+  return telemetry;
+}
 
-  // Notification: Upcoming Events
+const DEFAULT_SETTINGS: Settings = {
+  style: 'neon',
+  layoutType: 'vertical',
+  showLogo: true,
+  showMainHud: true,
+  showDrivers: true,
+  showEvent: true,
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers'],
+  zoom: 100,
+  bgOpacity: 80,
+  showGear: true,
+  showSpeed: true,
+  showFuel: true,
+  showRemainingDistance: true,
+  showETA: true,
+  showCargo: true,
+  showIncome: true
+};
+
+const MOCK_TELEMETRY: Telemetry = {
+  connected: true,
+  gameVersion: 1,
+  speed: 82.4,
+  speedLimit: 80,
+  cruiseControl: 80,
+  gear: 12,
+  rpm: 1250,
+  fuel: 380,
+  fuelRange: 940,
+  cargo: 'Bagger (Liebherr)',
+  cargoMass: 24.5,
+  source: 'Berlin',
+  dest: 'München',
+  navDistance: 452000,
+  navTime: 23200,
+  income: 38500,
+  brand: 'Scania',
+  model: 'S 580 V8',
+  wearTruck: 1.2,
+  wearCargo: 0,
+  paused: false
+};
+
+const OverlayPage: React.FC = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [settings, setSettings] = useState<Settings>(() => {
+    const saved = localStorage.getItem('fjoste_overlay_settings');
+    if (saved) {
+      try {
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      } catch (e) {
+        return DEFAULT_SETTINGS;
+      }
+    }
+    return DEFAULT_SETTINGS;
+  });
+
+  const [positions, setPositions] = useState<Positions>(() => {
+    const saved = localStorage.getItem('fjoste_overlay_positions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    // Default layout positions
+    return {
+      logo: { x: 40, y: 40 },
+      mainHud: { x: 40, y: 130 },
+      event: { x: 40, y: 310 },
+      drivers: { x: 40, y: 440 }
+    };
+  });
+
+  // Use batched telemetry updates; fallback to mock data when not connected
+  const telemetry = useTelemetry(MOCK_TELEMETRY);
+
+  const [isLocked, setIsLocked] = useState(true);
+  const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
+  const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
+
+  // Absolute forced transparency on body, html, and root elements
   useEffect(() => {
-    const now = new Date();
-    events.forEach(event => {
-        const start = new Date(event.start_at);
-        const diffMins = (start.getTime() - now.getTime()) / 60000;
+    document.documentElement.classList.add('is-overlay');
+    document.documentElement.classList.remove('light');
+    document.body?.classList.add('is-overlay-body');
+
+    const elements = [document.body, document.documentElement, document.getElementById('root')];
+    elements.forEach(el => {
+      if (el) {
+        el.style.setProperty('background', 'transparent', 'important');
+        el.style.setProperty('background-color', 'transparent', 'important');
+        el.style.setProperty('background-image', 'none', 'important');
+      }
+    });
+  }, []);
+
+  // IPC listeners for settings and lock updates
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      ipcRenderer.invoke('overlay-lock-status').then(setIsLocked).catch(() => {});
+      
+      const settingsListener = (_: any, newSettings: Settings) => {
+        setSettings(newSettings);
+      };
+      ipcRenderer.on('overlay-settings-updated', settingsListener);
+
+      const lockListener = (_: any, locked: boolean) => {
+        setIsLocked(locked);
+      };
+      ipcRenderer.on('overlay-lock-changed', lockListener);
+
+      const resetListener = () => {
+        setPositions({
+          logo: { x: 40, y: 40 },
+          mainHud: { x: 40, y: 130 },
+          event: { x: 40, y: 310 },
+          drivers: { x: 40, y: 440 }
+        });
+      };
+      ipcRenderer.on('overlay-positions-reset', resetListener);
+
+      return () => {
+        ipcRenderer.removeListener('overlay-settings-updated', settingsListener);
+        ipcRenderer.removeListener('overlay-lock-changed', lockListener);
+        ipcRenderer.removeListener('overlay-positions-reset', resetListener);
+      };
+    } catch (e) {}
+  }, []);
+
+  // Fetch online drivers list (if enabled)
+  useEffect(() => {
+    if (!settings.showDrivers) return;
+
+    const fetchOnlineDrivers = async () => {
+      try {
+        const [mapRes, usersRes] = await Promise.all([
+          axios.get(`${API_URL}/trucky/live-map`),
+          axios.get(`${API_URL}/management/users`).catch(() => ({ data: [] }))
+        ]);
+        const liveData = Array.isArray(mapRes.data) ? mapRes.data : [];
+        const users = Array.isArray(usersRes.data) ? usersRes.data : [];
+
+        const active = users
+          .map((u: any) => {
+            const live = liveData.find((l: any) => l && (l.id == u.id || (l.trucky_id && l.trucky_id == u.trucky_driver_id)));
+            return {
+              name: u.username || u.name,
+              online: !!live?.online,
+              speed: live?.speed || 0,
+              destination: live?.job?.destination || live?.dest || 'Auf Achse',
+              city: live?.live_location?.city || live?.source || ''
+            };
+          })
+          .filter((d: any) => d.online);
+        setOnlineDrivers(active.slice(0, 5));
+      } catch (e) {}
+    };
+
+    fetchOnlineDrivers();
+    const interval = setInterval(fetchOnlineDrivers, 30000);
+    return () => clearInterval(interval);
+  }, [settings.showDrivers]);
+
+  // Fetch upcoming event (if enabled)
+  useEffect(() => {
+    if (!settings.showEvent) return;
+
+    const fetchEvent = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/trucky/events`);
+        const all = Array.isArray(res.data) ? res.data : [];
+        const upcoming = all
+          .filter((e: any) => new Date(e.start_date) >= new Date())
+          .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
         
-        if (diffMins > 0 && diffMins <= 30 && !notifiedEvents.has(event.id)) {
-            addPopup({
-                type: 'system',
-                title: 'Event steht an!',
-                content: `${event.title} startet in ${Math.round(diffMins)} Minuten.`,
-                duration: 15000
-            });
-            setNotifiedEvents(prev => new Set(prev).add(event.id));
+        if (upcoming.length > 0) {
+          const e = upcoming[0];
+          setNextEvent({
+            title: typeof e.title === 'object' ? e.title.name : e.title,
+            date: new Date(e.start_date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr',
+            server: e.server || 'TruckersMP'
+          });
         }
+      } catch (e) {}
+    };
+
+    fetchEvent();
+  }, [settings.showEvent]);
+
+  const handleDragEnd = (widget: string, _event: any, info: PanInfo) => {
+    setPositions(prev => {
+      const currentX = prev[widget]?.x !== undefined ? prev[widget].x : 40;
+      const currentY = prev[widget]?.y !== undefined ? prev[widget].y : 40;
+
+      // Restrict widget position coordinates to the screen viewport
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+
+      // Keep at least a part of the widget visible so it can't get lost off-screen
+      const nextX = Math.max(0, Math.min(screenWidth - 80, currentX + info.offset.x));
+      const nextY = Math.max(0, Math.min(screenHeight - 40, currentY + info.offset.y));
+
+      const updated = {
+        ...prev,
+        [widget]: {
+          x: nextX,
+          y: nextY
+        }
+      };
+      localStorage.setItem('fjoste_overlay_positions', JSON.stringify(updated));
+      return updated;
     });
-  }, [events]);
+  };
 
-  const hasData = telemetry && !telemetry.error && telemetry.gameVersion > 0;
-
-  const getPositionClasses = () => {
-    switch (settings.position) {
-      case 'top-left': return 'top-10 left-10';
-      case 'top-right': return 'top-10 right-10';
-      case 'bottom-left': return 'bottom-10 left-10';
-      case 'bottom-right': return 'bottom-10 right-10';
-      case 'top-center': return 'top-10 left-1/2 -translate-x-1/2';
-      case 'bottom-center': return 'bottom-10 left-1/2 -translate-x-1/2';
-      default: return 'top-10 left-10';
+  // UI styling classes based on theme selection
+  const getThemeClasses = () => {
+    switch (settings.style) {
+      case 'retro':
+        return {
+          card: 'border border-green-500 rounded-none font-mono text-green-500 select-none shadow-[0_0_15px_rgba(34,197,94,0.1)] relative overflow-hidden',
+          textMuted: 'text-green-600',
+          textActive: 'text-green-400',
+          primaryAccent: 'bg-green-500',
+          borderAccent: 'border-green-500',
+          barBg: 'bg-green-950 border border-green-700',
+          barFill: 'bg-green-500 shadow-[0_0_6px_#22c55e]',
+          glow: 'shadow-[0_0_10px_#22c55e]'
+        };
+      case 'minimal':
+        return {
+          card: 'backdrop-blur-xl border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl',
+          textMuted: 'text-slate-500',
+          textActive: 'text-white',
+          primaryAccent: 'bg-white',
+          borderAccent: 'border-white/20',
+          barBg: 'bg-white/10',
+          barFill: 'bg-white',
+          glow: ''
+        };
+      case 'neon':
+      default:
+        return {
+          card: 'backdrop-blur-[40px] border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative',
+          textMuted: 'text-slate-500',
+          textActive: 'text-[#22D1EE]',
+          primaryAccent: 'bg-primary',
+          borderAccent: 'border-[#2ba1b9]/20',
+          barBg: 'bg-white/5 border border-white/5',
+          barFill: 'bg-gradient-to-r from-primary to-[#0ea5e9] shadow-[0_0_12px_rgba(43,161,185,0.4)]',
+          glow: 'shadow-[0_0_15px_rgba(43,161,185,0.3)]'
+        };
     }
   };
 
-  const getDriversPositionClasses = () => {
-    const pos = settings.driversPosition || 'top-right';
+  const c = getThemeClasses();
 
-    switch (pos) {
-      case 'top-left': return 'top-10 left-10';
-      case 'top-right': return 'top-10 right-10';
-      case 'bottom-left': return 'bottom-10 left-10';
-      case 'bottom-right': return 'bottom-10 right-10';
-      case 'top-center': return 'top-10 left-1/2 -translate-x-1/2';
-      case 'bottom-center': return 'bottom-10 left-1/2 -translate-x-1/2';
-      default: return 'top-10 right-10';
+  const formatDistance = (meters: number) => {
+    if (isNaN(meters)) return '0 km';
+    return `${Math.round(meters / 1000)} km`;
+  };
+
+  const formatETA = (secRemaining: number) => {
+    if (isNaN(secRemaining) || secRemaining <= 0) return '--:--';
+    const now = new Date();
+    const etaDate = new Date(now.getTime() + secRemaining * 1000);
+    return etaDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+  };
+
+  const formatRemainingTime = (secRemaining: number) => {
+    if (isNaN(secRemaining) || secRemaining <= 0) return '0 Min';
+    const totalMinutes = Math.round(secRemaining / 60);
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    if (hrs > 0) {
+      return `${hrs} Std ${mins} Min`;
     }
+    return `${mins} Min`;
   };
 
-  const formatRestTime = (mins: number) => {
-    if (!mins || mins <= 0) return "Sofort";
-    const h = Math.floor(mins / 60);
-    const m = Math.floor(mins % 60);
-    return `${h}h ${m}m`;
-  };
-
-  const getRealDuration = (gameSeconds: number) => {
-    if (!gameSeconds || gameSeconds <= 0) return "-- Min";
-    const realSeconds = gameSeconds / 15;
-    const mins = Math.ceil(realSeconds / 60);
-    if (mins < 60) return `${mins} Min`;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${h}h ${m}m`;
-  };
-
-  const getRealArrivalClock = (gameSeconds: number) => {
-    if (!gameSeconds || gameSeconds < 30) return "--:--";
-    const realSecondsRemaining = gameSeconds / 15;
-    const arrivalDate = new Date(Date.now() + (realSecondsRemaining * 1000));
-    return arrivalDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatGear = (gear: number) => {
-    if (gear === 0) return 'N';
-    if (gear < 0) return 'R' + Math.abs(gear);
-    if (gear > 20 || gear < -10) return '--';
-    return gear.toString();
-  };
-
-  const StatItem = ({ icon: Icon, value, label, color = "text-white" }: any) => (
-    <div className="flex items-center gap-2 px-3 border-l border-white/10 first:border-l-0">
-      <Icon size={14} className="text-slate-400 shrink-0" />
-      <div className="flex flex-col">
-        {label && <span className="text-[7px] text-slate-500 font-bold uppercase leading-none mb-0.5">{label}</span>}
-        <span className={`text-[10px] font-black leading-none ${color}`}>{value}</span>
-      </div>
+  const renderLogo = () => (
+    <div className="flex-1 flex items-center justify-center p-2">
+      {settings.style === 'retro' ? (
+        <span className="font-black text-xs uppercase tracking-widest text-green-500 text-center leading-tight">FJOSTE</span>
+      ) : (
+        <img 
+          src="logo.png" 
+          alt="FJOSTE" 
+          className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]" 
+        />
+      )}
     </div>
   );
 
-  const handleMouseEnter = () => {
-    if (!isLocked) {
-      window.require('electron').ipcRenderer.send('set-ignore-mouse-events', false);
-    }
-  };
+  const renderMainHud = () => {
+    let gearText = 'N';
+    const gear = telemetry?.gear || 0;
+    if (gear > 0) gearText = `D${gear}`;
+    else if (gear < 0) gearText = `R${Math.abs(gear)}`;
 
-  const handleMouseLeave = () => {
-    if (!isLocked) {
-      window.require('electron').ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
-    }
-  };
+    const maxFuel = 600;
+    const fuel = telemetry?.fuel || 0;
+    const fuelRange = telemetry?.fuelRange || 0;
+    const fuelPercent = Math.min(100, Math.max(0, (fuel / (fuelRange > 0 ? fuel / (fuelRange / 1000) : maxFuel)) * 100));
 
+    const speed = telemetry?.speed || 0;
+    const speedLimit = telemetry?.speedLimit || 0;
+    const cruiseControl = telemetry?.cruiseControl || 0;
+    const rpm = telemetry?.rpm || 0;
+    const cargo = telemetry?.cargo || '';
+    const cargoMass = telemetry?.cargoMass || 0;
+    const income = telemetry?.income || 0;
+    const navDistance = telemetry?.navDistance || 0;
+    const navTime = telemetry?.navTime || 0;
 
+    const isATS = telemetry?.gameType === 2;
+    const timeScale = isATS ? 20 : 19;
+    const realNavTime = navTime / timeScale;
 
+    return (
+      <div className="flex-1 p-3 flex flex-col justify-between gap-2 min-w-0">
+        {/* Speed, Gear, RPM */}
+        <div className="flex items-center justify-between gap-4">
+          {settings.showSpeed && (
+            <div className="flex items-baseline gap-1">
+              <span className="font-unbounded text-2xl font-black text-white leading-none tracking-tighter">
+                {Math.round(speed)}
+              </span>
+              <span className={`text-[8px] font-black uppercase tracking-wider ${c.textMuted}`}>KM/H</span>
+            </div>
+          )}
 
+          {/* RPM Bar */}
+          <div className="flex-1 max-w-xs px-2">
+            <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/5 border border-white/5 relative">
+              <div 
+                className="h-full rounded-full transition-all duration-300"
+                style={{ 
+                  width: `${Math.min(100, (rpm / 2000) * 100)}%`,
+                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9' 
+                }}
+              />
+            </div>
+          </div>
 
-  return (
-    <div
-      className="w-screen h-screen relative select-none overflow-hidden bg-transparent"
-    >
-      {/* Top Bar (Clock & Event Ticker) */}
-      <div className="fixed top-0 left-0 right-0 h-8 flex items-center justify-between px-6 z-[1100]">
-        <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 shadow-lg">
-          <Clock size={10} className="text-primary" />
-          <span className="text-[10px] font-black text-white tabular-nums">
-            {clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
+          <div className="flex items-center gap-2">
+            {speedLimit > 0 && (
+              <div className="w-5 h-5 rounded-full border-2 border-red-500 bg-white flex items-center justify-center font-black text-[9px] text-black">
+                {Math.round(speedLimit)}
+              </div>
+            )}
+            
+            {cruiseControl > 0 && (
+              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 rounded">
+                CC {Math.round(cruiseControl)}
+              </span>
+            )}
+
+            {settings.showGear && (
+              <span className="font-unbounded text-xs font-black text-white leading-none bg-white/10 px-2 py-1 rounded-lg">
+                {gearText}
+              </span>
+            )}
+          </div>
         </div>
 
-        {events.length > 0 && (
-          <div className="flex items-center gap-2 bg-primary/20 backdrop-blur-md px-4 py-1 rounded-full border border-primary/20 shadow-[0_0_15px_rgba(43,161,185,0.2)] max-w-[400px] overflow-hidden">
-            <Calendar size={10} className="text-primary shrink-0" />
-            <div className="overflow-hidden whitespace-nowrap">
-              <motion.p
-                animate={{ x: [-100, 100] }}
-                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                className="text-[9px] font-black text-white uppercase tracking-wider"
-              >
-                Nächstes Event: {events[0].title} @ {new Date(events[0].start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </motion.p>
+        {/* Cargo manifest details */}
+        {settings.showCargo && cargo && cargo.toLowerCase() !== 'none' && (
+          <div className="p-1.5 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 text-[9px] min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Package size={11} className="text-primary shrink-0" />
+              <span className="font-bold text-white truncate">{cargo}</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {cargoMass && (
+                <span className={`${c.textMuted} font-black italic`}>{Math.round(cargoMass)}t</span>
+              )}
+              {settings.showIncome && income > 0 && (
+                <span className="text-emerald-400 font-bold">{income.toLocaleString('de-DE')} $</span>
+              )}
             </div>
           </div>
         )}
-      </div>
 
-      {/* Popups Layer */}
-      <div className="fixed top-10 left-1/2 -translate-x-1/2 flex flex-col gap-3 z-[1000] items-center pointer-events-none">
-        {popups.map(p => (
-          <motion.div
-            key={p.id}
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="px-6 py-4 rounded-2xl border border-white/20 bg-[#0a0a0a] backdrop-blur-3xl shadow-2xl flex items-center gap-4 min-w-[300px]"
-          >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${p.type === 'start' ? 'bg-primary/20 text-primary' : p.type === 'delivered' ? 'bg-emerald-500/20 text-emerald-400' : p.type === 'system' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
-              {p.type === 'start' ? <Truck size={20} /> : p.type === 'delivered' ? <Navigation size={20} /> : p.type === 'system' ? <Bell size={20} /> : <ShieldAlert size={20} />}
-            </div>
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-white leading-none mb-1">
-                {p.type === 'start' ? 'Job Gestartet' : p.type === 'delivered' ? 'Job Abgeliefert' : p.type === 'system' ? (p.title || 'Benachrichtigung') : 'Job Abgebrochen'}
-              </p>
-              <p className="text-[10px] font-bold text-slate-400 italic">
-                {p.type === 'start' ? `${p.cargo} nach ${p.dest}` : p.type === 'delivered' ? 'Gute Arbeit! Daten synchronisiert.' : p.type === 'system' ? p.content : 'Job-Status wurde aktualisiert.'}
-              </p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: (hasData && telemetry?.paused) ? 0 : 1 }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`absolute ${getPositionClasses()} ${settings.layout === 'horizontal' ? 'rounded-full px-6 py-3 h-[60px] flex-row items-center' : 'rounded-[28px] p-5 flex-col w-[340px]'} border border-white/20 flex gap-3 shadow-2xl transition-all`}
-        style={{
-          backgroundColor: `rgba(10, 10, 15, ${(settings.opacity || 95) / 100})`,
-          backgroundImage: `
-            linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 100%),
-            repeating-conic-gradient(rgba(255,255,255,0.03) 0 25%, transparent 0 50%) 50% / 1px 1px
-          `,
-          boxShadow: '0 20px 40px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.15)',
-          ...(hasData && (telemetry.wearTruck > 10 || telemetry.wearCargo > 5) ? {
-            borderColor: 'rgba(239, 68, 68, 0.4)',
-            animation: 'pulse-red 2s infinite'
-          } : {}),
-          ...(hasData && telemetry.fuelRange < 150 ? {
-            borderColor: 'rgba(245, 158, 11, 0.4)',
-            animation: 'pulse-amber 2s infinite'
-          } : {})
-        } as any}
-      >
-
-        {hasData ? (
-          settings.layout === 'horizontal' ? (
-            <div className="flex items-center gap-1 whitespace-nowrap">
-              <div className="flex items-center gap-3 pr-3">
-                {settings.showGear && (
-                  <span className="text-xl font-unbounded font-black text-primary leading-none">{formatGear(telemetry.gear)}</span>
-                )}
-                {settings.showSpeed && (
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-xl font-unbounded font-black text-white leading-none">{Math.round(telemetry.speed || 0)}</span>
-                    <span className="text-[8px] font-black text-slate-500 italic">KMH</span>
-                  </div>
-                )}
-                {settings.showLimit && telemetry.speedLimit > 1 && (
-                  <div className="w-6 h-6 rounded-full border-2 border-red-600 bg-white flex items-center justify-center">
-                    <span className="text-[8px] font-black text-black">{Math.round(telemetry.speedLimit)}</span>
-                  </div>
-                )}
-              </div>
-
-              {settings.showFuel && (
-                <StatItem
-                  icon={Fuel}
-                  value={`${Math.round(telemetry.fuel)}L`}
-                  label={`${Math.round(telemetry.fuelRange)} km`}
-                  color={telemetry.fuelRange < 100 ? "text-amber-500" : "text-white"}
-                />
-              )}
-              {settings.showArrival && (
-                <>
-                  <StatItem icon={Map} value={`${Math.round(telemetry.navDistance / 1000)} km`} label="Distanz" />
-                  <StatItem icon={Timer} value={getRealDuration(telemetry.navTime)} label="Dauer" />
-                  <StatItem icon={Navigation} value={getRealArrivalClock(telemetry.navTime)} label="Ankunft" color="text-primary" />
-                </>
-              )}
-              {settings.showRest && <StatItem icon={Clock} value={formatRestTime(telemetry.nextRest)} label="Pause" />}
-              {settings.showDamage && (
-                <StatItem icon={ShieldAlert} value={`${Math.round(telemetry.wearTruck)}% / ${Math.round(telemetry.wearCargo)}%`} label="Schaden" color={telemetry.wearTruck > 10 ? "text-red-500" : "text-white"} />
-              )}
-
-
-              {settings.showCargo && telemetry.cargo && (
-                <div className="flex items-center gap-2 px-3 border-l border-white/10 max-w-[150px]">
-                  <Package size={14} className="text-primary shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-200 truncate italic leading-none mb-0.5">{telemetry.cargo}</span>
-                    <span className="text-[8px] font-black text-slate-500 uppercase">{Math.round(telemetry.cargoMass)} t</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 min-w-[300px]">
+        {/* Navigation & Fuel status */}
+        <div className="grid grid-cols-2 gap-4 text-[9px]">
+          {settings.showFuel && (
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {settings.showGear && (
-                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                      <span className="text-2xl font-unbounded font-black text-primary leading-none">{formatGear(telemetry.gear)}</span>
-                    </div>
-                  )}
-                  {settings.showSpeed && (
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-unbounded font-black text-white tracking-tighter leading-none">{Math.round(telemetry.speed || 0)}</span>
-                      <span className="text-[9px] font-black text-slate-500 uppercase italic">KM/H</span>
-                    </div>
-                  )}
-                  {settings.showLimit && (
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 border-red-600 bg-white shadow-lg transition-opacity ${telemetry.speedLimit > 1 ? 'opacity-100' : 'opacity-0'}`}>
-                      <span className="text-[11px] font-black text-black leading-none">{Math.round(telemetry.speedLimit || 0)}</span>
-                    </div>
-                  )}
-                  {telemetry.cruiseControl > 1 && (
-                    <div className="flex items-center gap-1 bg-emerald-500/20 px-2 py-1 rounded-lg border border-emerald-500/30">
-                      <Zap size={10} className="text-emerald-400" />
-                      <span className="text-[10px] font-black text-emerald-400">{Math.round(telemetry.cruiseControl)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  {settings.showFuel && (
-                    <div className="flex items-center gap-1.5 text-slate-300">
-                      <div className="flex flex-col items-end">
-                        <div className="flex items-center gap-1.5">
-                          <Fuel size={12} className="text-primary" />
-                          <span className="text-[11px] font-bold tracking-tight">{Math.round(telemetry.fuel || 0)}L</span>
-                        </div>
-                        <span className={`text-[8px] font-black uppercase mt-0.5 ${telemetry.fuelRange < 100 ? 'text-amber-500' : 'text-slate-500'}`}>
-                          {Math.round(telemetry.fuelRange)} km | {(telemetry.avgConsumption * 100).toFixed(1)} L/100
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <div className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-sm bg-white/5 ${telemetry.paused ? 'text-amber-500' : 'text-emerald-500 italic'}`}>
-                    {telemetry.paused ? 'Pausiert' : 'Live'}
-                  </div>
-                </div>
+                <span className={`${c.textMuted} flex items-center gap-1 uppercase font-bold text-[8px]`}>Tank</span>
+                <span className="text-white font-bold">{Math.round(fuelRange)} km</span>
               </div>
-
-              {/* Centered Time & Arrival Display */}
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
-                <div className="flex items-center gap-2 bg-white/5 px-4 py-1 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
-                   <Clock size={12} className="text-primary animate-pulse" />
-                   <span className="text-sm font-unbounded font-black text-white tracking-widest">
-                     {clock.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                   </span>
-                </div>
-                {telemetry.navTime > 0 && (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
-                    <Navigation size={10} className="text-primary" />
-                    <span className="text-[9px] font-black text-primary uppercase tracking-tighter">
-                      ETA: {getRealArrivalClock(telemetry.navTime)}
-                    </span>
-                  </div>
-                )}
+              <div className={`h-1 w-full rounded-full overflow-hidden ${c.barBg}`}>
+                <div 
+                  className={`h-full rounded-full ${c.barFill}`} 
+                  style={{ width: `${Math.min(100, Math.max(0, fuel * 0.1))}%` }} 
+                />
               </div>
-
-              {settings.showCargo && telemetry.cargo && (
-                <div className="flex items-center justify-between bg-white/5 p-2 px-3 rounded-xl border border-white/5">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <Package size={12} className="text-primary shrink-0" />
-                    <span className="text-[10px] font-bold text-slate-200 truncate italic">{telemetry.cargo}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
-                    <Weight size={12} className="text-slate-500" />
-                    <span className="text-[10px] font-black text-white">{Math.round(telemetry.cargoMass)} t</span>
-                  </div>
-                  {telemetry.income > 0 && (
-                    <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
-                      <Banknote size={12} className="text-emerald-400" />
-                      <span className="text-[10px] font-black text-emerald-400">{telemetry.income.toLocaleString('de-DE')} €</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {settings.showArrival && telemetry.navTime > 0 && (
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-white/5 p-2 rounded-xl border border-white/5 flex items-center gap-2">
-                    <Map size={12} className="text-slate-400" />
-                    <div className="flex flex-col">
-                      <span className="text-[7px] text-slate-500 font-bold uppercase leading-none mb-1">Distanz</span>
-                      <span className="text-[10px] font-black text-white leading-none">{Math.round(telemetry.navDistance / 1000)} km</span>
-                    </div>
-                  </div>
-                  <div className="bg-white/5 p-2 rounded-xl border border-white/5 flex items-center gap-2">
-                    <Timer size={12} className="text-slate-400" />
-                    <div className="flex flex-col">
-                      <span className="text-[7px] text-slate-500 font-bold uppercase leading-none mb-1">Dauer (EZ)</span>
-                      <span className="text-[10px] font-black text-white leading-none">{getRealDuration(telemetry.navTime)}</span>
-                    </div>
-                  </div>
-                  <div className="bg-primary/10 p-2 rounded-xl border border-primary/20 flex items-center gap-2">
-                    <Navigation size={12} className="text-primary" />
-                    <div className="flex flex-col">
-                      <span className="text-[7px] text-primary/70 font-bold uppercase leading-none mb-1">Ankunft</span>
-                      <span className="text-[10px] font-black text-white leading-none">{getRealArrivalClock(telemetry.navTime)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {(settings.showDamage || settings.showRest) && (
-                <div className="flex items-center gap-4 pt-1 px-1">
-                  {settings.showDamage && (
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert size={12} className={telemetry.wearTruck > 10 ? 'text-red-500' : 'text-slate-400'} />
-                      <div className="flex gap-2">
-                        <span className="text-[9px] font-bold text-slate-200">{Math.round(telemetry.wearTruck)}% <span className="text-slate-500 font-black text-[7px]">T</span></span>
-                        <span className="text-[9px] font-bold text-slate-200">{Math.round(telemetry.wearCargo)}% <span className="text-slate-500 font-black text-[7px]">C</span></span>
-                      </div>
-                    </div>
-                  )}
-                  {settings.showRest && (
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <Clock size={12} className="text-slate-400" />
-                      <span className="text-[10px] font-bold text-slate-200">{formatRestTime(telemetry.nextRest)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
             </div>
-          )
-        ) : (
-          <div className={`${settings.layout === 'horizontal' ? 'px-10 h-full' : 'py-4 px-10'} flex flex-col items-center justify-center opacity-50`}>
-            <Gauge size={settings.layout === 'horizontal' ? 16 : 24} className="text-white/20 mb-2 animate-pulse" />
-            <p className="text-[10px] font-black text-white uppercase tracking-[0.2em] italic text-center leading-none">Telemetrie...</p>
-          </div>
-        )}
-      </motion.div>
+          )}
 
-      {/* Drivers List Overlay */}
-      {settings.showDrivers && onlineDrivers.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{
-            opacity: (hasData && telemetry?.paused) ? 0 : 1,
-            y: (hasData && telemetry?.paused) ? -20 : 0
-          }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          className={`absolute ${getDriversPositionClasses()} rounded-[28px] border border-white/20 p-4 shadow-2xl flex flex-col gap-3 min-w-[200px] transition-all`}
-          style={{
-            backgroundColor: `rgba(10, 10, 15, ${(settings.opacity || 95) / 100})`,
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
-          } as any}
-        >
-          <div className="flex items-center gap-2 px-1 mb-0.5 opacity-80">
-            <Users size={12} className="text-primary" />
-            <span className="text-[9px] font-black uppercase tracking-[0.15em] text-white/70">Fahrer</span>
-            <span className="ml-auto text-[8px] font-black text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">{onlineDrivers.length}</span>
-          </div>
-
-          <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
-            {onlineDrivers.map((driver) => (
-              <div key={driver.id} className="group/driver flex items-center gap-2.5 hover:bg-white/5 rounded-xl p-1.5 transition-all">
-                <div className={`w-7 h-7 rounded-lg bg-black border overflow-hidden shrink-0 ${driver.online ? 'border-emerald-500/40' : 'border-white/10'}`}>
-                  {getAvatarUrl(driver.avatar_url) ? (
-                    <img src={getAvatarUrl(driver.avatar_url)!} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-primary/20 text-primary text-[10px] font-black">
-                      {(driver.username || driver.name)?.charAt(0)}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-white truncate leading-tight">{driver.username || driver.name || 'Unbekannt'}</p>
-                  <p className="text-[8px] font-black text-primary truncate leading-tight mt-0.5 uppercase tracking-tight">
-                    {driver.live_location?.city || driver.last_position?.city || 'Auf Achse'}
-                    {(driver.live_location?.country || driver.last_position?.country) ? `, ${driver.live_location?.country || driver.last_position?.country}` : ''}
-                  </p>
-                </div>
+          {settings.showRemainingDistance && navDistance > 0 && (
+            <div className="space-y-0.5 text-right">
+              <div className="flex items-center justify-between">
+                <span className={`${c.textMuted} flex items-center gap-1 uppercase font-bold text-[8px]`}>Ziel</span>
+                <span className="text-white font-bold">{formatDistance(navDistance)}</span>
               </div>
-            ))}
-          </div>
-        </motion.div>
+              <div className="text-[8px] font-medium text-slate-400">
+                noch {formatRemainingTime(realNavTime)} {settings.showETA && `(ETA ${formatETA(realNavTime)})`}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderEvent = () => {
+    if (!nextEvent) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-slate-500 text-[10px] uppercase font-bold tracking-wider p-3">
+          Keine anstehenden Events
+        </div>
+      );
+    }
+    return (
+      <div className="flex-1 p-3 flex items-center gap-3 min-w-0">
+        <div className="p-2 rounded-xl bg-amber-500/10 shrink-0">
+          <Calendar size={14} className="text-amber-500" />
+        </div>
+        <div className="min-w-0 text-left">
+          <p className={`${c.textMuted} text-[8px] font-black uppercase tracking-widest leading-none mb-1`}>Nächstes Event</p>
+          <p className="text-xs font-bold text-white truncate leading-tight">{nextEvent.title}</p>
+          <p className="text-[9px] text-slate-400 font-medium leading-none mt-1">{nextEvent.date} • {nextEvent.server}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDrivers = () => {
+    if (onlineDrivers.length === 0) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-slate-500 text-[10px] uppercase font-bold tracking-wider p-3">
+          Keine Fahrer online
+        </div>
+      );
+    }
+    return (
+      <div className="flex-1 p-3 flex flex-col gap-1.5 min-w-0 h-full">
+        <div className="flex items-center justify-between border-b border-white/5 pb-1">
+          <span className="text-white font-bold uppercase tracking-widest text-[8px] flex items-center gap-1"><Users size={10} /> Fahrer Online ({onlineDrivers.length})</span>
+        </div>
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1">
+          {onlineDrivers.map((d, i) => (
+            <div key={i} className="flex items-center justify-between gap-4 p-1 hover:bg-white/[0.02] rounded-lg text-[9px]">
+              <span className="font-bold text-slate-300 truncate">{d.name}</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[8px] text-primary">{d.city}</span>
+                <span className="text-emerald-400 font-bold italic">{Math.round(d.speed)} km/h</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const shouldShowOverlay = () => {
+    // If we are in Setup Mode (unlocked), always show the overlay
+    if (!isLocked) return true;
+
+    // If locked, check telemetry data
+    if (!telemetry || !telemetry.connected || telemetry.gameVersion === 0) {
+      return false;
+    }
+
+    // Check if game is in foreground
+    const activeTitle = (telemetry.activeTitle || '').toLowerCase();
+    const isGameActive = 
+      activeTitle.includes('euro truck simulator 2') || 
+      activeTitle.includes('american truck simulator') || 
+      activeTitle.includes('truckersmp');
+
+    return isGameActive;
+  };
+
+  const hideWidgets = isLocked && telemetry && telemetry.paused;
+  const showContent = shouldShowOverlay();
+
+  return (
+    <div 
+      ref={containerRef}
+      className="w-screen h-screen overflow-hidden relative select-none"
+      style={{
+        background: isLocked ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
+        willChange: 'transform, opacity',
+        opacity: showContent ? 1 : 0,
+        pointerEvents: showContent ? 'auto' : 'none',
+        transition: 'opacity 0.2s ease-in-out'
+      }}
+    >
+      {/* Visual Alignment Grid (only visible when unlocked) */}
+      {!isLocked && (
+        <div className="absolute inset-0 pointer-events-none opacity-20" style={{
+          backgroundImage: 'radial-gradient(rgba(43, 161, 185, 0.15) 1px, transparent 1px)',
+          backgroundSize: '24px 24px'
+        }} />
       )}
 
+      {/* Retro scanline effect */}
+      {settings.style === 'retro' && !hideWidgets && (
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-green-500/[0.02] to-transparent bg-[length:100%_4px] z-50 animate-[scanline_10s_infinite_linear]" />
+      )}
 
+      {/* Setup Mode Info Banner */}
+      {!isLocked && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#2ba1b9]/30 px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#22D1EE] flex items-center gap-2 justify-center">
+            <Unlock size={12} className="animate-pulse" /> Setup-Modus: Widgets verschiebbar
+          </p>
+          <p className="text-[8px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
+            Sperren mit Strg+Shift+L oder im Hub
+          </p>
+        </div>
+      )}
+
+      {/* Widgets */}
+      {settings.widgetOrder.map((widget) => {
+        const isEnabled = 
+          widget === 'logo' ? settings.showLogo :
+          widget === 'mainHud' ? settings.showMainHud :
+          widget === 'event' ? settings.showEvent :
+          settings.showDrivers;
+
+        if (!isEnabled) return null;
+
+        let content = null;
+        let dimensions = 'w-auto h-auto';
+        if (widget === 'logo') {
+          content = renderLogo();
+          dimensions = 'w-20 h-20 flex items-center justify-center';
+        } else if (widget === 'mainHud') {
+          content = renderMainHud();
+          dimensions = 'w-96 min-h-[120px]';
+        } else if (widget === 'event') {
+          content = renderEvent();
+          dimensions = 'w-72 h-16';
+        } else if (widget === 'drivers') {
+          content = renderDrivers();
+          dimensions = 'w-80 h-48 flex flex-col';
+        }
+
+        const widgetX = positions[widget]?.x !== undefined ? positions[widget].x : 40;
+        const widgetY = positions[widget]?.y !== undefined ? positions[widget].y : 40;
+
+        return (
+          <motion.div
+            key={widget}
+            drag={!isLocked}
+            dragElastic={0}
+            dragMomentum={false}
+            onDragEnd={(event, info) => handleDragEnd(widget, event, info)}
+            className="absolute"
+            animate={{ opacity: hideWidgets ? 0 : 1 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              left: 0,
+              top: 0,
+              x: widgetX,
+              y: widgetY,
+              zIndex: widget === 'logo' ? 10 : 20,
+              transition: 'none', // Remove any CSS transition that lags dragging
+              pointerEvents: hideWidgets ? 'none' : 'auto',
+            }}
+          >
+            <div
+              className={`${dimensions} ${c.card} ${!isLocked ? 'cursor-grab active:cursor-grabbing border-dashed border-primary/50' : 'border-solid'}`}
+              style={{
+                transform: `scale(${settings.zoom / 100})`,
+                transformOrigin: 'top left',
+                backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
+              }}
+            >
+              {/* Grab handle overlay (only visible when unlocked) */}
+              {!isLocked && (
+                <div className="absolute inset-0 bg-primary/[0.02] border border-[#22D1EE]/20 rounded-[inherit] pointer-events-none group-hover:border-[#22D1EE]/40 transition-colors" />
+              )}
+              {content}
+            </div>
+          </motion.div>
+        );
+      })}
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 3px;
+        @keyframes scanline {
+          0% { background-position: 0 0; }
+          100% { background-position: 0 100%; }
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.02);
-          border-radius: 10px;
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
         }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: var(--primary);
-        }
-        @keyframes pulse-red {
-          0%, 100% { box-shadow: 0 20px 40px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.15); }
-          50% { box-shadow: 0 20px 40px rgba(239, 68, 68, 0.4), inset 0 0 0 2px rgba(239, 68, 68, 0.6); }
-        }
-        @keyframes pulse-amber {
-          0%, 100% { box-shadow: 0 20px 40px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.15); }
-          50% { box-shadow: 0 20px 40px rgba(245, 158, 11, 0.4), inset 0 0 0 2px rgba(245, 158, 11, 0.6); }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
     </div>
   );
 };
 
-export default Overlay;
+export default OverlayPage;

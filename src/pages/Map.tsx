@@ -108,9 +108,10 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
   useEffect(() => {
     if (!mapContainer.current) return;
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: (theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK) as any,
+      style: (isLight ? MAP_STYLE_LIGHT : MAP_STYLE_DARK) as any,
       center: [12, 51],
       zoom: 4.5,
       attributionControl: false,
@@ -121,8 +122,29 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   }, []);
 
   useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.setStyle(theme === 'light' ? MAP_STYLE_LIGHT : MAP_STYLE_DARK);
+    const updateMapStyle = () => {
+      if (mapRef.current) {
+        const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+        mapRef.current.setStyle(isLight ? MAP_STYLE_LIGHT : MAP_STYLE_DARK);
+      }
+    };
+
+    updateMapStyle();
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', updateMapStyle);
+      } else {
+        mediaQuery.addListener(updateMapStyle);
+      }
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', updateMapStyle);
+        } else {
+          mediaQuery.removeListener(updateMapStyle);
+        }
+      };
     }
   }, [theme]);
 

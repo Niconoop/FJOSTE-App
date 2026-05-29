@@ -7,7 +7,7 @@ import Register from './pages/Register';
 import News from './pages/News';
 import Chat from './pages/Chat';
 import AfkBot from './pages/AfkBot';
-import Overlay from './pages/Overlay';
+import OverlayPage from './pages/Overlay';
 import OverlaySettings from './pages/OverlaySettings';
 
 // Lazy load heavy components
@@ -29,31 +29,79 @@ import { toast } from 'sonner';
 function App() {
   const { user, loading, logout, hasRole } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | number | 'me'>('me');
   const [showNotifications, setShowNotifications] = useState(false);
   const [serverOnline, setServerOnline] = useState(true);
   const [rpcActive, setRpcActive] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
+    const isOverlay = window.location.hash.includes('overlay');
+    if (isOverlay) return 'dark';
     const saved = localStorage.getItem('theme');
-    return (saved as 'dark' | 'light') || 'dark';
+    return (saved as 'dark' | 'light' | 'system') || 'dark';
   });
 
+  const [isOverlayRoute, setIsOverlayRoute] = useState(() => window.location.hash.startsWith('#overlay'));
+
   useEffect(() => {
-    const isOverlay = window.location.hash === '#overlay';
-    if (isOverlay) {
+    const handleHashChange = () => {
+      setIsOverlayRoute(window.location.hash.startsWith('#overlay'));
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    // Trigger once manually to cover immediate loads
+    handleHashChange();
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (isOverlayRoute) {
+      document.documentElement.classList.add('is-overlay');
       document.documentElement.classList.remove('light');
+      document.body?.classList.add('is-overlay-body');
       return;
     }
+    
+    document.body?.classList.remove('is-overlay-body');
+    
+    const applyTheme = (currentTheme: 'dark' | 'light' | 'system') => {
+      if (currentTheme === 'system') {
+        const isSystemLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        if (isSystemLight) {
+          document.documentElement.classList.add('light');
+        } else {
+          document.documentElement.classList.remove('light');
+        }
+      } else if (currentTheme === 'light') {
+        document.documentElement.classList.add('light');
+      } else {
+        document.documentElement.classList.remove('light');
+      }
+    };
 
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
+    applyTheme(theme);
     localStorage.setItem('theme', theme);
-  }, [theme]);
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+      const handleChange = () => applyTheme('system');
+
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handleChange);
+      } else {
+        mediaQuery.addListener(handleChange);
+      }
+
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', handleChange);
+        } else {
+          mediaQuery.removeListener(handleChange);
+        }
+      };
+    }
+  }, [theme, isOverlayRoute]);
   const [telemetry, setTelemetry] = useState<any>(null);
   const [pluginStatus, setPluginStatus] = useState<any[]>([]);
   const [showPluginPopup, setShowPluginPopup] = useState(false);
@@ -67,11 +115,6 @@ function App() {
   const [updatingApp, setUpdatingApp] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateStatus, setUpdateStatus] = useState('');
-
-
-  if (window.location.hash === '#overlay') {
-    return <Overlay />;
-  }
 
   useEffect(() => {
     const checkServer = async () => {
@@ -110,6 +153,10 @@ function App() {
         const teleListener = (_: any, data: any) => setTelemetry(data);
         ipcRenderer.on('telemetry-update', teleListener);
 
+        ipcRenderer.invoke('overlay-status').then(setIsOverlayOpen).catch(() => {});
+        const overlayListener = (_: any, status: boolean) => setIsOverlayOpen(status);
+        ipcRenderer.on('overlay-status-changed', overlayListener);
+
         // Real-time Job Notifications
         const jobEventListener = (_: any, event: any) => {
           console.log("App: Notification erhalten", event);
@@ -120,7 +167,7 @@ function App() {
             title = `🔔 ${event.title || 'System'}`;
             content = event.content || '';
           } else {
-            title = event.type === 'start' ? '🚚 Job Gestartet' : event.type === 'delivered' ? '🏁 Job Abgeliefert' : '❌ Job Abgebrochen';
+            title = event.type === 'start' ? 'Job Gestartet' : event.type === 'delivered' ? 'Job Abgeliefert' : event.type === 'cancelled' ? 'Job Abgebrochen' : event.type === 'resumed' ? 'Job Fortgesetzt' : title;
             content = event.type === 'start' 
               ? `${event.cargo} von ${event.source} nach ${event.dest}` 
               : `Fahrt beendet. Status: ${event.type === 'delivered' ? 'Erfolgreich' : 'Abgebrochen'}`;
@@ -133,6 +180,36 @@ function App() {
             time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr',
             read: false
           };
+
+          // Trigger visual toast notifications
+          if (event.type === 'system') {
+            toast(event.title || 'System-Meldung', {
+               description: event.content || '',
+               duration: 5000,
+               className: 'custom-toast toast-resumed',
+               className: 'custom-toast toast-resumed glass-card',
+             });
+          } else if (event.type === 'start' || event.type === 'delivered') {
+            const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
+            toast.success(title, {
+               description: content,
+               duration: 5000,
+               className: `custom-toast ${toastClass} glass-card`,
+            });
+          } else if (event.type === 'cancelled') {
+            toast.error(title, {
+               description: content,
+               duration: 5000,
+               className: 'custom-toast toast-cancelled glass-card',
+            });
+          } else if (event.type === 'resumed') {
+              toast.info(title, {
+                description: content,
+                duration: 5000,
+                className: 'custom-toast glass-card',
+              });
+            }
+
           if (event.type !== 'system' && event.type !== 'chat' && event.type !== 'chat_group') {
             setNotifications(prev => [newNotif, ...prev]);
             // Play sound for real-time notifications
@@ -207,6 +284,7 @@ function App() {
           ipcRenderer.removeListener('telemetry-update', teleListener);
           ipcRenderer.removeListener('job-notification', jobEventListener);
           ipcRenderer.removeListener('play-sound', soundListener);
+          ipcRenderer.removeListener('overlay-status-changed', overlayListener);
         }
       }
     } catch (e) {
@@ -367,7 +445,7 @@ function App() {
 
   useEffect(() => {
     // Only run this logic in the main window, not in the overlay window
-    const isOverlay = window.location.hash === '#overlay';
+    const isOverlay = window.location.hash.startsWith('#overlay');
     if (isOverlay) return;
 
     fetchNotifications();
@@ -424,6 +502,12 @@ function App() {
 
   const getAvatarUrlLocal = (url?: string) => getAvatarUrl(url);
 
+  const isOverlay = window.location.hash.startsWith('#overlay');
+
+  if (isOverlay) {
+    return <OverlayPage telemetry={telemetry} />;
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center">
       <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6" />
@@ -449,8 +533,8 @@ function App() {
     { id: 'gallery', name: 'Galerie', icon: ImageIcon },
     { id: 'statistiken', name: 'Statistiken', icon: Route },
     { id: 'team', name: 'Team', icon: Users },
-    { id: 'overlay', name: 'Overlay', icon: Monitor },
     { id: 'afkbot', name: 'AFK Bot', icon: Bot },
+    { id: 'overlay-settings', name: 'Overlay', icon: Monitor },
   ];
 
   if (canSeeAdmin) {
@@ -508,6 +592,8 @@ function App() {
                 <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">SDK</span>
               </div>
             </div>
+
+
 
             <button
               id="notif-bell"
@@ -589,11 +675,27 @@ function App() {
               </button>
             </div>
             <button
-              onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-              className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-              title={theme === 'dark' ? 'Helles Design' : 'Dunkles Design'}
+              onClick={() => setTheme(prev => {
+                if (prev === 'dark') return 'light';
+                if (prev === 'light') return 'system';
+                return 'dark';
+              })}
+              className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-1 shrink-0"
+              title={
+                theme === 'dark'
+                  ? 'Design: Dunkel (klicken für Helles Design)'
+                  : theme === 'light'
+                  ? 'Design: Hell (klicken für System-Einstellung)'
+                  : 'Design: System (klicken für Dunkles Design)'
+              }
             >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              {theme === 'dark' ? (
+                <Moon size={18} />
+              ) : theme === 'light' ? (
+                <Sun size={18} />
+              ) : (
+                <Monitor size={18} />
+              )}
             </button>
             <button
               onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch(e){} }}
@@ -639,9 +741,9 @@ function App() {
           {currentPage === 'gallery' && <Gallery />}
           {currentPage === 'chat' && <Chat selectedChannelId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
           {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => setCurrentPage('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
-          {currentPage === 'afkbot' && <AfkBot />}
-          {currentPage === 'reports' && <Reports />}
-          {currentPage === 'overlay' && <OverlaySettings />}
+          { currentPage === 'afkbot' && <AfkBot /> }
+          { currentPage === 'reports' && <Reports /> }
+          { currentPage === 'overlay-settings' && <OverlaySettings /> }
         </Suspense>
       </main>
 

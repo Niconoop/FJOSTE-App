@@ -1,0 +1,12 @@
+{
+  "htmlClass": "is-overlay dark",
+  "htmlStyleBg": "transparent",
+  "htmlStyleBgColor": "transparent",
+  "htmlComputedBg": "rgba(0, 0, 0, 0)",
+  "bodyClass": "",
+  "bodyStyleBg": "transparent",
+  "bodyStyleBgColor": "transparent",
+  "bodyComputedBg": "rgba(0, 0, 0, 0)",
+  "rootComputedBg": "rgba(0, 0, 0, 0)",
+  "url": "http://localhost:5173/#overlay"
+}

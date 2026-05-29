@@ -5,8 +5,49 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FJOSTE App</title>
+    <script>
+      (function() {
+        const isOverlay = window.location.hash.includes('overlay') || window.location.search.includes('overlay');
+        if (isOverlay) {
+          document.documentElement.classList.add('is-overlay');
+          document.documentElement.classList.remove('light');
+          document.documentElement.style.setProperty('background', 'transparent', 'important');
+          document.documentElement.style.setProperty('background-color', 'transparent', 'important');
+        } else {
+          const theme = localStorage.getItem('theme') || 'dark';
+          if (theme === 'light') document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
+    <style>
+      /* Force transparent overlay IMMEDIATELY */
+      html.is-overlay,
+      html.is-overlay.is-overlay,
+      html.is-overlay body,
+      html.is-overlay.is-overlay body,
+      html.is-overlay #root,
+      html.is-overlay.is-overlay #root {
+        background: transparent !important;
+        background-color: transparent !important;
+        background-image: none !important;
+      }
+      html.is-overlay * {
+        background-attachment: inherit !important;
+      }
+    </style>
   </head>
   <body>
+    <script>
+      (function() {
+        const isOverlay = window.location.hash.includes('overlay') || window.location.search.includes('overlay');
+        if (isOverlay) {
+          document.body.classList.add('is-overlay-body');
+          document.body.style.setProperty('background', 'transparent', 'important');
+          document.body.style.setProperty('background-color', 'transparent', 'important');
+          document.body.style.setProperty('background-image', 'none', 'important');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
