@@ -122,7 +122,7 @@ const DEFAULT_SETTINGS: Settings = {
   showMainHud: true,
   showDrivers: true,
   showEvent: true,
-  showSpotify: false,
+  showSpotify: true,
   widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify'],
   zoom: 100,
   bgOpacity: 80,
@@ -190,18 +190,23 @@ const OverlayPage: React.FC = () => {
     const saved = localStorage.getItem('fjoste_overlay_settings');
     if (saved) {
       try {
-        base = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      } catch (e) {}
+        const parsed = JSON.parse(saved);
+        if (parsed.widgetOrder && Array.isArray(parsed.widgetOrder)) {
+          const missing = DEFAULT_SETTINGS.widgetOrder.filter(w => !parsed.widgetOrder.includes(w));
+          parsed.widgetOrder = [...parsed.widgetOrder, ...missing];
+        }
+        base = { ...DEFAULT_SETTINGS, ...parsed };
+      } catch (e) { }
     }
-    
+
     // Merge correct sizes
     const isSingle = base.singleRowHud || false;
     const sizeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
     const savedSizes = localStorage.getItem(sizeKey);
     if (savedSizes) {
       try {
-        base.widgetSizes = JSON.parse(savedSizes);
-      } catch (e) {}
+        base.widgetSizes = { ...DEFAULT_SETTINGS.widgetSizes, ...JSON.parse(savedSizes) };
+      } catch (e) { }
     }
     return base;
   });
@@ -212,26 +217,27 @@ const OverlayPage: React.FC = () => {
     if (savedSettings) {
       try {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
-      } catch (e) {}
+      } catch (e) { }
     }
     const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
     const saved = localStorage.getItem(posKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      } catch (e) { }
-    }
-    // Default layout positions
-    return {
+    const defaultPositions = {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
       spotify: { x: 40, y: 580 }
     };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...defaultPositions, ...parsed };
+        }
+      } catch (e) { }
+    }
+    // Default layout positions
+    return defaultPositions;
   });
 
   // Use batched telemetry updates; fallback to mock data when not connected
@@ -272,7 +278,12 @@ const OverlayPage: React.FC = () => {
       ipcRenderer.invoke('overlay-lock-status').then(setIsLocked).catch(() => { });
 
       const settingsListener = (_: any, newSettings: Settings) => {
-        setSettings(newSettings);
+        let merged = { ...DEFAULT_SETTINGS, ...newSettings };
+        if (merged.widgetOrder && Array.isArray(merged.widgetOrder)) {
+          const missing = DEFAULT_SETTINGS.widgetOrder.filter(w => !merged.widgetOrder.includes(w));
+          merged.widgetOrder = [...merged.widgetOrder, ...missing];
+        }
+        setSettings(merged);
       };
       ipcRenderer.on('overlay-settings-updated', settingsListener);
 
@@ -293,7 +304,7 @@ const OverlayPage: React.FC = () => {
       ipcRenderer.on('overlay-positions-reset', resetListener);
 
       const positionsListener = (_: any, newPositions: Positions) => {
-        setPositions(newPositions);
+        setPositions(prev => ({ ...prev, ...newPositions }));
       };
       ipcRenderer.on('overlay-positions-updated', positionsListener);
 
@@ -320,11 +331,11 @@ const OverlayPage: React.FC = () => {
             if (savedSizes) {
               try {
                 newSettings.widgetSizes = JSON.parse(savedSizes);
-              } catch (err) {}
+              } catch (err) { }
             }
             setSettings(prev => ({ ...prev, ...newSettings }));
           }
-        } catch (err) {}
+        } catch (err) { }
       } else if (e.key === 'fjoste_overlay_widget_sizes' || e.key === 'fjoste_overlay_widget_sizes_single') {
         // Also listen to widget size changes directly
         const isSingle = settings.singleRowHud || false;
@@ -335,7 +346,7 @@ const OverlayPage: React.FC = () => {
             if (newSizes) {
               setSettings(prev => ({ ...prev, widgetSizes: newSizes }));
             }
-          } catch (err) {}
+          } catch (err) { }
         }
       }
     };
@@ -353,7 +364,8 @@ const OverlayPage: React.FC = () => {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
-      drivers: { x: 40, y: 440 }
+      drivers: { x: 40, y: 440 },
+      spotify: { x: 40, y: 580 }
     };
     if (savedPos) {
       try {
@@ -361,7 +373,7 @@ const OverlayPage: React.FC = () => {
         if (parsed && typeof parsed === 'object') {
           resolvedPos = parsed;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     setPositions(resolvedPos);
   }, [settings.singleRowHud]);
@@ -380,30 +392,30 @@ const OverlayPage: React.FC = () => {
           content = event.content || '';
         } else {
           title = event.type === 'start' ? 'Job Gestartet' : event.type === 'delivered' ? 'Job Abgeliefert' : event.type === 'cancelled' ? 'Job Abgebrochen' : event.type === 'resumed' ? 'Job Fortgesetzt' : title;
-          content = event.type === 'start' 
-            ? `${event.cargo} von ${event.source} nach ${event.dest}` 
+          content = event.type === 'start'
+            ? `${event.cargo} von ${event.source} nach ${event.dest}`
             : `Fahrt beendet. Status: ${event.type === 'delivered' ? 'Erfolgreich' : 'Abgebrochen'}`;
         }
 
         // Trigger visual toast notifications
         if (event.type === 'system') {
           toast(event.title || 'System-Meldung', {
-             description: event.content || '',
-             duration: 5000,
-             className: 'custom-toast toast-resumed glass-card',
-           });
+            description: event.content || '',
+            duration: 5000,
+            className: 'custom-toast toast-resumed glass-card',
+          });
         } else if (event.type === 'start' || event.type === 'delivered') {
           const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
           toast.success(title, {
-             description: content,
-             duration: 5000,
-             className: `custom-toast ${toastClass} glass-card`,
+            description: content,
+            duration: 5000,
+            className: `custom-toast ${toastClass} glass-card`,
           });
         } else if (event.type === 'cancelled') {
           toast.error(title, {
-             description: content,
-             duration: 5000,
-             className: 'custom-toast toast-cancelled glass-card',
+            description: content,
+            duration: 5000,
+            className: 'custom-toast toast-cancelled glass-card',
           });
         } else if (event.type === 'resumed') {
           toast.info(title, {
@@ -417,7 +429,7 @@ const OverlayPage: React.FC = () => {
           // Play sound for real-time notifications
           const audio = new Audio('sounds/start.mp3');
           audio.volume = 0.15;
-          audio.play().catch(() => {});
+          audio.play().catch(() => { });
         }
       };
 
@@ -656,7 +668,7 @@ const OverlayPage: React.FC = () => {
                 <span className={`text-[7px] font-black uppercase tracking-wider ${c.textMuted}`}>KM/H</span>
               </div>
             )}
-            
+
             <div className="flex items-center gap-1">
               {speedLimit > 0 && (
                 <div className="w-4 h-4 rounded-full border border-red-500 bg-white flex items-center justify-center font-black text-[8px] text-black">
@@ -1008,13 +1020,13 @@ const OverlayPage: React.FC = () => {
               className={`${dimensions} ${c.card} ${!isLocked ? 'border-dashed border-primary/50' : 'border-solid'}`}
               style={{
                 // Apply stored widget dimensions if available
-                width: settings.widgetSizes?.[widget]?.w 
-                  ? `${settings.widgetSizes[widget].w}px` 
+                width: settings.widgetSizes?.[widget]?.w
+                  ? `${settings.widgetSizes[widget].w}px`
                   : `${getWidgetDefaultSize(widget, settings.singleRowHud || false).w}px`,
-                height: settings.widgetSizes?.[widget]?.h 
-                  ? `${settings.widgetSizes[widget].h}px` 
-                  : getWidgetDefaultSize(widget, settings.singleRowHud || false).h > 0 
-                    ? `${getWidgetDefaultSize(widget, settings.singleRowHud || false).h}px` 
+                height: settings.widgetSizes?.[widget]?.h
+                  ? `${settings.widgetSizes[widget].h}px`
+                  : getWidgetDefaultSize(widget, settings.singleRowHud || false).h > 0
+                    ? `${getWidgetDefaultSize(widget, settings.singleRowHud || false).h}px`
                     : undefined,
                 transform: `scale(${settings.zoom / 100})`,
                 transformOrigin: 'top left',

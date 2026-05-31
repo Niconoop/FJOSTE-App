@@ -46,7 +46,7 @@ const SpotifyWidget: React.FC<SpotifyWidgetProps> = ({ themeClasses: c, isLocked
 
     ipcRenderer.invoke('get-smtc-media').then((d: SmtcData | null) => {
       if (d?.title) setData(d);
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => {
       ipcRenderer.removeListener('smtc-update', handler);
@@ -74,7 +74,11 @@ const SpotifyWidget: React.FC<SpotifyWidgetProps> = ({ themeClasses: c, isLocked
     return source.split('!')[0].split('.').pop() || 'Musik';
   };
 
-  const albumArtSrc = data?.thumb ? `data:image/jpeg;base64,${data.thumb}` : null;
+  const albumArtSrc = data?.thumb
+    ? data.thumb.startsWith('iVBOR')
+      ? `data:image/png;base64,${data.thumb}`
+      : `data:image/jpeg;base64,${data.thumb}`
+    : null;
 
   if (!data || !data.title) {
     return (

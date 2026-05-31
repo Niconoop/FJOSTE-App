@@ -239,7 +239,12 @@ const OverlaySettings = () => {
     const saved = localStorage.getItem('fjoste_overlay_settings');
     if (saved) {
       try {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved), blockCollisions: true };
+        const parsed = JSON.parse(saved);
+        if (parsed.widgetOrder && Array.isArray(parsed.widgetOrder)) {
+          const missing = DEFAULT_SETTINGS.widgetOrder.filter(w => !parsed.widgetOrder.includes(w));
+          parsed.widgetOrder = [...parsed.widgetOrder, ...missing];
+        }
+        return { ...DEFAULT_SETTINGS, ...parsed, blockCollisions: true };
       } catch (e) {
         return { ...DEFAULT_SETTINGS, blockCollisions: true };
       }
@@ -255,22 +260,23 @@ const OverlaySettings = () => {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
       } catch (e) { }
     }
-    const saved = localStorage.getItem(getPosKey(isSingle));
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      } catch (e) { }
-    }
-    return {
+    const defaultPositions = {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
       spotify: { x: 40, y: 580 }
     };
+    const saved = localStorage.getItem(getPosKey(isSingle));
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...defaultPositions, ...parsed };
+        }
+      } catch (e) { }
+    }
+    return defaultPositions;
   });
 
   const [widgetSizes, setWidgetSizes] = useState<Record<string, WidgetSize>>(() => {
@@ -281,15 +287,15 @@ const OverlaySettings = () => {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
       } catch (e) { }
     }
-    const saved = localStorage.getItem(getSizeKey(isSingle));
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) { }
-    }
     const defaults = { ...DEFAULT_WIDGET_SIZES };
     if (isSingle) {
       defaults.mainHud = { w: 680, h: 52 };
+    }
+    const saved = localStorage.getItem(getSizeKey(isSingle));
+    if (saved) {
+      try {
+        return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) { }
     }
     return defaults;
   });
@@ -335,10 +341,30 @@ const OverlaySettings = () => {
       const pos = positions[resizingWidget] || { x: 40, y: 40 };
       const defaultSize = getWidgetDefaultSize(resizingWidget, settings.singleRowHud);
 
-      // Minimum dimensions: 40px shrink allowed; maximum = default size when singleRowHud is active
-      const MIN_WIDGET_W = resizingWidget === 'mainHud' && settings.singleRowHud ? 450 : 280;
-      const minW = Math.max(MIN_WIDGET_W, settings.singleRowHud ? 40 : defaultSize.w);
-      const minH = settings.singleRowHud ? 40 : defaultSize.h;
+      // Specific minimum bounds for each widget
+      let minW = 40;
+      let minH = 40;
+      if (resizingWidget === 'logo') {
+        minW = 40;
+        minH = 40;
+      } else if (resizingWidget === 'mainHud') {
+        if (settings.singleRowHud) {
+          minW = 450;
+          minH = 40;
+        } else {
+          minW = 280;
+          minH = 80;
+        }
+      } else if (resizingWidget === 'event') {
+        minW = 180;
+        minH = 40;
+      } else if (resizingWidget === 'drivers') {
+        minW = 150;
+        minH = 80;
+      } else if (resizingWidget === 'spotify') {
+        minW = 180;
+        minH = 80;
+      }
 
       const maxW = Infinity; // unlimited width even in single‑row mode
       const maxH = resizingWidget === 'mainHud' && settings.singleRowHud ? defaultSize.h : Infinity;

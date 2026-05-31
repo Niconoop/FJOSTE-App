@@ -57,6 +57,11 @@ let eventY: number | null = null;
 let eventW = 280;
 let eventH = 90;
 
+let spotifyX: number | null = null;
+let spotifyY: number | null = null;
+let spotifyW = 280;
+let spotifyH = 140;
+
 let isOverlayLocked = true;
 let isOverlayActive = false;
 
@@ -64,7 +69,8 @@ let overlaySettings: any = {
   showLogo: true,
   showMainHud: true,
   showDrivers: true,
-  showEvent: true
+  showEvent: true,
+  showSpotify: true
 };
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'overlay-settings.json');
@@ -114,10 +120,22 @@ function loadSettings() {
       eventW = saved.eventW || 280;
       eventH = saved.eventH || 90;
 
+      spotifyX = saved.spotifyX !== undefined ? saved.spotifyX : null;
+      spotifyY = saved.spotifyY !== undefined ? saved.spotifyY : null;
+      spotifyW = saved.spotifyW || 280;
+      spotifyH = saved.spotifyH || 140;
+
       isOverlayLocked = true; // Always locked on app start
       isOverlayActive = saved.isOverlayActive !== undefined ? saved.isOverlayActive : false;
       if (saved.overlaySettings !== undefined) {
-        overlaySettings = saved.overlaySettings;
+        overlaySettings = {
+          showLogo: true,
+          showMainHud: true,
+          showDrivers: true,
+          showEvent: true,
+          showSpotify: true,
+          ...saved.overlaySettings
+        };
       }
       console.log('📦 Settings: Einstellungen geladen');
     }
@@ -148,6 +166,10 @@ function saveSettings() {
       eventY,
       eventW,
       eventH,
+      spotifyX,
+      spotifyY,
+      spotifyW,
+      spotifyH,
       isOverlayLocked,
       isOverlayActive,
       overlaySettings
@@ -968,7 +990,8 @@ function createSingleOverlayWindow() {
       logo: { x: logoX ?? 40, y: logoY ?? 40 },
       mainHud: { x: overlayX ?? 40, y: overlayY ?? 130 },
       event: { x: eventX ?? 40, y: eventY ?? 310 },
-      drivers: { x: driversX ?? 40, y: driversY ?? 440 }
+      drivers: { x: driversX ?? 40, y: driversY ?? 440 },
+      spotify: { x: spotifyX ?? 40, y: spotifyY ?? 580 }
     };
     overlayWin?.webContents.send('overlay-positions-updated', currentPositions);
 
@@ -1036,6 +1059,7 @@ ipcMain.on('overlay-positions-updated', (_, positions) => {
   if (positions.mainHud) { overlayX = positions.mainHud.x; overlayY = positions.mainHud.y; }
   if (positions.drivers) { driversX = positions.drivers.x; driversY = positions.drivers.y; }
   if (positions.event) { eventX = positions.event.x; eventY = positions.event.y; }
+  if (positions.spotify) { spotifyX = positions.spotify.x; spotifyY = positions.spotify.y; }
   saveSettings();
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.webContents.send('overlay-positions-updated', positions);
@@ -1084,12 +1108,79 @@ const smtcScript = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+$source = @"
+using System;
+using System.IO;
+using System.Reflection;
+
+public class WinRtHelper {
+    public static string GetBase64(object streamObj, int maxSize) {
+        try {
+            if (streamObj == null) return "";
+            
+            Type bufferType = Type.GetType("Windows.Storage.Streams.Buffer, Windows, ContentType=WindowsRuntime");
+            Type bufferInterface = Type.GetType("Windows.Storage.Streams.IBuffer, Windows, ContentType=WindowsRuntime");
+            Type inputStreamInterface = Type.GetType("Windows.Storage.Streams.IInputStream, Windows, ContentType=WindowsRuntime");
+            Type optionsType = Type.GetType("Windows.Storage.Streams.InputStreamOptions, Windows, ContentType=WindowsRuntime");
+            
+            if (bufferType == null || bufferInterface == null || inputStreamInterface == null || optionsType == null) {
+                return "";
+            }
+            
+            object buffer = Activator.CreateInstance(bufferType, new object[] { (uint)maxSize });
+            
+            MethodInfo readAsyncMethod = inputStreamInterface.GetMethod("ReadAsync", new Type[] { bufferInterface, typeof(uint), optionsType });
+            if (readAsyncMethod == null) return "";
+            
+            object optionsVal = Enum.ToObject(optionsType, 0);
+            object readAsyncOp = readAsyncMethod.Invoke(streamObj, new object[] { buffer, (uint)maxSize, optionsVal });
+            if (readAsyncOp == null) return "";
+            
+            Type extType = Type.GetType("System.WindowsRuntimeSystemExtensions, System.Runtime.WindowsRuntime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+            if (extType == null) return "";
+            
+            MethodInfo asTaskMethod = null;
+            foreach (var m in extType.GetMethods()) {
+                if (m.Name == "AsTask" && m.GetGenericArguments().Length == 2) {
+                    asTaskMethod = m;
+                    break;
+                }
+            }
+            if (asTaskMethod == null) return "";
+            
+            var closedMethod = asTaskMethod.MakeGenericMethod(bufferInterface, typeof(uint));
+            
+            dynamic task = closedMethod.Invoke(null, new object[] { readAsyncOp });
+            task.Wait();
+            
+            dynamic resultBuffer = task.Result;
+            if (resultBuffer == null) return "";
+            
+            Type bufExtType = Type.GetType("System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions, System.Runtime.WindowsRuntime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+            if (bufExtType == null) return "";
+            
+            var toArrayMethod = bufExtType.GetMethod("ToArray", new Type[] { bufferInterface });
+            if (toArrayMethod == null) return "";
+            
+            byte[] bytes = (byte[])toArrayMethod.Invoke(null, new object[] { resultBuffer });
+            if (bytes == null || bytes.Length == 0) return "";
+            
+            return Convert.ToBase64String(bytes);
+        } catch (Exception) {
+            return "";
+        }
+    }
+}
+"@
+
+try {
+    Add-Type -TypeDefinition $source -ReferencedAssemblies "System.Core", "Microsoft.CSharp" -ErrorAction SilentlyContinue
+} catch {}
+
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 
 # Force-load the WinRT namespaces
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media, ContentType=WindowsRuntime]
-[void][Windows.Storage.Streams.DataReader, Windows.Storage, ContentType=WindowsRuntime]
-[void][Windows.Storage.Streams.Buffer, Windows.Storage, ContentType=WindowsRuntime]
 
 $asTaskGeneric = $null
 foreach ($m in [System.WindowsRuntimeSystemExtensions].GetMethods()) {
@@ -1110,12 +1201,8 @@ function GetThumbnailBase64($thumbnail) {
     try {
         $streamRef = $thumbnail.OpenReadAsync()
         $stream = Await $streamRef ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-        $size = [int]$stream.Size
-        if ($size -le 0 -or $size -gt 500000) { return '' }
-        $buffer = [Windows.Storage.Streams.Buffer]::new([uint32]$size)
-        Await ($stream.ReadAsync($buffer, [uint32]$size, [Windows.Storage.Streams.InputStreamOptions]::None)) ([Windows.Storage.Streams.IBuffer]) | Out-Null
-        $bytes = [System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions]::ToArray($buffer)
-        return [Convert]::ToBase64String($bytes)
+        $res = [WinRtHelper]::GetBase64($stream, 262144)
+        return $res
     } catch {
         return ''
     }
@@ -1123,6 +1210,7 @@ function GetThumbnailBase64($thumbnail) {
 
 $lastTitle = ''
 $lastThumb = ''
+$thumbAttempts = 0
 
 while ($true) {
     try {
@@ -1140,19 +1228,24 @@ while ($true) {
             $playing = ($playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing)
             $src = if ($session.SourceAppUserModelId) { $session.SourceAppUserModelId -replace '"','' } else { '' }
             $playing_str = if ($playing) { 'true' } else { 'false' }
-            # Only re-fetch thumbnail when track changes (expensive)
+            
+            # Only re-fetch thumbnail when track changes (expensive) or if it was empty and we have retries left
             if ($t -ne $lastTitle) {
                 $lastTitle = $t
+                $lastThumb = ''
+                $thumbAttempts = 0
+            }
+            if ($lastThumb -eq '' -and $thumbAttempts -lt 5) {
+                $thumbAttempts++
                 if ($info.Thumbnail) {
                     $lastThumb = GetThumbnailBase64 $info.Thumbnail
-                } else {
-                    $lastThumb = ''
                 }
             }
             Write-Output ('{"title":"' + $t + '","artist":"' + $a + '","album":"' + $al + '","progress":' + $pos + ',"duration":' + $dur + ',"isPlaying":' + $playing_str + ',"source":"' + $src + '","thumb":"' + $lastThumb + '"}')
         } else {
             $lastTitle = ''
             $lastThumb = ''
+            $thumbAttempts = 0
             Write-Output '{"title":"","artist":"","album":"","progress":0,"duration":0,"isPlaying":false,"source":"","thumb":""}'
         }
     } catch {
