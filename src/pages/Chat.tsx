@@ -93,6 +93,23 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      if (ipcRenderer) {
+        if (activeChannel) {
+          if (activeChannel.is_group) {
+            ipcRenderer.send('rpc-page-changed', 'chat', { groupName: activeChannel.name });
+          } else {
+            ipcRenderer.send('rpc-page-changed', 'chat', { chattingWith: activeChannel.name });
+          }
+        } else {
+          ipcRenderer.send('rpc-page-changed', 'chat');
+        }
+      }
+    } catch (e) {}
+  }, [activeChannel]);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !activeChannel) return;

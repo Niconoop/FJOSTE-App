@@ -93,7 +93,7 @@ function loadSettings() {
       isRpcActive = saved.isRpcActive !== undefined ? saved.isRpcActive : isRpcActive;
       currentJobId = saved.currentJobId || null;
       lastJobDetails = saved.lastJobDetails || null;
-      
+
       overlayX = saved.overlayX !== undefined ? saved.overlayX : null;
       overlayY = saved.overlayY !== undefined ? saved.overlayY : null;
       overlayW = saved.overlayW || 380;
@@ -215,6 +215,7 @@ let telemetryData: any = null;
 let lastTelemetryUpdate = 0;
 const TELEMETRY_UPDATE_INTERVAL = 40; // ms
 let currentCity: string | null = null;
+let currentAppPage = 'Dashboard';
 
 function updateRpc() {
   if (!rpc || !isRpcActive || !isRpcConnected) return;
@@ -267,6 +268,8 @@ function updateRpc() {
     }
   } else {
     rpcStartTime = null;
+    activity.details = 'Im Drivers Hub';
+    activity.state = currentAppPage;
   }
 
   rpc.setActivity(activity).catch((err: any) => console.error('🎮 RPC: Fehler beim Setzen der Activity:', err));
@@ -298,6 +301,10 @@ let rpcTimeout: NodeJS.Timeout | null = null;
 
 async function loginRpc() {
   if (!isRpcActive) return;
+  if (rpc && isRpcConnected) {
+    updateRpc();
+    return;
+  }
   if (rpcTimeout) clearTimeout(rpcTimeout);
 
   if (rpc) {
@@ -380,6 +387,49 @@ ipcMain.handle('rpc-status', () => isRpcConnected);
 ipcMain.on('rpc-update-city', (_, city) => {
   console.log('📍 RPC Standort Update:', city);
   currentCity = city;
+  updateRpc();
+});
+
+ipcMain.on('rpc-page-changed', (_, page, details) => {
+  let displayPage = 'Dashboard';
+  if (page === 'profile') {
+    if (details?.isSelf) {
+      displayPage = 'Bearbeitet sein Profil';
+    } else if (details?.username) {
+      displayPage = `Schaut das Profil von ${details.username} an`;
+    } else {
+      displayPage = 'Schaut sich ein Profil an';
+    }
+  } else if (page === 'events') {
+    if (details?.planning) {
+      displayPage = 'Erstellt ein Event';
+    } else {
+      displayPage = 'Schaut sich Events an';
+    }
+  } else if (page === 'chat') {
+    displayPage = 'Chattet mit jemandem';
+  } else if (page === 'Dashboard' || page === 'dashboard') {
+    displayPage = 'Im Dashboard';
+  } else if (page === 'Map' || page === 'map') {
+    displayPage = 'Schaut auf die Karte';
+  } else if (page === 'OverlaySettings' || page === 'AfkBot' || page === 'overlay-settings' || page === 'afkbot') {
+    displayPage = 'In den Einstellungen';
+  } else if (page === 'Stats' || page === 'stats') {
+    displayPage = 'Schaut sich Statistiken an';
+  } else if (page === 'Gallery' || page === 'gallery') {
+    displayPage = 'Schaut sich die Galerie an';
+  } else if (page === 'News' || page === 'news') {
+    displayPage = 'Schaut sich Neuigkeiten an';
+  } else if (page === 'Team' || page === 'team') {
+    displayPage = 'Schaut sich das Team an';
+  } else if (page === 'Admin' || page === 'admin') {
+    displayPage = 'Im Admin-Bereich';
+  } else {
+    displayPage = page.charAt(0).toUpperCase() + page.slice(1);
+  }
+
+  console.log(`🎮 RPC: Seite geändert zu "${displayPage}"`);
+  currentAppPage = displayPage;
   updateRpc();
 });
 
@@ -818,38 +868,9 @@ ipcMain.on('set-auth-token', (_, token) => {
 
 
 
-function registerOverlayShortcut() {
-  if (!globalShortcut.isRegistered('CommandOrControl+Shift+L')) {
-    try {
-      globalShortcut.register('CommandOrControl+Shift+L', () => {
-        isOverlayLocked = !isOverlayLocked;
-        saveSettings();
-        if (overlayWin && !overlayWin.isDestroyed()) {
-          overlayWin.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
-          overlayWin.webContents.send('overlay-lock-changed', isOverlayLocked);
-          updateOverlayWindowVisibility(telemetryData);
-          if (!isOverlayLocked && isOverlayActive) {
-            overlayWin.show();
-            overlayWin.focus();
-          }
-        }
-      });
-      console.log('⌨️ Shortcut: Globaler Hotkey registriert');
-    } catch (e) {
-      console.error('Failed to register global shortcut:', e);
-    }
-  }
-}
-
 function updateOverlayStatus() {
   const isOpen = isOverlayActive || !!(logoWin || driversWin || eventWin);
   win?.webContents.send('overlay-status-changed', isOpen);
-  
-  if (!isOpen) {
-    try {
-      globalShortcut.unregister('CommandOrControl+Shift+L');
-    } catch (e) { }
-  }
 }
 
 function updateOverlayWindowVisibility(data: any) {
@@ -880,9 +901,9 @@ function updateOverlayWindowVisibility(data: any) {
   }
 
   const activeTitle = (data.activeTitle || '').toLowerCase();
-  const isGameActive = 
-    activeTitle.includes('euro truck simulator 2') || 
-    activeTitle.includes('american truck simulator') || 
+  const isGameActive =
+    activeTitle.includes('euro truck simulator 2') ||
+    activeTitle.includes('american truck simulator') ||
     activeTitle.includes('truckersmp');
 
   if (isGameActive) {
@@ -937,9 +958,20 @@ function createSingleOverlayWindow() {
   }
 
   overlayWin.webContents.on('did-finish-load', () => {
-    overlayWin?.setIgnoreMouseEvents(isOverlayLocked, { forward: true });
+    // Always ignore mouse events to allow clicking through the overlay window
+    overlayWin?.setIgnoreMouseEvents(true, { forward: true });
     overlayWin?.webContents.send('overlay-lock-changed', isOverlayLocked);
     overlayWin?.webContents.send('overlay-settings-updated', overlaySettings);
+
+    // Sync persisted positions on load
+    const currentPositions = {
+      logo: { x: logoX ?? 40, y: logoY ?? 40 },
+      mainHud: { x: overlayX ?? 40, y: overlayY ?? 130 },
+      event: { x: eventX ?? 40, y: eventY ?? 310 },
+      drivers: { x: driversX ?? 40, y: driversY ?? 440 }
+    };
+    overlayWin?.webContents.send('overlay-positions-updated', currentPositions);
+
     if (telemetryData) {
       overlayWin?.webContents.send('telemetry-update', telemetryData);
     }
@@ -948,9 +980,6 @@ function createSingleOverlayWindow() {
   overlayWin.once('ready-to-show', () => {
     updateOverlayWindowVisibility(telemetryData);
   });
-
-  // Register hotkey if not already registered
-  registerOverlayShortcut();
 
   overlayWin.on('closed', () => {
     overlayWin = null;
@@ -968,8 +997,6 @@ function syncOverlayWindows() {
     updateOverlayStatus();
     return;
   }
-
-  registerOverlayShortcut();
 
   if (!overlayWin || overlayWin.isDestroyed()) {
     createSingleOverlayWindow();
@@ -998,13 +1025,20 @@ ipcMain.on('overlay-lock', (_, locked: boolean) => {
   isOverlayLocked = locked;
   saveSettings();
   if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.setIgnoreMouseEvents(locked, { forward: true });
+    overlayWin.setIgnoreMouseEvents(true, { forward: true }); // Keep ignore mouse events to be click-through
     overlayWin.webContents.send('overlay-lock-changed', locked);
     updateOverlayWindowVisibility(telemetryData);
-    if (!locked && isOverlayActive) {
-      overlayWin.show();
-      overlayWin.focus();
-    }
+  }
+});
+
+ipcMain.on('overlay-positions-updated', (_, positions) => {
+  if (positions.logo) { logoX = positions.logo.x; logoY = positions.logo.y; }
+  if (positions.mainHud) { overlayX = positions.mainHud.x; overlayY = positions.mainHud.y; }
+  if (positions.drivers) { driversX = positions.drivers.x; driversY = positions.drivers.y; }
+  if (positions.event) { eventX = positions.event.x; eventY = positions.event.y; }
+  saveSettings();
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('overlay-positions-updated', positions);
   }
 });
 
@@ -1168,7 +1202,7 @@ let lastAfkHotkey: string | null = null;
 ipcMain.on('afk-configure', (e, config) => {
   afkConfig = config;
   if (lastAfkHotkey) {
-    try { globalShortcut.unregister(lastAfkHotkey); } catch(e){}
+    try { globalShortcut.unregister(lastAfkHotkey); } catch (e) { }
   }
   if (config.hotkey) {
     try {

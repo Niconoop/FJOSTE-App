@@ -225,6 +225,15 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      if (ipcRenderer) {
+        ipcRenderer.send('rpc-page-changed', 'events', { planning: showForm });
+      }
+    } catch (e) {}
+  }, [showForm]);
+
+  useEffect(() => {
     if (selectedId && !loading && events.length > 0) {
       const target = events.find(e => String(e.id) === String(selectedId));
       if (target) {

@@ -370,6 +370,19 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      if (ipcRenderer) {
+        if (driver?.name) {
+          ipcRenderer.send('rpc-page-changed', 'profile', { username: driver.name, isSelf });
+        } else {
+          ipcRenderer.send('rpc-page-changed', 'profile', { isSelf });
+        }
+      }
+    } catch (e) {}
+  }, [driver?.name, isSelf]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);

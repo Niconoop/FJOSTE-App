@@ -41,6 +41,7 @@ interface Settings {
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
+  widgetBlur: boolean;
   showGear: boolean;
   showSpeed: boolean;
   showFuel: boolean;
@@ -118,6 +119,7 @@ const DEFAULT_SETTINGS: Settings = {
   widgetOrder: ['logo', 'mainHud', 'event', 'drivers'],
   zoom: 100,
   bgOpacity: 80,
+  widgetBlur: false,
   showGear: true,
   showSpeed: true,
   showFuel: true,
@@ -174,7 +176,7 @@ const OverlayPage: React.FC = () => {
         if (parsed && typeof parsed === 'object') {
           return parsed;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     // Default layout positions
     return {
@@ -220,8 +222,8 @@ const OverlayPage: React.FC = () => {
   useEffect(() => {
     try {
       const { ipcRenderer } = window.require('electron');
-      ipcRenderer.invoke('overlay-lock-status').then(setIsLocked).catch(() => {});
-      
+      ipcRenderer.invoke('overlay-lock-status').then(setIsLocked).catch(() => { });
+
       const settingsListener = (_: any, newSettings: Settings) => {
         setSettings(newSettings);
       };
@@ -242,12 +244,18 @@ const OverlayPage: React.FC = () => {
       };
       ipcRenderer.on('overlay-positions-reset', resetListener);
 
+      const positionsListener = (_: any, newPositions: Positions) => {
+        setPositions(newPositions);
+      };
+      ipcRenderer.on('overlay-positions-updated', positionsListener);
+
       return () => {
         ipcRenderer.removeListener('overlay-settings-updated', settingsListener);
         ipcRenderer.removeListener('overlay-lock-changed', lockListener);
         ipcRenderer.removeListener('overlay-positions-reset', resetListener);
+        ipcRenderer.removeListener('overlay-positions-updated', positionsListener);
       };
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   // Fetch online drivers list (if enabled)
@@ -277,7 +285,7 @@ const OverlayPage: React.FC = () => {
           })
           .filter((d: any) => d.online);
         setOnlineDrivers(active.slice(0, 5));
-      } catch (e) {}
+      } catch (e) { }
     };
 
     fetchOnlineDrivers();
@@ -304,7 +312,7 @@ const OverlayPage: React.FC = () => {
         const upcoming = all
           .filter((e: any) => e.start_date && new Date(e.start_date) >= startOfToday)
           .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-        
+
         if (upcoming.length > 0) {
           const e = upcoming[0];
           setNextEvent({
@@ -417,10 +425,10 @@ const OverlayPage: React.FC = () => {
 
   const renderLogo = () => (
     <div className="flex-1 flex items-center justify-center p-2">
-      <img 
-        src="logo.png" 
-        alt="FJOSTE" 
-        className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]" 
+      <img
+        src="logo.png"
+        alt="FJOSTE"
+        className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]"
       />
     </div>
   );
@@ -451,7 +459,7 @@ const OverlayPage: React.FC = () => {
     const realNavTime = navTime / timeScale;
 
     return (
-      <div className="flex-1 p-3 flex flex-col justify-between gap-2 min-w-0">
+      <div className={`flex-1 p-3 flex ${settings.singleRowHud ? 'flex-row' : 'flex-col'} justify-between gap-2 min-w-0`}>
         {/* Speed, Gear, RPM */}
         <div className="flex items-center justify-between gap-4">
           {settings.showSpeed && (
@@ -466,11 +474,11 @@ const OverlayPage: React.FC = () => {
           {/* RPM Bar */}
           <div className="flex-1 max-w-xs px-2">
             <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/5 border border-white/5 relative">
-              <div 
+              <div
                 className="h-full rounded-full transition-all duration-300"
-                style={{ 
+                style={{
                   width: `${Math.min(100, (rpm / 2000) * 100)}%`,
-                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9' 
+                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9'
                 }}
               />
             </div>
@@ -482,7 +490,7 @@ const OverlayPage: React.FC = () => {
                 {Math.round(speedLimit)}
               </div>
             )}
-            
+
             {cruiseControl > 0 && (
               <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 rounded">
                 CC {Math.round(cruiseControl)}
@@ -524,9 +532,9 @@ const OverlayPage: React.FC = () => {
                 <span className="text-white font-bold">{Math.round(fuelRange)} km</span>
               </div>
               <div className={`h-1 w-full rounded-full overflow-hidden ${c.barBg}`}>
-                <div 
-                  className={`h-full rounded-full ${c.barFill}`} 
-                  style={{ width: `${Math.min(100, Math.max(0, fuel * 0.1))}%` }} 
+                <div
+                  className={`h-full rounded-full ${c.barFill}`}
+                  style={{ width: `${Math.min(100, Math.max(0, fuel * 0.1))}%` }}
                 />
               </div>
             </div>
@@ -620,9 +628,9 @@ const OverlayPage: React.FC = () => {
 
     // Check if game is in foreground
     const activeTitle = (telemetry.activeTitle || '').toLowerCase();
-    const isGameActive = 
-      activeTitle.includes('euro truck simulator 2') || 
-      activeTitle.includes('american truck simulator') || 
+    const isGameActive =
+      activeTitle.includes('euro truck simulator 2') ||
+      activeTitle.includes('american truck simulator') ||
       activeTitle.includes('truckersmp');
 
     return isGameActive;
@@ -632,14 +640,14 @@ const OverlayPage: React.FC = () => {
   const showContent = shouldShowOverlay();
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="w-screen h-screen overflow-hidden relative select-none"
       style={{
         background: isLocked ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
         willChange: 'transform, opacity',
         opacity: showContent ? 1 : 0,
-        pointerEvents: showContent ? 'auto' : 'none',
+        pointerEvents: 'none',
         transition: 'opacity 0.2s ease-in-out'
       }}
     >
@@ -657,21 +665,18 @@ const OverlayPage: React.FC = () => {
       {!isLocked && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#2ba1b9]/30 px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none">
           <p className="text-[10px] font-black uppercase tracking-widest text-[#22D1EE] flex items-center gap-2 justify-center">
-            <Unlock size={12} className="animate-pulse" /> Setup-Modus: Widgets verschiebbar
-          </p>
-          <p className="text-[8px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
-            Sperren mit Strg+Shift+L oder im Hub
+            <Unlock size={12} className="animate-pulse" /> Vorschaumodus
           </p>
         </div>
       )}
 
       {/* Widgets */}
       {settings.widgetOrder.map((widget) => {
-        const isEnabled = 
+        const isEnabled =
           widget === 'logo' ? settings.showLogo :
-          widget === 'mainHud' ? settings.showMainHud :
-          widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
-          settings.showDrivers;
+            widget === 'mainHud' ? settings.showMainHud :
+              widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
+                settings.showDrivers;
 
         if (!isEnabled) return null;
 
@@ -679,16 +684,16 @@ const OverlayPage: React.FC = () => {
         let dimensions = 'w-auto h-auto';
         if (widget === 'logo') {
           content = renderLogo();
-          dimensions = 'w-20 h-20 flex items-center justify-center';
+          dimensions = '';
         } else if (widget === 'mainHud') {
           content = renderMainHud();
-          dimensions = 'w-96 min-h-[120px]';
+          dimensions = '';
         } else if (widget === 'event') {
           content = renderEvent();
-          dimensions = 'w-72 h-16';
+          dimensions = '';
         } else if (widget === 'drivers') {
           content = renderDrivers();
-          dimensions = 'w-48 h-auto flex flex-col';
+          dimensions = '';
         }
 
         const widgetX = positions[widget]?.x !== undefined ? positions[widget].x : 40;
@@ -697,10 +702,6 @@ const OverlayPage: React.FC = () => {
         return (
           <motion.div
             key={widget}
-            drag={!isLocked}
-            dragElastic={0}
-            dragMomentum={false}
-            onDragEnd={(event, info) => handleDragEnd(widget, event, info)}
             className="absolute"
             animate={{ opacity: hideWidgets ? 0 : 1 }}
             transition={{ duration: 0.2 }}
@@ -715,13 +716,21 @@ const OverlayPage: React.FC = () => {
             }}
           >
             <div
-              className={`${dimensions} ${c.card} ${!isLocked ? 'cursor-grab active:cursor-grabbing border-dashed border-primary/50' : 'border-solid'}`}
+              className={`${dimensions} ${c.card} ${!isLocked ? 'border-dashed border-primary/50' : 'border-solid'}`}
               style={{
+                // Apply stored widget dimensions if available
+                width: settings.widgetSizes?.[widget]?.w ? `${settings.widgetSizes[widget].w}px` : undefined,
+                height: settings.widgetSizes?.[widget]?.h ? `${settings.widgetSizes[widget].h}px` : undefined,
                 transform: `scale(${settings.zoom / 100})`,
                 transformOrigin: 'top left',
+                position: 'relative',
+                overflow: 'hidden',
                 backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
+                backdropFilter: settings.widgetBlur ? 'blur(12px)' : 'none',
+                WebkitBackdropFilter: settings.widgetBlur ? 'blur(12px)' : 'none',
               }}
             >
+
               {/* Acrylic Noise Overlay */}
               <div className="acrylic-noise" />
               {/* Carbon Fiber Pattern Overlay */}
@@ -736,7 +745,7 @@ const OverlayPage: React.FC = () => {
         );
       })}
 
-      <style>{`
+      <style jsx global>{`
         .acrylic-noise {
           position: absolute;
           inset: 0;

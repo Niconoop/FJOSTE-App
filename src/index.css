@@ -531,3 +531,75 @@ body.is-overlay-body {
   background-image: none !important;
 }
 
+/* Premium Custom Switch Toggle */
+.switch-toggle {
+  position: relative;
+  width: 2.25rem; /* w-9 */
+  height: 1.25rem; /* h-5 */
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 9999px;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center; /* Perfect vertical alignment on all zoom levels */
+  line-height: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Knob */
+.switch-toggle::after {
+  content: '';
+  display: block;
+  width: 0.875rem; /* h-3.5 */
+  height: 0.875rem; /* w-3.5 */
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  border-radius: 9999px;
+  transition: all 0.2s ease-in-out;
+  margin: 0 0 0 2px !important; /* Force top/bottom margins to 0 for vertical centering */
+  box-sizing: border-box !important;
+  box-shadow: none !important; /* Remove shadows */
+}
+
+/* Hover effect */
+.switch-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Checked state */
+.peer:checked ~ .switch-toggle {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.peer:checked ~ .switch-toggle::after {
+  transform: translateX(1rem); /* Translate knob to the right side precisely */
+  background-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Light mode overrides */
+.light .switch-toggle {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+.light .switch-toggle:hover {
+  border-color: rgba(0, 0, 0, 0.25) !important;
+}
+
+.light .switch-toggle::after {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  box-shadow: none !important;
+}
+
+.light .peer:checked ~ .switch-toggle {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.light .peer:checked ~ .switch-toggle::after {
+  background-color: #ffffff !important;
+  box-shadow: none !important; /* Remove shadows */
+}
+

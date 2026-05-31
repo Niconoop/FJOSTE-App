@@ -102,6 +102,18 @@ function App() {
       };
     }
   }, [theme, isOverlayRoute]);
+
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      if (ipcRenderer) {
+        if (currentPage !== 'chat' && currentPage !== 'profile' && currentPage !== 'events') {
+          ipcRenderer.send('rpc-page-changed', currentPage);
+        }
+      }
+    } catch (e) {}
+  }, [currentPage]);
+
   const [telemetry, setTelemetry] = useState<any>(null);
   const [pluginStatus, setPluginStatus] = useState<any[]>([]);
   const [showPluginPopup, setShowPluginPopup] = useState(false);
