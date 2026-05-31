@@ -24,6 +24,7 @@ interface OverlaySettingsType {
   showMainHud: boolean;
   showDrivers: boolean;
   showEvent: boolean;
+  showSpotify: boolean;
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
@@ -44,7 +45,8 @@ const DEFAULT_WIDGET_SIZES: Record<string, WidgetSize> = {
   logo: { w: 80, h: 80 },
   mainHud: { w: 384, h: 120 },
   event: { w: 288, h: 64 },
-  drivers: { w: 192, h: 0 } // 0 = auto‑height (flex column)
+  drivers: { w: 192, h: 0 }, // 0 = auto‑height (flex column)
+  spotify: { w: 280, h: 140 }
 };
 
 const getWidgetDefaultSize = (widget: string, singleRowHud: boolean): WidgetSize => {
@@ -202,7 +204,8 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   showMainHud: true,
   showDrivers: true,
   showEvent: true,
-  widgetOrder: ['logo', 'mainHud', 'event', 'drivers'],
+  showSpotify: true,
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify'],
   zoom: 100,
   bgOpacity: 80,
   showGear: true,
@@ -250,7 +253,7 @@ const OverlaySettings = () => {
     if (savedSettings) {
       try {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
-      } catch (e) {}
+      } catch (e) { }
     }
     const saved = localStorage.getItem(getPosKey(isSingle));
     if (saved) {
@@ -265,7 +268,8 @@ const OverlaySettings = () => {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
-      drivers: { x: 40, y: 440 }
+      drivers: { x: 40, y: 440 },
+      spotify: { x: 40, y: 580 }
     };
   });
 
@@ -275,7 +279,7 @@ const OverlaySettings = () => {
     if (savedSettings) {
       try {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
-      } catch (e) {}
+      } catch (e) { }
     }
     const saved = localStorage.getItem(getSizeKey(isSingle));
     if (saved) {
@@ -320,32 +324,32 @@ const OverlaySettings = () => {
     const onMouseMove = (e: MouseEvent) => {
       const dx = e.clientX - resizeStartPos.current.x;
       const dy = e.clientY - resizeStartPos.current.y;
-      
+
       const scaleX = previewDims.w / SW;
       const scaleY = previewDims.h / SH;
       const zoomFactor = settings.zoom / 100;
-      
+
       const dxUnscaled = (dx / scaleX) / zoomFactor;
       const dyUnscaled = (dy / scaleY) / zoomFactor;
-      
+
       const pos = positions[resizingWidget] || { x: 40, y: 40 };
       const defaultSize = getWidgetDefaultSize(resizingWidget, settings.singleRowHud);
-      
+
       // Minimum dimensions: 40px shrink allowed; maximum = default size when singleRowHud is active
       const MIN_WIDGET_W = resizingWidget === 'mainHud' && settings.singleRowHud ? 450 : 280;
       const minW = Math.max(MIN_WIDGET_W, settings.singleRowHud ? 40 : defaultSize.w);
       const minH = settings.singleRowHud ? 40 : defaultSize.h;
-      
+
       const maxW = Infinity; // unlimited width even in single‑row mode
       const maxH = resizingWidget === 'mainHud' && settings.singleRowHud ? defaultSize.h : Infinity;
-      
+
       // Enforce screen boundaries during resize: pos.x + newW * zoomFactor <= SW
       const limitMaxW = Math.min(maxW, Math.max(minW, (SW - pos.x) / zoomFactor));
       const limitMaxH = Math.min(maxH, Math.max(minH, (SH - pos.y) / zoomFactor));
-      
+
       const newW = Math.min(limitMaxW, Math.max(minW, resizeStartSize.current.w + dxUnscaled));
       const newH = Math.min(limitMaxH, Math.max(minH, resizeStartSize.current.h + dyUnscaled));
-      
+
       setWidgetSizes(prev => ({
         ...prev,
         [resizingWidget]: { w: newW, h: newH }
@@ -375,7 +379,8 @@ const OverlaySettings = () => {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
-      drivers: { x: 40, y: 440 }
+      drivers: { x: 40, y: 440 },
+      spotify: { x: 40, y: 580 }
     };
     if (savedPos) {
       try {
@@ -383,7 +388,7 @@ const OverlaySettings = () => {
         if (parsed && typeof parsed === 'object') {
           resolvedPos = parsed;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     setPositions(resolvedPos);
 
@@ -396,7 +401,7 @@ const OverlaySettings = () => {
     if (savedSizes) {
       try {
         resolvedSizes = JSON.parse(savedSizes);
-      } catch (e) {}
+      } catch (e) { }
     }
     setWidgetSizes(resolvedSizes);
 
@@ -405,7 +410,7 @@ const OverlaySettings = () => {
       const { ipcRenderer } = window.require('electron');
       ipcRenderer.send('overlay-positions-updated', resolvedPos);
       ipcRenderer.send('overlay-settings-changed', { ...settings, widgetSizes: resolvedSizes });
-    } catch (e) {}
+    } catch (e) { }
   }, [settings.singleRowHud]);
 
   // Update and persist settings, widget sizes, and notify overlay
@@ -440,13 +445,13 @@ const OverlaySettings = () => {
     setRInput(String(r));
     setGInput(String(g));
     setBInput(String(b));
-    
+
     // Only update HSV if it doesn't match the new customAccentColor to avoid dragging loops
     const currentHexFromHsv = hsvToHex(hsv.h, hsv.s, hsv.v);
     if (currentHexFromHsv.toLowerCase() !== color.toLowerCase()) {
       try {
         setHsv(hexToHsv(color));
-      } catch (err) {}
+      } catch (err) { }
     }
   }, [settings.customAccentColor]);
 
@@ -497,16 +502,16 @@ const OverlaySettings = () => {
   const handleSvMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!svBoxRef.current) return;
-    
+
     const handleMove = (moveEvent: MouseEvent) => {
       if (!svBoxRef.current) return;
       const rect = svBoxRef.current.getBoundingClientRect();
       const x = Math.max(0, Math.min(1, (moveEvent.clientX - rect.left) / rect.width));
       const y = Math.max(0, Math.min(1, 1 - (moveEvent.clientY - rect.top) / rect.height));
-      
+
       const newS = Math.round(x * 100);
       const newV = Math.round(y * 100);
-      
+
       setHsv(prev => {
         const next = { ...prev, s: newS, v: newV };
         updateSetting('customAccentColor', hsvToHex(next.h, next.s, next.v));
@@ -524,7 +529,7 @@ const OverlaySettings = () => {
     const y = Math.max(0, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
     const newS = Math.round(x * 100);
     const newV = Math.round(y * 100);
-    
+
     setHsv(prev => {
       const next = { ...prev, s: newS, v: newV };
       updateSetting('customAccentColor', hsvToHex(next.h, next.s, next.v));
@@ -642,7 +647,8 @@ const OverlaySettings = () => {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
-      drivers: { x: 40, y: 440 }
+      drivers: { x: 40, y: 440 },
+      spotify: { x: 40, y: 580 }
     };
     const defaultSizes = { ...DEFAULT_WIDGET_SIZES };
     if (settings.singleRowHud) {
@@ -677,7 +683,8 @@ const OverlaySettings = () => {
     logo: 'Firmenlogo',
     mainHud: 'Haupt-HUD',
     event: 'Event-Widget',
-    drivers: 'Fahrer Online'
+    drivers: 'Fahrer Online',
+    spotify: 'Spotify Widget'
   };
 
   // Custom Drag Event Handlers
@@ -696,6 +703,7 @@ const OverlaySettings = () => {
     if (wName === 'mainHud') return settings.showMainHud;
     if (wName === 'event') return settings.showEvent;
     if (wName === 'drivers') return settings.showDrivers;
+    if (wName === 'spotify') return settings.showSpotify;
     return false;
   };
 
@@ -759,7 +767,7 @@ const OverlaySettings = () => {
         xTargets.push({ val: pos.x, label: other }); // Left-to-Left
         xTargets.push({ val: pos.x + otherW / 2, label: other }); // Center-to-Center
         xTargets.push({ val: pos.x + otherW, label: other }); // Right-to-Right
-        
+
         // Adjacency Snapping
         xTargets.push({ val: pos.x - limitW, label: other }); // Dragged right edge snaps to other left edge
         xTargets.push({ val: pos.x + otherW, label: other }); // Dragged left edge snaps to other right edge
@@ -767,7 +775,7 @@ const OverlaySettings = () => {
         yTargets.push({ val: pos.y, label: other }); // Top-to-Top
         yTargets.push({ val: pos.y + otherH / 2, label: other }); // Middle-to-Middle
         yTargets.push({ val: pos.y + otherH, label: other }); // Bottom-to-Bottom
-        
+
         // Adjacency Snapping
         yTargets.push({ val: pos.y - limitH, label: other }); // Dragged bottom edge snaps to other top edge
         yTargets.push({ val: pos.y + otherH, label: other }); // Dragged top edge snaps to other bottom edge
@@ -933,7 +941,7 @@ const OverlaySettings = () => {
       try {
         const { ipcRenderer } = window.require('electron');
         ipcRenderer.send('overlay-positions-updated', updated);
-      } catch (err) {}
+      } catch (err) { }
     };
 
     const handleMouseUp = () => {
@@ -1013,7 +1021,7 @@ const OverlaySettings = () => {
       try {
         const { ipcRenderer } = window.require('electron');
         ipcRenderer.send('overlay-positions-updated', resolved);
-      } catch (err) {}
+      } catch (err) { }
       return resolved;
     });
   }, [settings.zoom, settings.singleRowHud, widgetSizes]);
@@ -1143,7 +1151,7 @@ const OverlaySettings = () => {
                 >
                   <Palette size={14} style={{ color: settings.customAccentColor }} />
                   <span>Farbpalette öffnen</span>
-                  <span 
+                  <span
                     className="w-3 h-3 rounded-full border border-white/25 ml-1"
                     style={{ backgroundColor: settings.customAccentColor }}
                   />
@@ -1153,11 +1161,11 @@ const OverlaySettings = () => {
                   {showColorModal && (
                     <>
                       {/* Soft dark backdrop for closing when clicking outside */}
-                      <div 
-                        className="fixed inset-0 z-[9999] bg-black/40 cursor-default" 
-                        onClick={() => setShowColorModal(false)} 
+                      <div
+                        className="fixed inset-0 z-[9999] bg-black/40 cursor-default"
+                        onClick={() => setShowColorModal(false)}
                       />
-                      
+
                       {/* Centered Color Picker Popover Container */}
                       <div className="fixed inset-0 z-[10000] flex items-center justify-center pointer-events-none p-4">
                         <motion.div
@@ -1332,9 +1340,8 @@ const OverlaySettings = () => {
                                     key={preset.hex}
                                     onClick={() => updateSetting('customAccentColor', preset.hex)}
                                     title={preset.name}
-                                    className={`w-6 h-6 rounded-lg border transition-all cursor-pointer flex items-center justify-center ${
-                                      isActive ? 'border-white bg-white/5' : 'border-white/5 hover:border-white/20 hover:scale-105'
-                                    }`}
+                                    className={`w-6 h-6 rounded-lg border transition-all cursor-pointer flex items-center justify-center ${isActive ? 'border-white bg-white/5' : 'border-white/5 hover:border-white/20 hover:scale-105'
+                                      }`}
                                   >
                                     <span
                                       className="w-3.5 h-3.5 rounded-md shadow-sm block"
@@ -1433,6 +1440,7 @@ const OverlaySettings = () => {
                   { key: 'showLogo', label: 'FJOSTE Firmenlogo' },
                   { key: 'showMainHud', label: 'Haupt-HUD (Telemetriedaten)' },
                   { key: 'showEvent', label: 'Nächstes Event-Widget' },
+                  { key: 'showSpotify', label: 'Spotify Widget' },
                   { key: 'showDrivers', label: 'Online-Fahrer Liste' }
                 ].map(item => {
                   const active = settings[item.key as keyof OverlaySettingsType] as boolean;
@@ -1592,9 +1600,9 @@ const OverlaySettings = () => {
 
               {/* Active Snap Guide Lines */}
               {draggingWidget && activeGuides.x !== null && (
-                <div 
+                <div
                   className="absolute inset-y-0 border-l border-dashed pointer-events-none z-30"
-                  style={{ 
+                  style={{
                     left: `${(activeGuides.x / SW) * 100}%`,
                     borderColor: '#22D1EE',
                     opacity: 0.8
@@ -1602,9 +1610,9 @@ const OverlaySettings = () => {
                 />
               )}
               {draggingWidget && activeGuides.y !== null && (
-                <div 
+                <div
                   className="absolute inset-x-0 border-t border-dashed pointer-events-none z-30"
-                  style={{ 
+                  style={{
                     top: `${(activeGuides.y / SH) * 100}%`,
                     borderColor: '#22D1EE',
                     opacity: 0.8
@@ -1675,8 +1683,8 @@ const OverlaySettings = () => {
                       transform: `translate3d(${xPreview}px, ${yPreview}px, 0)`,
                       width: wPreview,
                       height: hPreview,
-                      backgroundColor: isEnabled 
-                        ? `rgba(0, 0, 0, ${settings.bgOpacity / 100})` 
+                      backgroundColor: isEnabled
+                        ? `rgba(0, 0, 0, ${settings.bgOpacity / 100})`
                         : undefined,
                       ...(isEnabled ? themeStyles.style : {})
                     }}

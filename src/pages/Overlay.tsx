@@ -5,6 +5,7 @@ import type { PanInfo } from 'framer-motion';
 import axios from 'axios';
 import { Toaster, toast } from 'sonner';
 import { API_URL, getAvatarUrl } from '../config';
+import SpotifyWidget from '../components/SpotifyWidget';
 
 interface Telemetry {
   connected: boolean;
@@ -39,6 +40,7 @@ interface Settings {
   showMainHud: boolean;
   showDrivers: boolean;
   showEvent: boolean;
+  showSpotify: boolean;
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
@@ -120,7 +122,8 @@ const DEFAULT_SETTINGS: Settings = {
   showMainHud: true,
   showDrivers: true,
   showEvent: true,
-  widgetOrder: ['logo', 'mainHud', 'event', 'drivers'],
+  showSpotify: false,
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify'],
   zoom: 100,
   bgOpacity: 80,
   showGear: true,
@@ -134,7 +137,8 @@ const DEFAULT_SETTINGS: Settings = {
     logo: { w: 80, h: 80 },
     mainHud: { w: 384, h: 120 },
     event: { w: 288, h: 64 },
-    drivers: { w: 192, h: 0 }
+    drivers: { w: 192, h: 0 },
+    spotify: { w: 280, h: 140 }
   },
   singleRowHud: false,
   customAccentColor: '#22d1ee',
@@ -172,7 +176,8 @@ const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
   const defaults: Record<string, { w: number, h: number }> = {
     logo: { w: 80, h: 80 },
     event: { w: 288, h: 64 },
-    drivers: { w: 192, h: 0 }
+    drivers: { w: 192, h: 0 },
+    spotify: { w: 280, h: 140 }
   };
   return defaults[widget] || { w: 80, h: 80 };
 };
@@ -224,7 +229,8 @@ const OverlayPage: React.FC = () => {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
-      drivers: { x: 40, y: 440 }
+      drivers: { x: 40, y: 440 },
+      spotify: { x: 40, y: 580 }
     };
   });
 
@@ -280,7 +286,8 @@ const OverlayPage: React.FC = () => {
           logo: { x: 40, y: 40 },
           mainHud: { x: 40, y: 130 },
           event: { x: 40, y: 310 },
-          drivers: { x: 40, y: 440 }
+          drivers: { x: 40, y: 440 },
+          spotify: { x: 40, y: 580 }
         });
       };
       ipcRenderer.on('overlay-positions-reset', resetListener);
@@ -891,6 +898,10 @@ const OverlayPage: React.FC = () => {
     );
   };
 
+  const renderSpotify = () => {
+    return <SpotifyWidget themeClasses={c} isLocked={isLocked} />;
+  };
+
   const shouldShowOverlay = () => {
     // If we are in Setup Mode (unlocked), always show the overlay
     if (!isLocked) return true;
@@ -950,7 +961,8 @@ const OverlayPage: React.FC = () => {
           widget === 'logo' ? settings.showLogo :
             widget === 'mainHud' ? settings.showMainHud :
               widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
-                settings.showDrivers;
+                widget === 'spotify' ? settings.showSpotify :
+                  settings.showDrivers;
 
         if (!isEnabled) return null;
 
@@ -964,6 +976,9 @@ const OverlayPage: React.FC = () => {
           dimensions = '';
         } else if (widget === 'event') {
           content = renderEvent();
+          dimensions = '';
+        } else if (widget === 'spotify') {
+          content = renderSpotify();
           dimensions = '';
         } else if (widget === 'drivers') {
           content = renderDrivers();

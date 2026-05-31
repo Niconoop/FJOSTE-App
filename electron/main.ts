@@ -1075,8 +1075,144 @@ ipcMain.on('overlay-resize', (_, type, w, h) => {
 });
 
 
+
+// ─── SMTC (Windows Media Session) ────────────────────────────────────────────
+// Reads what is currently playing on Windows (Spotify, YouTube, etc.)
+// via the System Media Transport Controls (SMTC) using a C# WinRT helper.
+
+const smtcScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+# Force-load the WinRT namespaces
+[void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media, ContentType=WindowsRuntime]
+[void][Windows.Storage.Streams.DataReader, Windows.Storage, ContentType=WindowsRuntime]
+[void][Windows.Storage.Streams.Buffer, Windows.Storage, ContentType=WindowsRuntime]
+
+$asTaskGeneric = $null
+foreach ($m in [System.WindowsRuntimeSystemExtensions].GetMethods()) {
+    if ($m.Name -eq 'AsTask' -and $m.GetParameters().Count -eq 1 -and $m.GetParameters()[0].ParameterType.Name -like 'IAsyncOperation*') {
+        $asTaskGeneric = $m
+        break
+    }
+}
+
+function Await($WinRtTask, $ResultType) {
+    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+    $netTask = $asTask.Invoke($null, @($WinRtTask))
+    $netTask.Wait(-1) | Out-Null
+    return $netTask.Result
+}
+
+function GetThumbnailBase64($thumbnail) {
+    try {
+        $streamRef = $thumbnail.OpenReadAsync()
+        $stream = Await $streamRef ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
+        $size = [int]$stream.Size
+        if ($size -le 0 -or $size -gt 500000) { return '' }
+        $buffer = [Windows.Storage.Streams.Buffer]::new([uint32]$size)
+        Await ($stream.ReadAsync($buffer, [uint32]$size, [Windows.Storage.Streams.InputStreamOptions]::None)) ([Windows.Storage.Streams.IBuffer]) | Out-Null
+        $bytes = [System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions]::ToArray($buffer)
+        return [Convert]::ToBase64String($bytes)
+    } catch {
+        return ''
+    }
+}
+
+$lastTitle = ''
+$lastThumb = ''
+
+while ($true) {
+    try {
+        $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+        $session = $mgr.GetCurrentSession()
+        if ($session) {
+            $info = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+            $timeline = $session.GetTimelineProperties()
+            $playback = $session.GetPlaybackInfo()
+            $t = if ($info.Title) { $info.Title -replace '"','' } else { '' }
+            $a = if ($info.Artist) { $info.Artist -replace '"','' } else { '' }
+            $al = if ($info.AlbumTitle) { $info.AlbumTitle -replace '"','' } else { '' }
+            $pos = [long]$timeline.Position.TotalMilliseconds
+            $dur = [long]$timeline.EndTime.TotalMilliseconds
+            $playing = ($playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing)
+            $src = if ($session.SourceAppUserModelId) { $session.SourceAppUserModelId -replace '"','' } else { '' }
+            $playing_str = if ($playing) { 'true' } else { 'false' }
+            # Only re-fetch thumbnail when track changes (expensive)
+            if ($t -ne $lastTitle) {
+                $lastTitle = $t
+                if ($info.Thumbnail) {
+                    $lastThumb = GetThumbnailBase64 $info.Thumbnail
+                } else {
+                    $lastThumb = ''
+                }
+            }
+            Write-Output ('{"title":"' + $t + '","artist":"' + $a + '","album":"' + $al + '","progress":' + $pos + ',"duration":' + $dur + ',"isPlaying":' + $playing_str + ',"source":"' + $src + '","thumb":"' + $lastThumb + '"}')
+        } else {
+            $lastTitle = ''
+            $lastThumb = ''
+            Write-Output '{"title":"","artist":"","album":"","progress":0,"duration":0,"isPlaying":false,"source":"","thumb":""}'
+        }
+    } catch {
+        Write-Output '{"title":"","artist":"","album":"","progress":0,"duration":0,"isPlaying":false,"source":"","thumb":""}'
+    }
+    Start-Sleep -Milliseconds 2000
+}
+`;
+
+const smtcTempPath = path.join(app.getPath('temp'), 'fjoste_smtc_v2.ps1');
+let smtcProcess: any = null;
+let lastSmtcData: any = null;
+
+function startSmtcBridge() {
+  if (smtcProcess) return;
+
+  try { fs.writeFileSync(smtcTempPath, smtcScript, 'utf8'); } catch (e) { }
+
+  smtcProcess = spawn('powershell', [
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', smtcTempPath
+  ]);
+
+  smtcProcess.stdout.setEncoding('utf8');
+
+  let smtcBuffer = '';
+  smtcProcess.stdout.on('data', (data: any) => {
+    smtcBuffer += data.toString();
+    let boundary = smtcBuffer.indexOf('\n');
+    while (boundary !== -1) {
+      const line = smtcBuffer.substring(0, boundary).trim();
+      smtcBuffer = smtcBuffer.substring(boundary + 1);
+      boundary = smtcBuffer.indexOf('\n');
+      if (!line || !line.startsWith('{')) continue;
+      try {
+        lastSmtcData = JSON.parse(line);
+        safeSend(overlayWin, 'smtc-update', lastSmtcData);
+      } catch (e) { }
+    }
+  });
+
+  smtcProcess.stderr.on('data', (data: any) => {
+    console.warn('⚠️ SMTC:', data.toString().substring(0, 200));
+  });
+
+  smtcProcess.on('exit', () => {
+    smtcProcess = null;
+    setTimeout(startSmtcBridge, 5000);
+  });
+}
+
+startSmtcBridge();
+
+ipcMain.handle('get-smtc-media', () => lastSmtcData);
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Start bridge once
 startTelemetryBridge();
+
 
 ipcMain.handle('telemetry-status', () => telemetryData);
 
@@ -1558,6 +1694,16 @@ app.on('will-quit', () => {
       // Force kill on windows if needed
       if (telemetryProcess.pid) {
         exec(`taskkill /pid ${telemetryProcess.pid} /f /t`);
+      }
+    } catch (e) { }
+  }
+
+  // Kill SMTC Process
+  if (smtcProcess) {
+    try {
+      smtcProcess.kill();
+      if (smtcProcess.pid) {
+        exec(`taskkill /pid ${smtcProcess.pid} /f /t`);
       }
     } catch (e) { }
   }

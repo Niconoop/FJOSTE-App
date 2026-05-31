@@ -79,6 +79,10 @@ export const apiService = {
   markNotificationRead: (id: string, headers?: any) => api.put(`/notifications/${id}/read`, {}, { headers }),
   markAllNotificationsRead: (headers?: any) => api.put('/notifications/read-all', {}, { headers }),
 
+  // Spotify
+  getSpotifyCurrentTrack: (headers?: any) => api.get('/spotify/current-track', { headers }),
+  getSpotifyQueue: (headers?: any) => api.get('/spotify/queue', { headers }),
+
   // Admin
   getInviteCodes: (headers?: any) => api.get('/management/invite-codes', { headers }),
   createInviteCode: (headers?: any) => api.post('/management/invite-codes', {}, { headers }),
