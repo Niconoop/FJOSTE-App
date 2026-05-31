@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, Unlock, Calendar, Users, Package } from 'lucide-react';
+import { Lock, Unlock, Calendar, Users, Package, Gauge, Fuel, MapPin, Clock, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import axios from 'axios';
+import { Toaster, toast } from 'sonner';
 import { API_URL, getAvatarUrl } from '../config';
 
 interface Telemetry {
@@ -32,7 +33,7 @@ interface Telemetry {
 }
 
 interface Settings {
-  style: 'neon' | 'carbon' | 'minimal';
+  style: 'neon' | 'carbon' | 'minimal' | 'custom';
   layoutType: 'vertical' | 'horizontal' | 'grid';
   showLogo: boolean;
   showMainHud: boolean;
@@ -41,7 +42,6 @@ interface Settings {
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
-  widgetBlur: boolean;
   showGear: boolean;
   showSpeed: boolean;
   showFuel: boolean;
@@ -49,6 +49,10 @@ interface Settings {
   showETA: boolean;
   showCargo: boolean;
   showIncome: boolean;
+  widgetSizes?: Record<string, { w: number, h: number }>;
+  singleRowHud?: boolean;
+  customAccentColor?: string;
+  blockCollisions?: boolean;
 }
 
 interface Position {
@@ -119,14 +123,22 @@ const DEFAULT_SETTINGS: Settings = {
   widgetOrder: ['logo', 'mainHud', 'event', 'drivers'],
   zoom: 100,
   bgOpacity: 80,
-  widgetBlur: false,
   showGear: true,
   showSpeed: true,
   showFuel: true,
   showRemainingDistance: true,
   showETA: true,
   showCargo: true,
-  showIncome: true
+  showIncome: true,
+  widgetSizes: {
+    logo: { w: 80, h: 80 },
+    mainHud: { w: 384, h: 120 },
+    event: { w: 288, h: 64 },
+    drivers: { w: 192, h: 0 }
+  },
+  singleRowHud: false,
+  customAccentColor: '#22d1ee',
+  blockCollisions: true
 };
 
 const MOCK_TELEMETRY: Telemetry = {
@@ -153,23 +165,52 @@ const MOCK_TELEMETRY: Telemetry = {
   paused: false
 };
 
+const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
+  if (widget === 'mainHud') {
+    return singleRowHud ? { w: 680, h: 52 } : { w: 384, h: 120 };
+  }
+  const defaults: Record<string, { w: number, h: number }> = {
+    logo: { w: 80, h: 80 },
+    event: { w: 288, h: 64 },
+    drivers: { w: 192, h: 0 }
+  };
+  return defaults[widget] || { w: 80, h: 80 };
+};
+
 const OverlayPage: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [settings, setSettings] = useState<Settings>(() => {
+    let base = DEFAULT_SETTINGS;
     const saved = localStorage.getItem('fjoste_overlay_settings');
     if (saved) {
       try {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      } catch (e) {
-        return DEFAULT_SETTINGS;
-      }
+        base = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      } catch (e) {}
     }
-    return DEFAULT_SETTINGS;
+    
+    // Merge correct sizes
+    const isSingle = base.singleRowHud || false;
+    const sizeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+    const savedSizes = localStorage.getItem(sizeKey);
+    if (savedSizes) {
+      try {
+        base.widgetSizes = JSON.parse(savedSizes);
+      } catch (e) {}
+    }
+    return base;
   });
 
   const [positions, setPositions] = useState<Positions>(() => {
-    const saved = localStorage.getItem('fjoste_overlay_positions');
+    const savedSettings = localStorage.getItem('fjoste_overlay_settings');
+    let isSingle = false;
+    if (savedSettings) {
+      try {
+        isSingle = !!JSON.parse(savedSettings).singleRowHud;
+      } catch (e) {}
+    }
+    const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+    const saved = localStorage.getItem(posKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -256,6 +297,130 @@ const OverlayPage: React.FC = () => {
         ipcRenderer.removeListener('overlay-positions-updated', positionsListener);
       };
     } catch (e) { }
+  }, []);
+
+  // Fallback listener for localStorage settings sync in standard web browser tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'fjoste_overlay_settings') {
+        try {
+          const newSettings = JSON.parse(e.newValue || '');
+          if (newSettings) {
+            // Correctly load and merge the active widget sizes for the current singleRowHud setting
+            const isSingle = newSettings.singleRowHud || false;
+            const sizeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+            const savedSizes = localStorage.getItem(sizeKey);
+            if (savedSizes) {
+              try {
+                newSettings.widgetSizes = JSON.parse(savedSizes);
+              } catch (err) {}
+            }
+            setSettings(prev => ({ ...prev, ...newSettings }));
+          }
+        } catch (err) {}
+      } else if (e.key === 'fjoste_overlay_widget_sizes' || e.key === 'fjoste_overlay_widget_sizes_single') {
+        // Also listen to widget size changes directly
+        const isSingle = settings.singleRowHud || false;
+        const activeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+        if (e.key === activeKey) {
+          try {
+            const newSizes = JSON.parse(e.newValue || '');
+            if (newSizes) {
+              setSettings(prev => ({ ...prev, widgetSizes: newSizes }));
+            }
+          } catch (err) {}
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [settings.singleRowHud]);
+
+  // Load/switch positions when singleRowHud changes in Overlay page
+  useEffect(() => {
+    const isSingle = settings.singleRowHud || false;
+    const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+
+    const savedPos = localStorage.getItem(posKey);
+    let resolvedPos = {
+      logo: { x: 40, y: 40 },
+      mainHud: { x: 40, y: 130 },
+      event: { x: 40, y: 310 },
+      drivers: { x: 40, y: 440 }
+    };
+    if (savedPos) {
+      try {
+        const parsed = JSON.parse(savedPos);
+        if (parsed && typeof parsed === 'object') {
+          resolvedPos = parsed;
+        }
+      } catch (e) {}
+    }
+    setPositions(resolvedPos);
+  }, [settings.singleRowHud]);
+
+  // Listen to job notifications
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      const jobEventListener = (_: any, event: any) => {
+        console.log("Overlay: Notification erhalten", event);
+        let title = '';
+        let content = '';
+
+        if (event.type === 'system') {
+          title = `🔔 ${event.title || 'System'}`;
+          content = event.content || '';
+        } else {
+          title = event.type === 'start' ? 'Job Gestartet' : event.type === 'delivered' ? 'Job Abgeliefert' : event.type === 'cancelled' ? 'Job Abgebrochen' : event.type === 'resumed' ? 'Job Fortgesetzt' : title;
+          content = event.type === 'start' 
+            ? `${event.cargo} von ${event.source} nach ${event.dest}` 
+            : `Fahrt beendet. Status: ${event.type === 'delivered' ? 'Erfolgreich' : 'Abgebrochen'}`;
+        }
+
+        // Trigger visual toast notifications
+        if (event.type === 'system') {
+          toast(event.title || 'System-Meldung', {
+             description: event.content || '',
+             duration: 5000,
+             className: 'custom-toast toast-resumed glass-card',
+           });
+        } else if (event.type === 'start' || event.type === 'delivered') {
+          const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
+          toast.success(title, {
+             description: content,
+             duration: 5000,
+             className: `custom-toast ${toastClass} glass-card`,
+          });
+        } else if (event.type === 'cancelled') {
+          toast.error(title, {
+             description: content,
+             duration: 5000,
+             className: 'custom-toast toast-cancelled glass-card',
+          });
+        } else if (event.type === 'resumed') {
+          toast.info(title, {
+            description: content,
+            duration: 5000,
+            className: 'custom-toast glass-card',
+          });
+        }
+
+        if (event.type !== 'system' && event.type !== 'chat' && event.type !== 'chat_group') {
+          // Play sound for real-time notifications
+          const audio = new Audio('sounds/start.mp3');
+          audio.volume = 0.15;
+          audio.play().catch(() => {});
+        }
+      };
+
+      ipcRenderer.on('job-notification', jobEventListener);
+      return () => {
+        ipcRenderer.removeListener('job-notification', jobEventListener);
+      };
+    } catch (e) {
+      console.warn("Electron IPC not available in Overlay");
+    }
   }, []);
 
   // Fetch online drivers list (if enabled)
@@ -353,7 +518,9 @@ const OverlayPage: React.FC = () => {
           y: nextY
         }
       };
-      localStorage.setItem('fjoste_overlay_positions', JSON.stringify(updated));
+      const isSingle = settings.singleRowHud || false;
+      const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+      localStorage.setItem(posKey, JSON.stringify(updated));
       return updated;
     });
   };
@@ -363,7 +530,7 @@ const OverlayPage: React.FC = () => {
     switch (settings.style) {
       case 'carbon':
         return {
-          card: 'backdrop-blur-[35px] backdrop-saturate-[130%] border border-amber-500/20 rounded-3xl text-slate-200 select-none shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden',
+          card: 'border border-amber-500/20 rounded-3xl text-slate-200 select-none shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-amber-400 font-bold drop-shadow-[0_0_6px_rgba(245,158,11,0.35)]',
           primaryAccent: 'bg-amber-500',
@@ -374,7 +541,7 @@ const OverlayPage: React.FC = () => {
         };
       case 'minimal':
         return {
-          card: 'backdrop-blur-[35px] backdrop-saturate-[130%] border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl relative overflow-hidden',
+          card: 'border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-white',
           primaryAccent: 'bg-white',
@@ -383,10 +550,21 @@ const OverlayPage: React.FC = () => {
           barFill: 'bg-white',
           glow: ''
         };
+      case 'custom':
+        return {
+          card: 'border-2 border-[var(--custom-border)] rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
+          textMuted: 'text-slate-500',
+          textActive: 'text-[var(--custom-accent)] font-bold drop-shadow-[0_0_6px_var(--custom-glow)]',
+          primaryAccent: 'bg-[var(--custom-accent)]',
+          borderAccent: 'border-[var(--custom-border)]',
+          barBg: 'bg-white/5 border border-white/5',
+          barFill: 'bg-[var(--custom-accent)] shadow-[0_0_12px_var(--custom-glow)]',
+          glow: 'shadow-[0_0_15px_var(--custom-glow-subtle)]'
+        };
       case 'neon':
       default:
         return {
-          card: 'backdrop-blur-[45px] backdrop-saturate-[140%] border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
+          card: 'border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-[#22D1EE]',
           primaryAccent: 'bg-primary',
@@ -458,8 +636,104 @@ const OverlayPage: React.FC = () => {
     const timeScale = isATS ? 20 : 19;
     const realNavTime = navTime / timeScale;
 
+    if (settings.singleRowHud) {
+      return (
+        <div className="flex-1 px-3 py-1 flex flex-row items-center justify-between gap-3 min-w-0 h-full select-none">
+          {/* Section 1: Speed, Speed Limit, CC, Gear */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {settings.showSpeed && (
+              <div className="flex items-baseline gap-0.5">
+                <span className="font-unbounded text-xl font-black text-white leading-none tracking-tighter">
+                  {Math.round(speed)}
+                </span>
+                <span className={`text-[7px] font-black uppercase tracking-wider ${c.textMuted}`}>KM/H</span>
+              </div>
+            )}
+            
+            <div className="flex items-center gap-1">
+              {speedLimit > 0 && (
+                <div className="w-4 h-4 rounded-full border border-red-500 bg-white flex items-center justify-center font-black text-[8px] text-black">
+                  {Math.round(speedLimit)}
+                </div>
+              )}
+              {cruiseControl > 0 && (
+                <span className="text-[7px] font-black uppercase tracking-tight text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 py-0.5 rounded">
+                  CC {Math.round(cruiseControl)}
+                </span>
+              )}
+            </div>
+
+            {settings.showGear && (
+              <span className="font-unbounded text-[9px] font-black text-white leading-none bg-white/10 px-1.5 py-0.5 rounded-md">
+                {gearText}
+              </span>
+            )}
+          </div>
+
+          {/* Section 2: RPM Bar */}
+          <div className="flex-1 max-w-[120px] px-3 shrink-0 flex items-center h-5">
+            <div className="h-1.5 w-full rounded-full overflow-hidden bg-white/5 border border-white/5 relative">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, (rpm / 2000) * 100)}%`,
+                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Section 3: Cargo Manifest */}
+          {settings.showCargo && cargo && cargo.toLowerCase() !== 'none' && (
+            <div className="flex items-center gap-2 px-3 shrink-0 text-[9px] min-w-0 max-w-[180px] h-5">
+              <Package size={11} className="text-primary shrink-0" />
+              <span className="font-bold text-white truncate">{cargo}</span>
+              {cargoMass && (
+                <span className={`${c.textMuted} font-black shrink-0`}>{Math.round(cargoMass)}t</span>
+              )}
+              {settings.showIncome && income > 0 && (
+                <span className="text-emerald-400 font-bold shrink-0">{income.toLocaleString('de-DE')} $</span>
+              )}
+            </div>
+          )}
+
+          {/* Section 4: Fuel & Navigation */}
+          {(settings.showFuel || (settings.showRemainingDistance && navDistance > 0)) && (
+            <div className="flex items-center gap-3 pl-3 shrink-0 text-[9px] h-5">
+              {settings.showFuel && (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex flex-col text-left">
+                    <span className={`${c.textMuted} font-bold text-[7px] uppercase leading-none mb-0.5`}>Tank</span>
+                    <span className="text-white font-bold leading-none">{Math.round(fuelRange)} km</span>
+                  </div>
+                  <div className={`h-1 w-8 rounded-full overflow-hidden ${c.barBg}`}>
+                    <div
+                      className={`h-full rounded-full ${c.barFill}`}
+                      style={{ width: `${Math.min(100, Math.max(0, fuel * 0.1))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {settings.showRemainingDistance && navDistance > 0 && (
+                <div className="flex flex-col text-right justify-center">
+                  <div className="flex items-center gap-1 justify-end">
+                    <span className={`${c.textMuted} font-bold text-[7px] uppercase leading-none`}>Ziel</span>
+                    <span className="text-white font-bold leading-none">{formatDistance(navDistance)}</span>
+                  </div>
+                  <div className="text-[7.5px] font-medium text-slate-400 mt-0.5">
+                    noch {formatRemainingTime(realNavTime)} {settings.showETA && `(ETA ${formatETA(realNavTime)})`}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
-      <div className={`flex-1 p-3 flex ${settings.singleRowHud ? 'flex-row' : 'flex-col'} justify-between gap-2 min-w-0`}>
+      <div className="flex-1 p-3 flex flex-col justify-between gap-2 min-w-0">
         {/* Speed, Gear, RPM */}
         <div className="flex items-center justify-between gap-4">
           {settings.showSpeed && (
@@ -719,16 +993,25 @@ const OverlayPage: React.FC = () => {
               className={`${dimensions} ${c.card} ${!isLocked ? 'border-dashed border-primary/50' : 'border-solid'}`}
               style={{
                 // Apply stored widget dimensions if available
-                width: settings.widgetSizes?.[widget]?.w ? `${settings.widgetSizes[widget].w}px` : undefined,
-                height: settings.widgetSizes?.[widget]?.h ? `${settings.widgetSizes[widget].h}px` : undefined,
+                width: settings.widgetSizes?.[widget]?.w 
+                  ? `${settings.widgetSizes[widget].w}px` 
+                  : `${getWidgetDefaultSize(widget, settings.singleRowHud || false).w}px`,
+                height: settings.widgetSizes?.[widget]?.h 
+                  ? `${settings.widgetSizes[widget].h}px` 
+                  : getWidgetDefaultSize(widget, settings.singleRowHud || false).h > 0 
+                    ? `${getWidgetDefaultSize(widget, settings.singleRowHud || false).h}px` 
+                    : undefined,
                 transform: `scale(${settings.zoom / 100})`,
                 transformOrigin: 'top left',
                 position: 'relative',
                 overflow: 'hidden',
                 backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
-                backdropFilter: settings.widgetBlur ? 'blur(12px)' : 'none',
-                WebkitBackdropFilter: settings.widgetBlur ? 'blur(12px)' : 'none',
-              }}
+                // Custom accent properties
+                '--custom-accent': settings.customAccentColor || '#22d1ee',
+                '--custom-border': `${settings.customAccentColor || '#22d1ee'}33`,
+                '--custom-glow': `${settings.customAccentColor || '#22d1ee'}80`,
+                '--custom-glow-subtle': `${settings.customAccentColor || '#22d1ee'}26`,
+              } as React.CSSProperties}
             >
 
               {/* Acrylic Noise Overlay */}
@@ -745,6 +1028,19 @@ const OverlayPage: React.FC = () => {
         );
       })}
 
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: 'rgba(10, 10, 10, 0.95)',
+            backdropFilter: 'blur(20px)',
+            border: '2px solid var(--border)',
+            color: 'var(--foreground)',
+          },
+          className: 'glass-card',
+        }}
+      />
+
       <style jsx global>{`
         .acrylic-noise {
           position: absolute;
@@ -758,15 +1054,15 @@ const OverlayPage: React.FC = () => {
           position: absolute;
           inset: 0;
           z-index: -4;
-          opacity: 0.08;
+          opacity: 0.55;
           pointer-events: none;
-          background-color: #000;
+          background-color: rgba(18, 18, 18, 0.4);
           background-image: 
-            linear-gradient(45deg, #111 25%, transparent 25%), 
-            linear-gradient(-45deg, #111 25%, transparent 25%), 
-            linear-gradient(45deg, transparent 75%, #111 75%), 
-            linear-gradient(-45deg, transparent 75%, #111 75%);
-          background-size: 8px 8px;
+            linear-gradient(45deg, #090909 25%, transparent 25%, transparent 75%, #090909 75%, #090909),
+            linear-gradient(45deg, #090909 25%, transparent 25%, transparent 75%, #090909 75%, #090909),
+            linear-gradient(to right, #2a2a2a, #161616, #2a2a2a);
+          background-size: 6px 6px, 6px 6px, 6px 6px;
+          background-position: 0px 0px, 3px 3px, 0px 0px;
         }
         .no-scrollbar::-webkit-scrollbar {
           display: none;

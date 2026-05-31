@@ -11,6 +11,10 @@
 - Overlay‑Rendering angepasst, um gespeicherte Widget‑Abmessungen zu verwenden und Zoom, Hintergrund‑Deckkraft und Unschärfe zu berücksichtigen.
 - Layout‑Reset korrigiert, sodass auch die Widget‑Größen zurückgesetzt werden.
 - UI‑Stil und CSS‑Klassen für das neue Layout‑Verhalten aktualisiert.
+- Entfernt: Alle Blur‑bezogenen CSS‑Klassen und Inline‑Stile (`backdrop-blur*`, `backdropFilter`) aus `Overlay.tsx` und `OverlaySettings.tsx`.
+- Entfernt: UI‑Einstellungen für Widget‑Blur aus den Overlay‑Einstellungen.
+- Aktualisiert: Hintergrund- und Toast‑Designs, verwenden nun opaque dunkle Hintergründe ohne Blur‑Effekte.
+
 
 ## 2026-05-30
 - Erste Implementierung von Widget‑Größenanpassung und Synchronisation im Layout‑Editor.
