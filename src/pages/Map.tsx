@@ -5,40 +5,304 @@ import { RefreshCw, Truck, MapPin, Clock, Users, X, Map as MapIcon, ChevronRight
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, getAvatarUrl } from '../config';
+import * as proj4 from 'proj4';
+import * as pmtiles from 'pmtiles';
 
-const MAP_STYLE_DARK = {
-  version: 8,
-  sources: {
-    "carto-dark": {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png?lang=de",
-        "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png?lang=de",
-        "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png?lang=de",
-      ],
-      tileSize: 256,
-      attribution: '&copy; CARTO &copy; OSM',
-    },
-  },
-  layers: [{ id: "carto-base", type: "raster", source: "carto-dark" }],
-};
+// Register PMTiles protocol once
+let pmTilesProtocolAdded = false;
+function addPmTilesProtocol() {
+  if (pmTilesProtocolAdded) return;
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+  pmTilesProtocolAdded = true;
+}
 
-const MAP_STYLE_LIGHT = {
-  version: 8,
-  sources: {
-    "carto-light": {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png?lang=de",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png?lang=de",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png?lang=de",
-      ],
-      tileSize: 256,
-      attribution: '&copy; CARTO &copy; OSM',
+const PROXY_BASE = `${API_URL}/map/proxy`;
+
+function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+    sprite: 'https://truckermudgeon.github.io/sprites',
+    sources: {
+      ets2: {
+        type: 'vector',
+        url: `pmtiles://${PROXY_BASE}/ets2.pmtiles`,
+      },
+      world: {
+        type: 'vector',
+        url: `pmtiles://${PROXY_BASE}/world.pmtiles`,
+      },
     },
-  },
-  layers: [{ id: "carto-base", type: "raster", source: "carto-light" }],
-};
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': isLight ? '#f1f3f5' : '#0a0b0d',
+        },
+      },
+      {
+        id: 'world-water',
+        type: 'fill',
+        source: 'world',
+        'source-layer': 'water',
+        paint: {
+          'fill-color': isLight ? '#c4d7ec' : '#060708',
+        },
+      },
+      {
+        id: 'ets2-areas',
+        type: 'fill',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea']],
+        layout: { 'fill-sort-key': ['get', 'zIndex'] },
+        paint: {
+          'fill-color': isLight
+            ? [
+              'match', ['get', 'color'],
+              0, '#c4d7ec',  // water (light)
+              1, '#f1f3f5',  // land (light)
+              2, '#cbd5e1',  // road surface (light)
+              3, '#dee2e6',  // building (light)
+              '#f1f3f5',
+            ]
+            : [
+              'match', ['get', 'color'],
+              0, '#060708',  // water
+              1, '#0a0b0d',  // land
+              2, '#14171f',  // road surface
+              3, '#050507',  // building
+              '#0a0b0d',
+            ],
+          'fill-opacity': 0.95,
+        },
+      },
+      {
+        id: 'ets2-prefabs',
+        type: 'fill',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+        paint: {
+          'fill-color': isLight ? '#cbd5e1' : '#14171f',
+          'fill-opacity': 0.9
+        },
+      },
+      {
+        id: 'ets2-roads',
+        type: 'line',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': isLight
+            ? [
+              'match', ['get', 'roadType'],
+              'freeway', '#ff9f1c',  // Orange (Highways / Autobahn)
+              'divided', '#ffd166',  // Yellow (Major Roads)
+              'local', '#8e9aa8',    // Slate grey (Local Roads)
+              'train', '#8a9ba8',    // Grey (Rail)
+              '#8e9aa8',
+            ]
+            : [
+              'match', ['get', 'roadType'],
+              'freeway', '#ff8c00',  // Dark Orange
+              'divided', '#e5a93b',  // Gold / Muted Yellow
+              'local', '#384556',    // Dark grey-blue
+              'train', '#11161b',    // Black
+              '#384556',
+            ],
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            3, 0.5,
+            6, 1.5,
+            10, 3,
+          ],
+          'line-opacity': 0.9,
+        },
+      },
+      {
+        id: 'ets2-ferries',
+        type: 'line',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'ferry']],
+        paint: {
+          'line-color': isLight ? '#0ea5e9' : '#2ba1b9',
+          'line-width': 1.5,
+          'line-dasharray': [4, 4],
+          'line-opacity': 0.6,
+        },
+      },
+      {
+        id: 'world-states',
+        type: 'line',
+        source: 'world',
+        'source-layer': 'states',
+        paint: {
+          'line-color': isLight ? '#cbd5e1' : '#10131a',
+          'line-width': 1,
+          'line-opacity': 0.8,
+          'line-dasharray': [2, 2],
+        },
+      },
+      {
+        id: 'world-countries',
+        type: 'line',
+        source: 'world',
+        'source-layer': 'countries',
+        filter: ['!=', ['get', 'name'], 'Serbia-Kosovo'],
+        paint: {
+          'line-color': isLight ? '#94a3b8' : '#1a1f29',
+          'line-width': 1.5,
+          'line-opacity': 0.9,
+        },
+      },
+      {
+        id: 'world-countries-dashed',
+        type: 'line',
+        source: 'world',
+        'source-layer': 'countries',
+        filter: ['==', ['get', 'name'], 'Serbia-Kosovo'],
+        paint: {
+          'line-color': isLight ? '#94a3b8' : '#1a1f29',
+          'line-width': 1.5,
+          'line-opacity': 0.9,
+          'line-dasharray': [3, 2],
+        },
+      },
+      // POI Icons (gas stations, services, dealers, recruitment, parking, garages, toll booths, viewpoints)
+      {
+        id: 'ets2-pois',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        minzoom: 8,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'type'], 'poi'],
+          ['!=', ['get', 'poiType'], 'company']
+        ],
+        layout: {
+          'icon-image': '{sprite}',
+          'icon-allow-overlap': true,
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            8, 0.4,
+            11, 0.7,
+            14, 1.0
+          ]
+        }
+      },
+      // Company Depot Icons
+      {
+        id: 'ets2-companies',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        minzoom: 9,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'type'], 'poi'],
+          ['==', ['get', 'poiType'], 'company']
+        ],
+        layout: {
+          'icon-image': '{sprite}',
+          'icon-allow-overlap': true,
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            9, 0.4,
+            12, 0.7,
+            15, 1.0
+          ]
+        }
+      },
+      {
+        id: 'ets2-cities',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'city']],
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 3, 8, 7, 12, 10, 14],
+          'text-anchor': 'center',
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'text-padding': 4,
+        },
+        paint: {
+          'text-color': isLight ? '#495057' : '#8899aa',
+          'text-halo-color': isLight ? '#ffffff' : '#0d1117',
+          'text-halo-width': 1.5,
+        },
+      },
+    ],
+  } as any;
+}
+
+// --- ETS2 coordinate → lat/lng projection (Lambert Conformal Conic) ---
+const earthRadiusMeters = 6_370_997;
+const lengthOfDegree = (earthRadiusMeters * Math.PI) / 180;
+
+const ets2DefData = {
+  mapProjection: 'lambert_conic',
+  standardParalel1: 37,
+  standardParalel2: 65,
+  mapOrigin: [50, 15],
+  mapOffset: [16660, 4150],
+  mapFactor: [-0.000171570875, 0.0001729241463],
+} as const;
+
+const ets2ProjectionString = [
+  '+proj=lcc',
+  `+R=${earthRadiusMeters}`,
+  `+lat_1=${ets2DefData.standardParalel1}`,
+  `+lat_2=${ets2DefData.standardParalel2}`,
+  `+lat_0=${ets2DefData.mapOrigin[0]}`,
+  `+lon_0=${ets2DefData.mapOrigin[1]}`,
+].join(' ');
+
+const fromWgs84ToEts2Converter = proj4.default(ets2ProjectionString);
+
+function projectGameToLatLng(gx: number, gz: number): [number, number] | null {
+  if (gx == null || gz == null) return null;
+
+  let x = gx;
+  let y = gz;
+
+  const sx = Math.floor(x / 4000);
+  const sy = Math.floor(y / 4000);
+  x -= ets2DefData.mapOffset[0];
+  y -= ets2DefData.mapOffset[1];
+
+  const ukScaleFactor = 0.75;
+  const calais = [-31100, -5500];
+  const isUk = sx <= -8 && sy <= -2 && !(sx === -8 && sy === -2);
+  if (isUk) {
+    x = (x + calais[0] / 2) * ukScaleFactor;
+    y = (y + calais[1] / 2) * ukScaleFactor;
+  }
+
+  const lccCoords: [number, number] = [
+    x * ets2DefData.mapFactor[1] * lengthOfDegree,
+    y * ets2DefData.mapFactor[0] * lengthOfDegree,
+  ];
+
+  const [lng, lat] = fromWgs84ToEts2Converter.inverse(lccCoords);
+
+  if (lat > 35 && lat < 71 && lng > -15 && lng < 45) {
+    return [lat, lng];
+  }
+
+  return null;
+}
 
 const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { onViewProfile?: (id: string | number) => void, initialSelectedId?: string | number | null, onClearInitialId?: () => void, theme?: string }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -108,14 +372,19 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
   useEffect(() => {
     if (!mapContainer.current) return;
+    addPmTilesProtocol();
     const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: (isLight ? MAP_STYLE_LIGHT : MAP_STYLE_DARK) as any,
+      style: createEts2Style(isLight),
       center: [12, 51],
       zoom: 4.5,
+      minZoom: 4.5,
+      maxZoom: 14,
       attributionControl: false,
     });
+    map.setMinZoom(4.5);
+    map.setMaxZoom(14);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
     return () => map.remove();
@@ -125,7 +394,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     const updateMapStyle = () => {
       if (mapRef.current) {
         const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
-        mapRef.current.setStyle(isLight ? MAP_STYLE_LIGHT : MAP_STYLE_DARK);
+        mapRef.current.setStyle(createEts2Style(isLight));
       }
     };
 
@@ -161,7 +430,17 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         setSelectedDriver(driver);
         const loc = driver.online ? driver.live_location : driver.last_position;
         if (loc && mapRef.current) {
-          mapRef.current.flyTo({ center: [loc.lng, loc.lat], zoom: 8, duration: 1500 });
+          let lat = loc.lat;
+          let lng = loc.lng;
+          if (loc.game_x != null && loc.game_y != null) {
+            const projected = projectGameToLatLng(loc.game_x, loc.game_y);
+            if (projected) {
+              [lat, lng] = projected;
+            }
+          }
+          if (lat != null && lng != null) {
+            mapRef.current.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+          }
         }
       }
       onClearInitialId?.();
@@ -179,10 +458,19 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
     mapData.forEach(member => {
       const loc = member.online ? member.live_location : member.last_position;
-      if (!loc || loc.lat == null || loc.lng == null) return;
+      if (!loc) return;
 
       let lat = loc.lat;
       let lng = loc.lng;
+
+      if (loc.game_x != null && loc.game_y != null) {
+        const projected = projectGameToLatLng(loc.game_x, loc.game_y);
+        if (projected) {
+          [lat, lng] = projected;
+        }
+      }
+
+      if (lat == null || lng == null) return;
 
       // Prevent overlapping markers
       const posKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -211,7 +499,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
       el.addEventListener("click", () => {
         setSelectedDriver(member);
-        map.flyTo({ center: [lng, lat], zoom: 8, duration: 1500 });
+        map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
       });
 
       const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
@@ -263,7 +551,17 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                 onClick={() => {
                   setSelectedDriver(m);
                   if (hasPos && mapRef.current) {
-                    mapRef.current.flyTo({ center: [loc.lng, loc.lat], zoom: 8, duration: 1500 });
+                    let lat = loc.lat;
+                    let lng = loc.lng;
+                    if (loc.game_x != null && loc.game_y != null) {
+                      const projected = projectGameToLatLng(loc.game_x, loc.game_y);
+                      if (projected) {
+                        [lat, lng] = projected;
+                      }
+                    }
+                    if (lat != null && lng != null) {
+                      mapRef.current.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+                    }
                   }
                 }}
                 className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all border ${selectedDriver?.id === m.id ? "bg-primary/10 border-primary/20" : "bg-black/60 border-transparent hover:bg-white/5"}`}

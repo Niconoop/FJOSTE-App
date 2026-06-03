@@ -137,7 +137,7 @@ function loadSettings() {
           ...saved.overlaySettings
         };
       }
-      console.log('📦 Settings: Einstellungen geladen');
+
     }
   } catch (e) {
     console.error('❌ Settings: Fehler beim Laden der Einstellungen', e);
@@ -334,12 +334,12 @@ async function loginRpc() {
     rpc = null;
   }
 
-  console.log('🎮 RPC: Verbindungsversuch...');
+
 
   try {
     rpc = new DiscordRPC.Client({ transport: 'ipc' });
     rpc.on('ready', () => {
-      console.log('🎮 RPC: Bereit!');
+
       isRpcConnected = true;
       updateRpc();
       win?.webContents.send('rpc-status-changed', true);
@@ -407,7 +407,7 @@ ipcMain.handle('rpc-get-status', () => isRpcActive);
 ipcMain.handle('rpc-status', () => isRpcConnected);
 
 ipcMain.on('rpc-update-city', (_, city) => {
-  console.log('📍 RPC Standort Update:', city);
+
   currentCity = city;
   updateRpc();
 });
@@ -450,13 +450,13 @@ ipcMain.on('rpc-page-changed', (_, page, details) => {
     displayPage = page.charAt(0).toUpperCase() + page.slice(1);
   }
 
-  console.log(`🎮 RPC: Seite geändert zu "${displayPage}"`);
+
   currentAppPage = displayPage;
   updateRpc();
 });
 
 ipcMain.on('set-auth-username', (_, username) => {
-  console.log('👤 Benutzer erkannt:', username);
+
   currentUsername = username;
   updateRpc();
 });
@@ -561,7 +561,7 @@ public class SCSTelemetry {
                         result["posX"] = BitConverter.ToDouble(raw, 2200);
                         result["posY"] = BitConverter.ToDouble(raw, 2208);
                         result["posZ"] = BitConverter.ToDouble(raw, 2216);
-                        result["heading"] = BitConverter.ToDouble(raw, 2232);
+                        result["heading"] = BitConverter.ToDouble(raw, 2224) * 2 * Math.PI;
 
                         result["income"] = BitConverter.ToUInt64(raw, 4000);
                         result["plannedDistance"] = BitConverter.ToUInt32(raw, 100);

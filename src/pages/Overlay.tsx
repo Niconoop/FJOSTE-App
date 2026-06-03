@@ -6,6 +6,7 @@ import axios from 'axios';
 import { Toaster, toast } from 'sonner';
 import { API_URL, getAvatarUrl } from '../config';
 import SpotifyWidget from '../components/SpotifyWidget';
+import GameMapWidget from '../components/GameMapWidget';
 
 interface Telemetry {
   connected: boolean;
@@ -31,6 +32,10 @@ interface Telemetry {
   paused: boolean;
   activeTitle?: string;
   gameType?: number;
+  posX?: number;
+  posY?: number;
+  posZ?: number;
+  heading?: number;
 }
 
 interface Settings {
@@ -41,6 +46,7 @@ interface Settings {
   showDrivers: boolean;
   showEvent: boolean;
   showSpotify: boolean;
+  showGameMap: boolean;
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
@@ -123,7 +129,8 @@ const DEFAULT_SETTINGS: Settings = {
   showDrivers: true,
   showEvent: true,
   showSpotify: true,
-  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify'],
+  showGameMap: true,
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify', 'gameMap'],
   zoom: 100,
   bgOpacity: 80,
   showGear: true,
@@ -138,7 +145,8 @@ const DEFAULT_SETTINGS: Settings = {
     mainHud: { w: 384, h: 120 },
     event: { w: 288, h: 64 },
     drivers: { w: 192, h: 0 },
-    spotify: { w: 280, h: 140 }
+    spotify: { w: 280, h: 140 },
+    gameMap: { w: 300, h: 200 }
   },
   singleRowHud: false,
   customAccentColor: '#22d1ee',
@@ -166,7 +174,11 @@ const MOCK_TELEMETRY: Telemetry = {
   model: 'S 580 V8',
   wearTruck: 1.2,
   wearCargo: 0,
-  paused: false
+  paused: false,
+  posX: 10070.25,
+  posY: 37.763,
+  posZ: -9774.412,
+  heading: 0.5,
 };
 
 const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
@@ -177,7 +189,8 @@ const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
     logo: { w: 80, h: 80 },
     event: { w: 288, h: 64 },
     drivers: { w: 192, h: 0 },
-    spotify: { w: 280, h: 140 }
+    spotify: { w: 280, h: 140 },
+    gameMap: { w: 300, h: 200 }
   };
   return defaults[widget] || { w: 80, h: 80 };
 };
@@ -226,7 +239,8 @@ const OverlayPage: React.FC = () => {
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
-      spotify: { x: 40, y: 580 }
+      spotify: { x: 40, y: 580 },
+      gameMap: { x: 40, y: 740 }
     };
     if (saved) {
       try {
@@ -298,7 +312,8 @@ const OverlayPage: React.FC = () => {
           mainHud: { x: 40, y: 130 },
           event: { x: 40, y: 310 },
           drivers: { x: 40, y: 440 },
-          spotify: { x: 40, y: 580 }
+          spotify: { x: 40, y: 580 },
+          gameMap: { x: 40, y: 740 }
         });
       };
       ipcRenderer.on('overlay-positions-reset', resetListener);
@@ -365,7 +380,8 @@ const OverlayPage: React.FC = () => {
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
-      spotify: { x: 40, y: 580 }
+      spotify: { x: 40, y: 580 },
+      gameMap: { x: 40, y: 740 }
     };
     if (savedPos) {
       try {
@@ -914,6 +930,30 @@ const OverlayPage: React.FC = () => {
     return <SpotifyWidget themeClasses={c} isLocked={isLocked} />;
   };
 
+  const renderGameMap = () => {
+    const mapW = settings.widgetSizes?.gameMap?.w || 300;
+    const mapH = settings.widgetSizes?.gameMap?.h || 200;
+    return (
+      <GameMapWidget
+        gameX={telemetry?.posX}
+        gameY={telemetry?.posZ}
+        heading={telemetry?.heading}
+        source={telemetry?.source}
+        dest={telemetry?.dest}
+        navDistance={telemetry?.navDistance}
+        connected={telemetry?.connected}
+        accentColor={
+          settings.style === 'carbon' ? '#f59e0b' :
+          settings.style === 'minimal' ? '#ffffff' :
+          settings.style === 'custom' ? (settings.customAccentColor || '#22D1EE') :
+          '#22D1EE'
+        }
+        width={mapW}
+        height={mapH}
+      />
+    );
+  };
+
   const shouldShowOverlay = () => {
     // If we are in Setup Mode (unlocked), always show the overlay
     if (!isLocked) return true;
@@ -974,7 +1014,8 @@ const OverlayPage: React.FC = () => {
             widget === 'mainHud' ? settings.showMainHud :
               widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
                 widget === 'spotify' ? settings.showSpotify :
-                  settings.showDrivers;
+                  widget === 'gameMap' ? settings.showGameMap :
+                    settings.showDrivers;
 
         if (!isEnabled) return null;
 
@@ -994,6 +1035,9 @@ const OverlayPage: React.FC = () => {
           dimensions = '';
         } else if (widget === 'drivers') {
           content = renderDrivers();
+          dimensions = '';
+        } else if (widget === 'gameMap') {
+          content = renderGameMap();
           dimensions = '';
         }
 

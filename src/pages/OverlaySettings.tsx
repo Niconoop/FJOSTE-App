@@ -25,6 +25,7 @@ interface OverlaySettingsType {
   showDrivers: boolean;
   showEvent: boolean;
   showSpotify: boolean;
+  showGameMap: boolean;
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
@@ -46,7 +47,8 @@ const DEFAULT_WIDGET_SIZES: Record<string, WidgetSize> = {
   mainHud: { w: 384, h: 120 },
   event: { w: 288, h: 64 },
   drivers: { w: 192, h: 0 }, // 0 = auto‑height (flex column)
-  spotify: { w: 280, h: 140 }
+  spotify: { w: 280, h: 140 },
+  gameMap: { w: 300, h: 200 }
 };
 
 const getWidgetDefaultSize = (widget: string, singleRowHud: boolean): WidgetSize => {
@@ -205,7 +207,8 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   showDrivers: true,
   showEvent: true,
   showSpotify: true,
-  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify'],
+  showGameMap: true,
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify', 'gameMap'],
   zoom: 100,
   bgOpacity: 80,
   showGear: true,
@@ -265,7 +268,8 @@ const OverlaySettings = () => {
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
-      spotify: { x: 40, y: 580 }
+      spotify: { x: 40, y: 580 },
+      gameMap: { x: 40, y: 740 }
     };
     const saved = localStorage.getItem(getPosKey(isSingle));
     if (saved) {
@@ -364,6 +368,9 @@ const OverlaySettings = () => {
       } else if (resizingWidget === 'spotify') {
         minW = 180;
         minH = 80;
+      } else if (resizingWidget === 'gameMap') {
+        minW = 200;
+        minH = 120;
       }
 
       const maxW = Infinity; // unlimited width even in single‑row mode
@@ -406,7 +413,8 @@ const OverlaySettings = () => {
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
-      spotify: { x: 40, y: 580 }
+      spotify: { x: 40, y: 580 },
+      gameMap: { x: 40, y: 740 }
     };
     if (savedPos) {
       try {
@@ -674,7 +682,8 @@ const OverlaySettings = () => {
       mainHud: { x: 40, y: 130 },
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
-      spotify: { x: 40, y: 580 }
+      spotify: { x: 40, y: 580 },
+      gameMap: { x: 40, y: 740 }
     };
     const defaultSizes = { ...DEFAULT_WIDGET_SIZES };
     if (settings.singleRowHud) {
@@ -710,7 +719,8 @@ const OverlaySettings = () => {
     mainHud: 'Haupt-HUD',
     event: 'Event-Widget',
     drivers: 'Fahrer Online',
-    spotify: 'Spotify Widget'
+    spotify: 'Spotify Widget',
+    gameMap: 'Spielkarte'
   };
 
   // Custom Drag Event Handlers
@@ -730,6 +740,7 @@ const OverlaySettings = () => {
     if (wName === 'event') return settings.showEvent;
     if (wName === 'drivers') return settings.showDrivers;
     if (wName === 'spotify') return settings.showSpotify;
+    if (wName === 'gameMap') return settings.showGameMap;
     return false;
   };
 
@@ -1467,7 +1478,8 @@ const OverlaySettings = () => {
                   { key: 'showMainHud', label: 'Haupt-HUD (Telemetriedaten)' },
                   { key: 'showEvent', label: 'Nächstes Event-Widget' },
                   { key: 'showSpotify', label: 'Spotify Widget' },
-                  { key: 'showDrivers', label: 'Online-Fahrer Liste' }
+                  { key: 'showDrivers', label: 'Online-Fahrer Liste' },
+                  { key: 'showGameMap', label: 'Spielkarte (ETS2)' }
                 ].map(item => {
                   const active = settings[item.key as keyof OverlaySettingsType] as boolean;
                   return (

@@ -1,7 +1,7 @@
 {
   "name": "FJOSTE-APP",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Job Tracker und DriversHUB der FJOSTE Group",
   "author": "FJOSTE",
   "type": "module",
@@ -57,12 +57,27 @@
     }
   },
   "dependencies": {
-    "discord-rpc": "^4.0.1"
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/joy": "^5.0.0-beta.52",
+    "@mui/material": "^9.0.1",
+    "@turf/bbox": "^7.3.5",
+    "@turf/bearing": "^7.3.5",
+    "@turf/clean-coords": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
+    "@turf/length": "^7.3.5",
+    "@turf/nearest-point-on-line": "^7.3.5",
+    "@types/proj4": "^2.5.6",
+    "discord-rpc": "^4.0.1",
+    "mobx": "^6.15.4",
+    "mobx-react-lite": "^4.1.1",
+    "proj4": "^2.20.8",
+    "react-map-gl": "^8.1.1"
   },
   "devDependencies": {
-    "date-fns": "^4.1.0",
-    "maplibre-gl": "^5.24.0",
-    "pmtiles": "^4.4.1",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/discord-rpc": "^4.0.10",
@@ -72,6 +87,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "axios": "^1.16.0",
+    "date-fns": "^4.1.0",
     "electron": "^41.5.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
@@ -81,6 +97,8 @@
     "framer-motion": "^12.38.0",
     "globals": "^17.5.0",
     "lucide-react": "^1.14.0",
+    "maplibre-gl": "^5.24.0",
+    "pmtiles": "^4.4.1",
     "postcss": "^8.5.14",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
@@ -92,6 +110,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
-    "vite-plugin-electron": "^0.29.1"
+    "vite-plugin-electron": "^0.29.1",
+    "vite-tsconfig-paths": "^6.1.1"
   }
 }
