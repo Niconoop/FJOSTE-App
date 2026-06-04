@@ -68,6 +68,7 @@ export const apiService = {
   // Reports
   getReports: (headers?: any) => api.get('/reports', { headers }),
   getWeeklyReport: (headers?: any) => api.get('/reports/weekly', { headers }),
+  getReportDetails: (reportId: string, headers?: any) => api.get(`/reports/${reportId}`, { headers }),
   exportReport: (reportId: string, format: 'csv' | 'pdf', headers?: any) =>
     api.get(`/reports/${reportId}/export?format=${format}`, {
       headers,

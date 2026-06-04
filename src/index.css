@@ -593,6 +593,15 @@ body.is-overlay-body {
   box-shadow: none !important;
 }
 
+/* Remove chat input box styling in light mode */
+.light .chat-form input,
+.light .chat-form input:not([type="checkbox"]):not([type="radio"]) {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .light .peer:checked ~ .switch-toggle {
   background-color: var(--primary) !important;
   border-color: var(--primary) !important;

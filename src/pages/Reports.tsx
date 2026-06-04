@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, BarChart3, Loader2, TrendingUp, Users, Route, Coins, FileText, ChevronRight, Activity, UserCheck, UserX, Clock, Calendar } from 'lucide-react';
+import { Download, BarChart3, Loader2, TrendingUp, Users, Route, Coins, FileText, ChevronRight, Activity, UserCheck, UserX, Clock, Calendar, Eye, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
+import { getAvatarUrl } from '../config';
 
 const Reports = () => {
   const { token } = useAuth();
@@ -14,6 +15,20 @@ const Reports = () => {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [view, setView] = useState<'current' | 'archive'>('current');
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+
+  const viewReportDetails = async (reportId: string) => {
+    setLoadingReport(true);
+    try {
+      const res = await apiService.getReportDetails(reportId);
+      setSelectedReport(res.data);
+    } catch {
+      toast.error("Fehler beim Laden des Berichts");
+    } finally {
+      setLoadingReport(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -170,7 +185,7 @@ const Reports = () => {
                     <div key={m.id} className="p-4 hover:bg-black/60 transition-colors flex items-center justify-between hover-glow">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-black border border-white/5 overflow-hidden">
-                          {m.avatar_url ? <img src={m.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
+                          {getAvatarUrl(m.avatar_url) ? <img src={getAvatarUrl(m.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
                         </div>
                         <div>
                           <p className="text-[11px] font-bold text-white leading-none mb-1">{m.name}</p>
@@ -241,6 +256,13 @@ const Reports = () => {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button 
+                        onClick={() => viewReportDetails(rep.id)}
+                        disabled={loadingReport}
+                        className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary hover:bg-white/5 rounded-xl transition-all disabled:opacity-50 hover-glow"
+                      >
+                        {loadingReport ? <Loader2 size={12} className="animate-spin" /> : <><Eye size={12} /> Ansehen</>}
+                      </button>
+                      <button 
                         onClick={() => exportReport(rep.id, 'csv')}
                         disabled={exporting}
                         className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary hover:bg-white/5 rounded-xl transition-all disabled:opacity-50 hover-glow"
@@ -260,6 +282,66 @@ const Reports = () => {
               </div>
             )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedReport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-4xl bg-black/90 border border-white/10 rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col backdrop-blur-md"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+                <div>
+                  <h3 className="font-unbounded text-xs font-black text-white uppercase tracking-tight italic">{selectedReport.title}</h3>
+                  <p className="text-[9px] text-primary font-black uppercase tracking-widest italic mt-1">{selectedReport.period}</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedReport(null)}
+                  className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Driver Stats Table */}
+              <div className="flex-1 overflow-y-auto p-6 no-scrollbar">
+                {selectedReport.members.length === 0 ? (
+                  <div className="py-20 text-center opacity-30">
+                    <Users size={36} className="mx-auto mb-2 text-slate-600" />
+                    <p className="text-[10px] font-black uppercase tracking-widest italic">Keine Fahrer-Aktivitäten in dieser Woche</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/5 text-[9px] font-black text-slate-500 uppercase tracking-widest italic">
+                          <th className="pb-3">Fahrer</th>
+                          <th className="pb-3 text-center">Jobs</th>
+                          <th className="pb-3 text-right">Strecke</th>
+                          <th className="pb-3 text-right">Umsatz</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {selectedReport.members.map((m: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-white/[0.01] transition-colors">
+                            <td className="py-4 text-[11px] font-black text-white italic uppercase">{m.name}</td>
+                            <td className="py-4 text-[10px] font-bold text-center text-slate-400">{m.jobs_count}</td>
+                            <td className="py-4 text-[10px] font-black text-right text-white italic">{Math.round(m.total_km).toLocaleString()} KM</td>
+                            <td className="py-4 text-[10px] font-black text-right text-emerald-400 italic">{Math.round(m.total_revenue).toLocaleString()} $</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

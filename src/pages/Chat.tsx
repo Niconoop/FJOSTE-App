@@ -391,10 +391,9 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar */}
         {activeChannel && (
           <div className="p-6 bg-[#000000] border-t border-white/10">
-            <form onSubmit={handleSend} className="flex gap-3 items-center bg-black border-2 border-[#2ba1b9]/20 rounded-2xl p-2 focus-within:border-primary transition-all shadow-inner">
+            <form onSubmit={handleSend} className="chat-form flex gap-3 items-center bg-black border-2 border-[#2ba1b9]/20 rounded-2xl p-2 focus-within:border-primary transition-all shadow-inner">
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
