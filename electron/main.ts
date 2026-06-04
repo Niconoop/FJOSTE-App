@@ -461,6 +461,7 @@ ipcMain.on('set-auth-username', (_, username) => {
   updateRpc();
 });
 
+let isQuitting = false;
 const rpcInterval = setInterval(updateRpc, 15000);
 
 // Telemetry Polling
@@ -1773,11 +1774,27 @@ app.whenReady().then(() => {
     syncOverlayWindows();
   }
 })
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
+app.on('before-quit', async (e) => {
+  if (isQuitting) return;
+  e.preventDefault();
+  isQuitting = true;
+
+  // Clear all intervals
+  clearInterval(rpcInterval);
+  if (telemetryProcess) {
+    telemetryProcess.kill();
   }
-})
+
+  // Stop Discord RPC
+  await stopRpc();
+
+  // Destroy all windows
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.destroy();
+  });
+
+  app.quit();
+});
 
 app.on('will-quit', () => {
   // Kill Telemetry Process

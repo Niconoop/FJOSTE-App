@@ -229,7 +229,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'city']],
         layout: {
-          'text-field': ['get', 'name'],
+          'text-field': ['coalesce', ['get', 'name:de'], ['get', 'name']],
           'text-font': ['Open Sans Bold'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 3, 8, 7, 12, 10, 14],
           'text-anchor': 'center',
