@@ -400,7 +400,7 @@ function App() {
         } else if (data.error) {
           ipcRenderer.removeListener('install-plugin-progress', progressListener);
           setInstallingPlugin(false);
-          alert("Fehler: " + data.status);
+          toast.error("Fehler: " + data.status);
         }
       };
 
@@ -430,7 +430,7 @@ function App() {
         } else if (data.error) {
           ipcRenderer.removeListener('install-update-progress', progressListener);
           setUpdatingApp(false);
-          alert("Fehler bei der Aktualisierung: " + data.status);
+          toast.error("Fehler bei der Aktualisierung: " + data.status);
         }
       };
 
@@ -439,7 +439,7 @@ function App() {
     } catch (e: any) {
       console.error(e);
       setUpdatingApp(false);
-      alert("Fehler bei der Aktualisierung: " + e.message);
+      toast.error("Fehler bei der Aktualisierung: " + e.message);
     }
   };
 

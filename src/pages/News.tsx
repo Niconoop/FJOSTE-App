@@ -5,6 +5,7 @@ import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 const staggerContainer = {
   hidden: {},
@@ -108,6 +109,7 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
 
 const News = ({ selectedId, onClearSelectedId }: any) => {
   const { token, user, isAdmin, hasRole } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const NEWS_ROLES = ["event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", "personal team", "personal-team"];
   const canManageNews = isAdmin || hasRole(NEWS_ROLES);
   const [news, setNews] = useState<any[]>([]);
@@ -182,7 +184,7 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
   };
 
   const handleDelete = async (id: string | number) => {
-    if (!window.confirm("News wirklich löschen?")) return;
+    if (!(await confirm("News wirklich löschen?"))) return;
     try {
       await axios.delete(`${API_URL}/news/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -193,6 +195,8 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
   };
 
   return (
+    <>
+    <ConfirmDialog />
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between gap-6">
         <div>
@@ -302,6 +306,7 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
         ))}
       </motion.div>
     </div>
+    </>
   );
 };
 

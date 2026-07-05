@@ -8,9 +8,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
 import { useAuth } from '../context/AuthContext';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 const Gallery = () => {
   const { token, user, isAdmin, hasRole } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const HR_ROLES = ["hr team", "hr-team", "personal team", "personal-team"];
 
   const canManageImage = (img: any) => {
@@ -114,7 +116,7 @@ const Gallery = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Bild wirklich löschen?")) return;
+    if (!(await confirm("Bild wirklich löschen?"))) return;
     try {
       await axios.delete(`${API_URL}/gallery/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -141,6 +143,8 @@ const Gallery = () => {
   };
 
   return (
+    <>
+    <ConfirmDialog />
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
@@ -304,6 +308,7 @@ const Gallery = () => {
         document.body
       )}
     </div>
+    </>
   );
 };
 
