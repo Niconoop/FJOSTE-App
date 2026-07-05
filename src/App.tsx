@@ -148,6 +148,17 @@ function App() {
   }, [theme, isOverlayRoute]);
 
   useEffect(() => {
+    if (!loading) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        if (ipcRenderer) {
+          ipcRenderer.send('app-ready');
+        }
+      } catch (e) { }
+    }
+  }, [loading]);
+
+  useEffect(() => {
     try {
       const { ipcRenderer } = window.require('electron');
       if (ipcRenderer) {
@@ -629,13 +640,14 @@ function App() {
       <AnimatedBackground />
 
       {/* Top Navbar */}
-      <nav className="fixed top-0 left-0 right-0 h-16 bg-black border-b-2 border-[#2ba1b9]/20 z-50 drag">
+      <nav className="fixed top-0 left-0 right-0 h-16 bg-black border-b-2 border-[#2ba1b9]/20 z-50">
+        <div className="absolute inset-0 -z-10" style={{ WebkitAppRegion: 'drag' }} />
         <div className="max-w-[1800px] mx-auto h-full px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 shrink-0">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="xl:hidden p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#2ba1b9]/20 hover:border-primary transition-all no-drag"
+              className="xl:hidden p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#2ba1b9]/20 hover:border-primary transition-all"
               onClick={() => setMenuOpen(!menuOpen)}
               data-testid="hamburger-btn"
             >
@@ -651,7 +663,7 @@ function App() {
             <span className="font-unbounded font-bold text-xs tracking-tight hidden xl:block uppercase">Drivers Hub</span>
           </div>
 
-          <div className="hidden xl:flex items-center flex-1 min-w-0 no-drag">
+          <div className="hidden xl:flex items-center flex-1 min-w-0">
             <motion.div
               onWheel={(e) => {
                 const container = e.currentTarget;
@@ -744,11 +756,11 @@ function App() {
             </motion.div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 relative no-drag">
+          <div className="flex items-center gap-3 shrink-0 relative">
 
 
             {/* Combined Status Pill Vertical */}
-            <div className="hidden xl:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 gap-3 no-drag mr-2 items-center shadow-md">
+            <div className="hidden xl:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 gap-3 mr-2 items-center shadow-md">
               <div className="flex flex-col gap-1 border-r border-white/10 pr-3">
                 <div className="flex items-center gap-2" title={serverOnline ? "Server Online" : "Server Offline"}>
                   <div className="relative flex h-1.5 w-1.5">
@@ -867,15 +879,12 @@ function App() {
                 <LogOut size={14} />
               </button>
             </motion.div>
-            <motion.button
+            <button
               onClick={() => setTheme(prev => {
                 if (prev === 'dark') return 'light';
                 if (prev === 'light') return 'system';
                 return 'dark';
               })}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 350, damping: 15 }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-1 shrink-0"
               title={
                 theme === 'dark'
@@ -892,35 +901,28 @@ function App() {
               ) : (
                 <Monitor size={18} />
               )}
-            </motion.button>
-            <motion.button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch (e) { } }}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
+            </button>
+            <button
+              onClick={() => { console.log('App.tsx: Minimieren geklickt'); try { (window as any).electronAPI.minimizeWindow() } catch (e) { console.error(e) } }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-2"
               title="Minimieren"
             >
               <Minus size={18} />
-            </motion.button>
-            <motion.button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-maximize') } catch (e) { } }}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
+            </button>
+            <button
+              onClick={() => { console.log('App.tsx: Maximieren geklickt'); try { (window as any).electronAPI.maximizeWindow() } catch (e) { console.error(e) } }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
               title="Vollbild"
             >
               <Square size={16} />
-            </motion.button>
-            <motion.button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-close') } catch (e) { } }}
-              whileHover={{ scale: 1.15 }}
-              whileTap={{ scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 300, damping: 15 }}
+            </button>
+            <button
+              onClick={() => { console.log('App.tsx: Schließen geklickt'); try { (window as any).electronAPI.closeWindow() } catch (e) { console.error(e) } }}
               className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
               title="Schließen"
             >
               <X size={18} />
-            </motion.button>
+            </button>
           </div>
         </div>
       </nav>
@@ -928,7 +930,7 @@ function App() {
 
 
       {/* Main Content */}
-      <main className="relative z-10 pt-20 px-6 max-w-[1600px] mx-auto pb-10">
+      <main className="relative z-10 pt-28 px-6 max-w-[1600px] mx-auto pb-10">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentPage}

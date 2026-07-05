@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Key, Users, Link2, Unlink, RefreshCw, Trash2, Crown, Loader2, ShieldCheck, ShieldOff, Check, X, Settings as SettingsIcon, User, MapPin, Inbox, BarChart3, Globe, Save, AlertTriangle } from 'lucide-react';
+import { Key, Users, Link2, Unlink, RefreshCw, Trash2, Crown, Loader2, ShieldCheck, ShieldOff, Check, X, Settings as SettingsIcon, User, MapPin, Inbox, BarChart3, Globe, Save, AlertTriangle, Server, Database, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -241,6 +241,7 @@ const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void
     { key: "applications", label: "Bewerbungen", icon: Inbox },
     ...(isAdmin ? [{ key: "reports", label: "Berichte", icon: BarChart3 }] : []),
     ...(isAdmin ? [{ key: "vtc", label: "VTC Einstellungen", icon: Globe }] : []),
+    ...(isAdmin ? [{ key: "system", label: "System-Tools", icon: Server }] : []),
   ];
 
   return (
@@ -484,6 +485,56 @@ const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void
 
           {tab === "applications" && <Applications />}
           {tab === "reports" && <Reports />}
+          {tab === "system" && (
+            <motion.div variants={containerVariants} className="space-y-6">
+              <div className="glass-card p-8 backdrop-blur-xl shadow-xl hover-glow transition-all border-2 border-[#2ba1b9]/20 bg-[#000000]">
+                <div className="mb-6">
+                  <h2 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest">System-Verwaltung</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">Direkter Zugriff auf die Server- und Datenbank-Infrastruktur von FJOSTE.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <a
+                    href="https://pm2.fjostegroup.de"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-5 p-6 bg-black/40 border border-[#2ba1b9]/20 rounded-2xl hover:border-primary/50 transition-all group hover-glow"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-[#2ba1b9]/10 border border-[#2ba1b9]/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                      <Server size={24} className="text-[#2ba1b9]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-tight group-hover:text-primary transition-colors">Server Manager</h3>
+                        <ExternalLink size={12} className="text-slate-600 group-hover:text-primary transition-colors" />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PM2 Prozesse überwachen & verwalten</p>
+                      <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest mt-2">pm2.fjostegroup.de</p>
+                    </div>
+                  </a>
+
+                  <a
+                    href="https://db.fjostegroup.de/_/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-5 p-6 bg-black/40 border border-emerald-500/20 rounded-2xl hover:border-emerald-500/50 transition-all group hover-glow"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                      <Database size={24} className="text-emerald-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors">Datenbank</h3>
+                        <ExternalLink size={12} className="text-slate-600 group-hover:text-emerald-400 transition-colors" />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PocketBase Verwaltungsoberfläche</p>
+                      <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest mt-2">db.fjostegroup.de</p>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </AnimatePresence>
 

@@ -26,24 +26,25 @@ const Login = ({ onSwitchToRegister }: { onSwitchToRegister: () => void }) => {
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-6 bg-[#000000]">
-      <div className="absolute top-0 left-0 right-0 h-16 drag z-20 flex justify-end items-center px-6">
-        <div className="flex items-center gap-1 no-drag">
+      <div className="absolute top-0 left-0 right-0 h-16 z-20 flex justify-end items-center px-6">
+        <div className="absolute inset-0 -z-10" style={{ WebkitAppRegion: 'drag' }} />
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch (e) { } }}
+            onClick={() => { console.log('Login.tsx: Minimieren geklickt'); try { (window as any).electronAPI.minimizeWindow() } catch (e) { console.error(e) } }}
             className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
             title="Minimieren"
           >
             <Minus size={18} />
           </button>
           <button
-            onClick={() => { try { window.require('electron').ipcRenderer.send('window-maximize') } catch (e) { } }}
+            onClick={() => { console.log('Login.tsx: Maximieren geklickt'); try { (window as any).electronAPI.maximizeWindow() } catch (e) { console.error(e) } }}
             className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
             title="Vollbild"
           >
             <Square size={16} />
           </button>
           <button
-            onClick={() => { try { window.require('electron').ipcRenderer.send('window-close') } catch (e) { } }}
+            onClick={() => { console.log('Login.tsx: Schließen geklickt'); try { (window as any).electronAPI.closeWindow() } catch (e) { console.error(e) } }}
             className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
             title="Schließen"
           >

@@ -46,6 +46,82 @@ $headers = @{
     "Accept" = "application/vnd.github.v3+json"
 }
 
+# 2.5. Generate and push CHANGELOG.md if not already present
+$changelogPath = "../CHANGELOG.md"
+if (Test-Path $changelogPath) {
+    $currentChangelog = Get-Content -Raw -Encoding UTF8 $changelogPath
+    # Check if the version header is already in the file (supporting ## [1.0.2] or ## 1.0.2 or ## [v1.0.2] formats)
+    if ($currentChangelog -notmatch "##\s*\[?v?$($version.Replace('.', '\.'))\]?") {
+        write-host "Version v$version nicht im CHANGELOG.md gefunden. Generiere automatischen Eintrag..."
+        
+        # Get the previous tag name to gather commits since then
+        $lastTag = ""
+        try {
+            $tags = git tag --sort=-v:refname
+            foreach ($t in $tags) {
+                # Look for a tag that is not the current version tag
+                if ($t -ne "v$version" -and $t -ne $version) {
+                    $lastTag = $t
+                    break
+                }
+            }
+        } catch {}
+        
+        # Gather commits
+        $commits = @()
+        try {
+            if ($lastTag) {
+                write-host "Lese Commits zwischen $lastTag und HEAD..."
+                $commits = git log "$lastTag..HEAD" --pretty=format:"- %s (%h)"
+            } else {
+                write-host "Kein vorheriger Tag gefunden. Lese die letzten 20 Commits..."
+                $commits = git log -n 20 --pretty=format:"- %s (%h)"
+            }
+        } catch {
+            write-warning "Git-Commits konnten nicht ausgelesen werden."
+        }
+        
+        # Format the new entry
+        $dateStr = Get-Date -Format "dd-MM-yyyy"
+        $newEntry = "## [$version] – $dateStr`r`n`r`n### 🔄 Änderungen und Verbesserungen`r`n"
+        $commitCount = 0
+        if ($commits) {
+            foreach ($commit in $commits) {
+                if ($commit.Trim()) {
+                    $newEntry += "$($commit.Trim())`r`n"
+                    $commitCount++
+                }
+            }
+        }
+        if ($commitCount -eq 0) {
+            $newEntry += "- Wartungsarbeiten und kleinere Verbesserungen`r`n"
+        }
+        $newEntry += "`r`n"
+        
+        # Prepend entry to the existing changelog content
+        $updatedChangelog = $newEntry + $currentChangelog
+        [System.IO.File]::WriteAllText((Resolve-Path $changelogPath), $updatedChangelog, [System.Text.Encoding]::UTF8)
+        write-host "[OK] CHANGELOG.md erfolgreich mit $commitCount Eintraegen aktualisiert."
+        
+        # Commit and push updated CHANGELOG.md to the current branch
+        try {
+            write-host "Committe und pushe aktualisierten CHANGELOG.md..."
+            $branch = (git branch --show-current).Trim()
+            if (-not $branch) { $branch = "main" }
+            
+            git add "../CHANGELOG.md"
+            git commit -m "chore: update CHANGELOG.md for v$version [skip ci]"
+            git push origin $branch
+            write-host "[OK] CHANGELOG.md erfolgreich gepusht."
+        } catch {
+            write-warning "Konnte CHANGELOG.md nicht automatisch pushen. Bitte manuell pushen."
+        }
+    } else {
+        write-host "CHANGELOG.md enthaelt bereits einen Eintrag fuer v$version."
+    }
+}
+
+
 # 3. Create and push Git Tag
 write-host ""
 write-host "[1/3] Erstelle Git-Tag v$version..."

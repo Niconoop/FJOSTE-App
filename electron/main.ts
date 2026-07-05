@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell } from 'electron'
 import { exec, execSync, spawn } from 'node:child_process'
 import net from 'node:net'
 import DiscordRPC from 'discord-rpc'
@@ -380,6 +380,27 @@ function createSplashScreen() {
   });
 }
 
+let isMainReady = false;
+function showMainWindow() {
+  if (isMainReady) return;
+  isMainReady = true;
+  if (splashWin && !splashWin.isDestroyed()) {
+    try {
+      splashWin.close();
+    } catch (e) {
+      console.error('Failed to close splashWin:', e);
+    }
+  }
+  if (win && !win.isDestroyed()) {
+    win.show();
+    win.focus();
+  }
+}
+
+ipcMain.on('app-ready', () => {
+  showMainWindow();
+});
+
 function createWindow() {
   app.name = 'FJOSTE App';
   win = new BrowserWindow({
@@ -400,6 +421,24 @@ function createWindow() {
     show: false,
   })
 
+  // Intercept navigation requests and open external links in default browser
+  win.webContents.on('will-navigate', (event, url) => {
+    const isExternal = !url.startsWith('file://') && !url.startsWith(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
+    if (isExternal) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+    }
+  });
+
+  // Intercept new window requests and open external links in default browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const isExternal = !url.startsWith('file://') && !url.startsWith(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
+    if (isExternal && (url.startsWith('http:') || url.startsWith('https:'))) {
+      shell.openExternal(url).catch(() => {});
+    }
+    return { action: 'deny' };
+  });
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
@@ -407,10 +446,9 @@ function createWindow() {
   }
 
   win.webContents.on('did-finish-load', () => {
-    if (splashWin && !splashWin.isDestroyed()) {
-      splashWin.close();
-    }
-    win?.show();
+    // Set a fallback timer of 4 seconds in case React app fails to signal 'app-ready'
+    setTimeout(showMainWindow, 4000);
+    
     setTimeout(loginRpc, 3000);
     // Clear HTTP cache every 30 minutes to prevent unbounded growth
     setInterval(() => {
@@ -419,11 +457,32 @@ function createWindow() {
   });
 }
 
-ipcMain.on('window-close', () => app.quit())
-ipcMain.on('window-minimize', () => win?.minimize())
-ipcMain.on('window-maximize', () => {
-  if (win?.isMaximized()) win.unmaximize()
-  else win?.maximize()
+ipcMain.on('window-close', (event) => {
+  const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
+  console.log(`[IPC] window-close received. Target window exists: ${!!targetWin}`);
+  if (targetWin) {
+    targetWin.close();
+  } else {
+    app.quit();
+  }
+})
+ipcMain.on('window-minimize', (event) => {
+  const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
+  console.log(`[IPC] window-minimize received. Target window exists: ${!!targetWin}`);
+  if (targetWin) {
+    targetWin.minimize();
+  }
+})
+ipcMain.on('window-maximize', (event) => {
+  const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
+  console.log(`[IPC] window-maximize received. Target window exists: ${!!targetWin}`);
+  if (targetWin) {
+    if (targetWin.isMaximized()) {
+      targetWin.unmaximize();
+    } else {
+      targetWin.maximize();
+    }
+  }
 })
 
 ipcMain.on('job-notification', (_, data) => {
@@ -671,6 +730,10 @@ const rpcInterval = setInterval(updateRpc, 15000);
 
 // Telemetry Polling
 const telemetryScript = `
+param(
+    [int]$ParentPid = 0
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -801,6 +864,12 @@ public class SCSTelemetry {
 "@
 
 while($true) {
+    if ($ParentPid -gt 0) {
+        $parent = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+        if (-not $parent) {
+            exit
+        }
+    }
     try {
         [SCSTelemetry]::GetData() | ConvertTo-Json -Compress
     } catch {
@@ -822,7 +891,8 @@ function startTelemetryBridge() {
   telemetryProcess = spawn('powershell', [
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-File', telemetryTempPath
+    '-File', telemetryTempPath,
+    '-ParentPid', process.pid.toString()
   ]);
 
   telemetryProcess.stdout.setEncoding('utf8');
@@ -875,7 +945,9 @@ function startTelemetryBridge() {
 
   telemetryProcess.on('exit', () => {
     telemetryProcess = null;
-    setTimeout(startTelemetryBridge, 5000);
+    if (!isQuitting) {
+      setTimeout(startTelemetryBridge, 5000);
+    }
   });
 }
 
@@ -1317,6 +1389,10 @@ ipcMain.on('overlay-resize', (_, type, w, h) => {
 // via the System Media Transport Controls (SMTC) using a C# WinRT helper.
 
 const smtcScript = `
+param(
+    [int]$ParentPid = 0
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -1425,6 +1501,12 @@ $lastThumb = ''
 $thumbAttempts = 0
 
 while ($true) {
+    if ($ParentPid -gt 0) {
+        $parent = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
+        if (-not $parent) {
+            exit
+        }
+    }
     try {
         $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
         $session = $mgr.GetCurrentSession()
@@ -1479,7 +1561,8 @@ function startSmtcBridge() {
   smtcProcess = spawn('powershell', [
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-File', smtcTempPath
+    '-File', smtcTempPath,
+    '-ParentPid', process.pid.toString()
   ]);
 
   smtcProcess.stdout.setEncoding('utf8');
@@ -1506,7 +1589,9 @@ function startSmtcBridge() {
 
   smtcProcess.on('exit', () => {
     smtcProcess = null;
-    setTimeout(startSmtcBridge, 5000);
+    if (!isQuitting) {
+      setTimeout(startSmtcBridge, 5000);
+    }
   });
 }
 
@@ -1685,33 +1770,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
-  isRpcActive = false;
-  if (rpcTimeout) clearTimeout(rpcTimeout);
-  clearInterval(rpcInterval);
-  if (afkIntervalId) clearInterval(afkIntervalId);
-  if (afkStartTimeout) clearTimeout(afkStartTimeout);
-
-  if (telemetryProcess) {
-    try {
-      // Force kill the whole process tree (PowerShell + children) on Windows
-      const pid = telemetryProcess.pid;
-      if (pid) {
-        execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
-      }
-    } catch (e) {
-      try { telemetryProcess.kill('SIGKILL'); } catch (e2) { }
-    }
-  }
-
-  if (rpc) {
-    try {
-      rpc.clearActivity();
-      rpc.destroy();
-    } catch (e) { }
-    rpc = null;
-  }
-})
 
 const PLUGIN_URL = 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip';
 
@@ -2016,51 +2074,51 @@ app.on('before-quit', async (e) => {
   e.preventDefault();
   isQuitting = true;
 
-  // Clear all intervals
+  console.log('🔌 App shutdown initiated. Cleaning up...');
+
+  // 1. Clear all intervals and timeouts
+  isRpcActive = false;
+  if (rpcTimeout) clearTimeout(rpcTimeout);
   clearInterval(rpcInterval);
+  if (afkIntervalId) clearInterval(afkIntervalId);
+  if (afkStartTimeout) clearTimeout(afkStartTimeout);
+
+  // 2. Kill telemetry process tree
   if (telemetryProcess) {
     try {
-      if (telemetryProcess.pid) {
-        execSync(`taskkill /pid ${telemetryProcess.pid} /f /t`);
+      const pid = telemetryProcess.pid;
+      if (pid) {
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
       }
-      telemetryProcess.kill();
-    } catch (e) { }
+    } catch (err) {
+      try { telemetryProcess.kill('SIGKILL'); } catch (e2) { }
+    }
+    telemetryProcess = null;
   }
 
-  // Stop Discord RPC
-  await stopRpc();
-
-  // Destroy all windows
-  BrowserWindow.getAllWindows().forEach(win => {
-    win.destroy();
-  });
-
-  app.quit();
-});
-
-app.on('will-quit', () => {
-  // Kill Telemetry Process
-  if (telemetryProcess) {
-    try {
-      if (telemetryProcess.pid) {
-        execSync(`taskkill /pid ${telemetryProcess.pid} /f /t`);
-      }
-      telemetryProcess.kill();
-    } catch (e) { }
-  }
-
-  // Kill SMTC Process
+  // 3. Kill SMTC process tree
   if (smtcProcess) {
     try {
-      if (smtcProcess.pid) {
-        execSync(`taskkill /pid ${smtcProcess.pid} /f /t`);
+      const pid = smtcProcess.pid;
+      if (pid) {
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
       }
-      smtcProcess.kill();
-    } catch (e) { }
+    } catch (err) {
+      try { smtcProcess.kill('SIGKILL'); } catch (e2) { }
+    }
+    smtcProcess = null;
   }
 
-  // Kill RPC
-  if (rpc) {
-    try { rpc.destroy(); } catch (e) { }
-  }
-})
+  // 4. Stop Discord RPC gracefully
+  await stopRpc();
+
+  // 5. Destroy all windows
+  BrowserWindow.getAllWindows().forEach(win => {
+    if (!win.isDestroyed()) {
+      win.destroy();
+    }
+  });
+
+  // 6. Quit app
+  app.quit();
+});
