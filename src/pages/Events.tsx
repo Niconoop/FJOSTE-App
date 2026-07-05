@@ -9,6 +9,18 @@ import { API_URL, getAvatarUrl } from "../config";
 const formatShort = (d: string) => d ? new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
 const formatLong = (d: string) => d ? new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 
+const staggerContainer = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.06 }
+  }
+};
+
+const staggerChild = {
+  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 260, damping: 20 } }
+};
+
 class ErrorBoundary extends Component<{ children: any }, { error: string | null }> {
   state = { error: null };
   static getDerivedStateFromError(e: Error) { return { error: e.message }; }
@@ -40,9 +52,11 @@ const EventCard = ({ event, participants, isJoined, canDelete, onDelete, onJoin,
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`glass-card !p-0 overflow-hidden group hover-glow border-2 border-[#2ba1b9]/20 ${isPast ? "opacity-60 grayscale-[0.5]" : ""}`}
+      id={`event-${event.id}`}
+      variants={staggerChild}
+      whileHover={{ y: -4, scale: 1.015 }}
+      whileTap={{ scale: 0.995 }}
+      className={`glass-card !p-0 overflow-hidden group hover-glow border-2 border-[#2ba1b9]/20 cursor-pointer ${isPast ? "opacity-60 grayscale-[0.5]" : ""}`}
     >
       {event.cover_url && (
         <div className="relative h-44 overflow-hidden bg-black">
@@ -74,8 +88,8 @@ const EventCard = ({ event, participants, isJoined, canDelete, onDelete, onJoin,
               {event.title}
             </h3>
             <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-3 font-bold uppercase tracking-tight">
-               <span className="flex items-center gap-1"><MapPin size={12} className="text-primary" />{event.start_city || "TBD"}</span>
-               <span className="flex items-center gap-1"><Users size={12} />{partCount}</span>
+              <span className="flex items-center gap-1"><MapPin size={12} className="text-primary" />{event.start_city || "TBD"}</span>
+              <span className="flex items-center gap-1"><Users size={12} />{partCount}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -109,62 +123,62 @@ const EventCard = ({ event, participants, isJoined, canDelete, onDelete, onJoin,
             className="overflow-hidden border-t border-white/5"
           >
             <div className="p-5 space-y-4">
-               {event.information && <p className="text-xs text-slate-400 leading-relaxed font-medium">{event.information}</p>}
-               
-               <div className="grid grid-cols-2 gap-4 text-[10px] font-bold uppercase tracking-widest">
-                  {event.server && (
-                    <div className="space-y-1">
-                      <p className="text-slate-600">Server</p>
-                      <p className="text-white">
-                        {typeof event.server === 'object' ? event.server.name : event.server}
-                      </p>
-                    </div>
-                  )}
-                  {event.game && (
-                    <div className="space-y-1">
-                      <p className="text-slate-600">Spiel</p>
-                      <p className="text-white">
-                        {typeof event.game === 'object' ? event.game.name : event.game}
-                      </p>
-                    </div>
-                  )}
-               </div>
+              {event.information && <p className="text-xs text-slate-400 leading-relaxed font-medium">{event.information}</p>}
 
-               {event.route_url && (
-                 <div className="pt-2">
-                   <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2 italic">Route</p>
-                   <img src={getAvatarUrlLocal(event.route_url)!} className="w-full rounded-xl border border-white/5 bg-black/40" />
-                 </div>
-               )}
+              <div className="grid grid-cols-2 gap-4 text-[10px] font-bold uppercase tracking-widest">
+                {event.server && (
+                  <div className="space-y-1">
+                    <p className="text-slate-600">Server</p>
+                    <p className="text-white">
+                      {typeof event.server === 'object' ? event.server.name : event.server}
+                    </p>
+                  </div>
+                )}
+                {event.game && (
+                  <div className="space-y-1">
+                    <p className="text-slate-600">Spiel</p>
+                    <p className="text-white">
+                      {typeof event.game === 'object' ? event.game.name : event.game}
+                    </p>
+                  </div>
+                )}
+              </div>
 
-               <div className="pt-2">
-                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2 italic">Teilnehmer ({partCount})</p>
-                 <div className="flex flex-wrap gap-2">
-                    {participants.map((p: any) => (
-                      <div key={p.id} className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-lg px-2 py-1">
-                        <div className="w-4 h-4 rounded-full bg-slate-800 overflow-hidden">
-                           {getAvatarUrlLocal(p.avatar_url) ? <img src={getAvatarUrlLocal(p.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
-                        </div>
-                        <span className="text-[10px] text-white font-bold">{p.username}</span>
+              {event.route_url && (
+                <div className="pt-2">
+                  <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2 italic">Route</p>
+                  <img src={getAvatarUrlLocal(event.route_url)!} className="w-full rounded-xl border border-white/5 bg-black/40" />
+                </div>
+              )}
+
+              <div className="pt-2">
+                <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2 italic">Teilnehmer ({partCount})</p>
+                <div className="flex flex-wrap gap-2">
+                  {participants.map((p: any) => (
+                    <div key={p.id} className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-lg px-2 py-1">
+                      <div className="w-4 h-4 rounded-full bg-slate-800 overflow-hidden">
+                        {getAvatarUrlLocal(p.avatar_url) ? <img src={getAvatarUrlLocal(p.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
                       </div>
-                    ))}
-                 </div>
-               </div>
+                      <span className="text-[10px] text-white font-bold">{p.username}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <div className="pt-4 border-t border-white/5">
                 {isJoined ? (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handle(onLeave); }} 
-                    disabled={acting} 
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handle(onLeave); }}
+                    disabled={acting}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
                   >
                     {acting ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={14} />}
                     Vom Event abmelden
                   </button>
                 ) : (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handle(onJoin); }} 
-                    disabled={acting} 
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handle(onJoin); }}
+                    disabled={acting}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
                   >
                     {acting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
@@ -189,7 +203,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("calendar");
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); d.setDate(1); return d; });
-  
+
   const [showForm, setShowForm] = useState(false);
   const [showPickerModal, setShowPickerModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -219,7 +233,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       const all = [...(Array.isArray(tr.data) ? tr.data : []), ...(Array.isArray(cu.data) ? cu.data : [])];
       setEvents(all.sort((a, b) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime()));
       setRsvps(rs.data || {});
-    } catch {} finally { setLoading(false); }
+    } catch { } finally { setLoading(false); }
   }, [token]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -230,7 +244,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       if (ipcRenderer) {
         ipcRenderer.send('rpc-page-changed', 'events', { planning: showForm });
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [showForm]);
 
   useEffect(() => {
@@ -252,9 +266,9 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
       if (coverFile) fd.append("cover", coverFile);
       if (routeFile) fd.append("route", routeFile);
-      
-      await axios.post(`${API_URL}/events`, fd, { 
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } 
+
+      await axios.post(`${API_URL}/events`, fd, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
       });
       toast.success("Event erfolgreich geplant!");
       setShowForm(false);
@@ -326,8 +340,8 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
           </div>
           {canManageEvents && (
             <button onClick={() => setShowForm(!showForm)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-primary text-black"}`}>
-               {showForm ? <XIcon size={16} /> : <Plus size={16} />}
-               {showForm ? "Abbrechen" : "Event planen"}
+              {showForm ? <XIcon size={16} /> : <Plus size={16} />}
+              {showForm ? "Abbrechen" : "Event planen"}
             </button>
           )}
         </div>
@@ -335,96 +349,97 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
 
       <AnimatePresence>
         {showForm && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 z-[110] flex items-start justify-center p-6 pt-28 bg-black/90 backdrop-blur-xl overflow-y-auto"
             onClick={() => setShowForm(false)}
           >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }} 
-              animate={{ scale: 1, y: 0 }} 
-              exit={{ scale: 0.9, y: 20 }} 
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="glass-card w-full max-w-3xl !p-0 overflow-hidden shadow-2xl border-2 border-[#2ba1b9]/20"
               onClick={e => e.stopPropagation()}
             >
-               <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                  <div>
-                    <h2 className="font-unbounded text-xs font-bold text-white uppercase italic tracking-widest">Neues Event planen</h2>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">Event Management</p>
+              <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+                <div>
+                  <h2 className="font-unbounded text-xs font-bold text-white uppercase italic tracking-widest">Neues Event planen</h2>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">Event Management</p>
+                </div>
+                <button onClick={() => setShowForm(false)} className="p-2 text-slate-500 hover:text-white transition-colors"><XIcon size={20} /></button>
+              </div>
+
+              <form onSubmit={handleCreate} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto no-scrollbar">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titel des Events *</label>
+                  <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" required />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Startdatum & Uhrzeit *</label>
+                  <div
+                    onClick={() => setShowPickerModal(true)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus-within:border-primary/30 outline-none cursor-pointer flex items-center justify-between group hover:border-white/20 transition-all"
+                  >
+                    <span className={form.start_date ? "text-white" : "text-slate-500"}>
+                      {form.start_date ? new Date(form.start_date).toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Datum & Uhrzeit wählen..."}
+                    </span>
+                    <Calendar size={16} className="text-slate-500 group-hover:text-primary transition-colors" />
                   </div>
-                  <button onClick={() => setShowForm(false)} className="p-2 text-slate-500 hover:text-white transition-colors"><XIcon size={20} /></button>
-               </div>
+                </div>
 
-               <form onSubmit={handleCreate} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto no-scrollbar">
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titel des Events *</label>
-                   <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" required />
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Startstadt</label>
+                  <input value={form.start_city} onChange={e => setForm({ ...form, start_city: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Hamburg" />
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Startdatum & Uhrzeit *</label>
-                   <div 
-                     onClick={() => setShowPickerModal(true)}
-                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus-within:border-primary/30 outline-none cursor-pointer flex items-center justify-between group hover:border-white/20 transition-all"
-                   >
-                     <span className={form.start_date ? "text-white" : "text-slate-500"}>
-                       {form.start_date ? new Date(form.start_date).toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "Datum & Uhrzeit wählen..."}
-                     </span>
-                     <Calendar size={16} className="text-slate-500 group-hover:text-primary transition-colors" />
-                   </div>
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Zielstadt</label>
+                  <input value={form.end_city} onChange={e => setForm({ ...form, end_city: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Berlin" />
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Startstadt</label>
-                   <input value={form.start_city} onChange={e => setForm({...form, start_city: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Hamburg" />
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Server</label>
+                  <input value={form.server} onChange={e => setForm({ ...form, server: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="Simulation 1" />
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Zielstadt</label>
-                   <input value={form.end_city} onChange={e => setForm({...form, end_city: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Berlin" />
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Spiel</label>
+                  <select value={form.game} onChange={e => setForm({ ...form, game: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none">
+                    <option value="ETS2">Euro Truck Simulator 2</option>
+                    <option value="ATS">American Truck Simulator</option>
+                  </select>
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Server</label>
-                   <input value={form.server} onChange={e => setForm({...form, server: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="Simulation 1" />
-                 </div>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Zusätzliche Informationen</label>
+                  <textarea value={form.information} onChange={e => setForm({ ...form, information: e.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none min-h-[100px]" placeholder="Details zum Treffpunkt, DLCs, etc." />
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Spiel</label>
-                   <select value={form.game} onChange={e => setForm({...form, game: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none">
-                      <option value="ETS2">Euro Truck Simulator 2</option>
-                      <option value="ATS">American Truck Simulator</option>
-                   </select>
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titelbild (Optional)</label>
+                  <div className="relative h-32 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
+                    <input type="file" accept="image/*" onChange={e => setCoverFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    {coverFile ? <img src={URL.createObjectURL(coverFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild wählen</div>}
+                  </div>
+                </div>
 
-                 <div className="md:col-span-2 space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Zusätzliche Informationen</label>
-                   <textarea value={form.information} onChange={e => setForm({...form, information: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none min-h-[100px]" placeholder="Details zum Treffpunkt, DLCs, etc." />
-                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Routenbild (Optional)</label>
+                  <div className="relative h-32 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
+                    <input type="file" accept="image/*" onChange={e => setRouteFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    {routeFile ? <img src={URL.createObjectURL(routeFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild wählen</div>}
+                  </div>
+                </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titelbild (Optional)</label>
-                   <div className="relative h-32 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
-                      <input type="file" accept="image/*" onChange={e => setCoverFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                      {coverFile ? <img src={URL.createObjectURL(coverFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild wählen</div>}
-                   </div>
-                 </div>
-
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Routenbild (Optional)</label>
-                   <div className="relative h-32 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
-                      <input type="file" accept="image/*" onChange={e => setRouteFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                      {routeFile ? <img src={URL.createObjectURL(routeFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild wählen</div>}
-                   </div>
-                 </div>
-
-                 <div className="md:col-span-2 pt-4">
-                   <button disabled={submitting} className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs hover:bg-white transition-all flex items-center justify-center gap-3">
-                      {submitting ? <Loader2 className="animate-spin" /> : <><Plus size={18} /> Event Veröffentlichen</>}
-                   </button>
-                 </div>
+                <div className="md:col-span-2 pt-4">
+                  <button disabled={submitting} className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs hover:bg-white transition-all flex items-center justify-center gap-3">
+                    {submitting ? <Loader2 className="animate-spin" /> : <><Plus size={18} /> Event Veröffentlichen</>}
+                  </button>
+                </div>
               </form>
             </motion.div>
           </motion.div>
@@ -434,109 +449,110 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       {/* Picker Modal (Website Style) */}
       <AnimatePresence>
         {showPickerModal && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl"
             onClick={() => setShowPickerModal(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="glass-card w-full max-w-sm !p-0 overflow-hidden shadow-2xl border-2 border-[#2ba1b9]/20"
               onClick={e => e.stopPropagation()}
             >
-               <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                  <div>
-                    <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest italic">Zeitpunkt wählen</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">Event Planung</p>
-                  </div>
-                  <button onClick={() => setShowPickerModal(false)} className="p-2 text-slate-500 hover:text-white transition-colors"><XIcon size={18} /></button>
-               </div>
+              <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+                <div>
+                  <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest italic">Zeitpunkt wählen</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">Event Planung</p>
+                </div>
+                <button onClick={() => setShowPickerModal(false)} className="p-2 text-slate-500 hover:text-white transition-colors"><XIcon size={18} /></button>
+              </div>
 
-               <div className="p-6 space-y-6">
-                  {/* Month Selector */}
-                  <div className="flex items-center justify-between">
-                     <button 
-                       onClick={() => setPickerDate(new Date(pickerDate.getFullYear(), pickerDate.getMonth() - 1, 1))}
-                       className="p-1.5 hover:bg-white/5 rounded-lg text-slate-500"
-                     >
-                       <ChevronLeft size={16} />
-                     </button>
-                     <p className="text-[10px] font-black text-white uppercase tracking-widest italic">
-                       {pickerDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
-                     </p>
-                     <button 
-                       onClick={() => setPickerDate(new Date(pickerDate.getFullYear(), pickerDate.getMonth() + 1, 1))}
-                       className="p-1.5 hover:bg-white/5 rounded-lg text-slate-500"
-                     >
-                       <ChevronRight size={16} />
-                     </button>
-                  </div>
-
-                  {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-1">
-                     {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(d => (
-                       <div key={d} className="text-center text-[8px] font-black text-slate-700 uppercase mb-1">{d}</div>
-                     ))}
-                     {(() => {
-                       const y = pickerDate.getFullYear();
-                       const m = pickerDate.getMonth();
-                       const first = (new Date(y, m, 1).getDay() + 6) % 7;
-                       const days = new Date(y, m + 1, 0).getDate();
-                       const cells = [];
-                       for(let i=0; i<first; i++) cells.push(<div key={`empty-${i}`} />);
-                       for(let d=1; d<=days; d++) {
-                         const isSelected = pickerDate.getDate() === d && pickerDate.getMonth() === m && pickerDate.getFullYear() === y;
-                         cells.push(
-                           <button 
-                             key={d} 
-                             onClick={() => setPickerDate(new Date(y, m, d))}
-                             className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-bold transition-all ${isSelected ? "bg-primary text-black shadow-[0_0_15px_rgba(43,161,185,0.4)]" : "text-slate-400 hover:bg-white/5"}`}
-                           >
-                             {d}
-                           </button>
-                         );
-                       }
-                       return cells;
-                     })()}
-                  </div>
-
-                  {/* Time Input */}
-                  <div className="pt-4 border-t border-white/5">
-                     <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block mb-3 italic">Uhrzeit (HH:mm)</label>
-                     <div className="flex items-center gap-3">
-                        <input 
-                          type="time" 
-                          value={pickerTime} 
-                          onChange={e => setPickerTime(e.target.value)}
-                          className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/30 [color-scheme:dark]"
-                        />
-                        <div className="p-3 rounded-xl bg-primary/10 text-primary">
-                           <Clock size={18} />
-                        </div>
-                     </div>
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                      const [h, min] = pickerTime.split(":");
-                      const finalDate = new Date(pickerDate);
-                      finalDate.setHours(parseInt(h), parseInt(min), 0);
-                      
-                      const pad = (n: number) => String(n).padStart(2, '0');
-                      const formatted = `${finalDate.getFullYear()}-${pad(finalDate.getMonth()+1)}-${pad(finalDate.getDate())}T${pad(finalDate.getHours())}:${pad(finalDate.getMinutes())}`;
-                      
-                      setForm({ ...form, start_date: formatted });
-                      setShowPickerModal(false);
-                    }}
-                    className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] italic hover:bg-white transition-all shadow-xl"
+              <div className="p-6 space-y-6">
+                {/* Month Selector */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setPickerDate(new Date(pickerDate.getFullYear(), pickerDate.getMonth() - 1, 1))}
+                    className="p-1.5 hover:bg-white/5 rounded-lg text-slate-500"
                   >
-                    Termin Übernehmen
+                    <ChevronLeft size={16} />
                   </button>
-               </div>
+                  <p className="text-[10px] font-black text-white uppercase tracking-widest italic">
+                    {pickerDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
+                  </p>
+                  <button
+                    onClick={() => setPickerDate(new Date(pickerDate.getFullYear(), pickerDate.getMonth() + 1, 1))}
+                    className="p-1.5 hover:bg-white/5 rounded-lg text-slate-500"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(d => (
+                    <div key={d} className="text-center text-[8px] font-black text-slate-700 uppercase mb-1">{d}</div>
+                  ))}
+                  {(() => {
+                    const y = pickerDate.getFullYear();
+                    const m = pickerDate.getMonth();
+                    const first = (new Date(y, m, 1).getDay() + 6) % 7;
+                    const days = new Date(y, m + 1, 0).getDate();
+                    const cells = [];
+                    for (let i = 0; i < first; i++) cells.push(<div key={`empty-${i}`} />);
+                    for (let d = 1; d <= days; d++) {
+                      const isSelected = pickerDate.getDate() === d && pickerDate.getMonth() === m && pickerDate.getFullYear() === y;
+                      cells.push(
+                        <button
+                          key={d}
+                          onClick={() => setPickerDate(new Date(y, m, d))}
+                          className={`aspect-square rounded-lg flex items-center justify-center text-[10px] font-bold transition-all ${isSelected ? "bg-primary text-black shadow-[0_0_15px_rgba(43,161,185,0.4)]" : "text-slate-400 hover:bg-white/5"}`}
+                        >
+                          {d}
+                        </button>
+                      );
+                    }
+                    return cells;
+                  })()}
+                </div>
+
+                {/* Time Input */}
+                <div className="pt-4 border-t border-white/5">
+                  <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block mb-3 italic">Uhrzeit (HH:mm)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="time"
+                      value={pickerTime}
+                      onChange={e => setPickerTime(e.target.value)}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/30 [color-scheme:dark]"
+                    />
+                    <div className="p-3 rounded-xl bg-primary/10 text-primary">
+                      <Clock size={18} />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const [h, min] = pickerTime.split(":");
+                    const finalDate = new Date(pickerDate);
+                    finalDate.setHours(parseInt(h), parseInt(min), 0);
+
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    const formatted = `${finalDate.getFullYear()}-${pad(finalDate.getMonth() + 1)}-${pad(finalDate.getDate())}T${pad(finalDate.getHours())}:${pad(finalDate.getMinutes())}`;
+
+                    setForm({ ...form, start_date: formatted });
+                    setShowPickerModal(false);
+                  }}
+                  className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] italic hover:bg-white transition-all shadow-xl"
+                >
+                  Termin Übernehmen
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -550,7 +566,12 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
         </div>
       ) : view === "list" ? (
         <ErrorBoundary>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start"
+          >
             {events.map(e => (
               <EventCard
                 key={e.id ?? Math.random()}
@@ -563,7 +584,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                 onLeave={handleLeave}
               />
             ))}
-          </div>
+          </motion.div>
         </ErrorBoundary>
       ) : (
         <div className="glass-card hover-glow shadow-2xl border-2 border-[#2ba1b9]/20">
@@ -607,33 +628,31 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     if (cell && canManageEvents) {
                       const d = cell.date;
                       const pad = (n: number) => String(n).padStart(2, '0');
-                      const formatted = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T18:00`;
+                      const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T18:00`;
                       setForm({ ...form, start_date: formatted });
                       setShowForm(true);
                     }
                   }}
-                  className={`min-h-[80px] p-2 rounded-xl border transition-all hover-glow cursor-pointer ${
-                    cell 
-                      ? `border-white/10 hover:border-primary/30 shadow-lg ${
-                          isToday 
-                            ? "bg-primary/10 border-primary/40 ring-1 ring-primary/20" 
-                            : (i % 7 >= 5 ? "calendar-weekend" : "calendar-weekday")
-                        }` 
+                  className={`min-h-[80px] p-2 rounded-xl border transition-all hover-glow cursor-pointer ${cell
+                      ? `border-white/10 hover:border-primary/30 shadow-lg ${isToday
+                        ? "bg-primary/10 border-primary/40 ring-1 ring-primary/20"
+                        : (i % 7 >= 5 ? "calendar-weekend" : "calendar-weekday")
+                      }`
                       : "border-transparent opacity-10"
-                  }`}
+                    }`}
                 >
                   {cell && (
                     <>
                       <p className={`text-[10px] font-black mb-1 italic ${isToday ? "text-primary" : "text-slate-500"}`}>{cell.date.getDate()}</p>
                       <div className="space-y-1">
                         {cell.events.map((ev: any) => {
-                          const cover = typeof ev.cover_url === 'string' && ev.cover_url.startsWith("http") 
-                            ? ev.cover_url 
+                          const cover = typeof ev.cover_url === 'string' && ev.cover_url.startsWith("http")
+                            ? ev.cover_url
                             : ev.cover_url ? getAvatarUrlLocal(ev.cover_url) : null;
-                          
+
                           return (
-                            <div 
-                              key={ev.id ?? Math.random()} 
+                            <div
+                              key={ev.id ?? Math.random()}
                               onClick={(e) => { e.stopPropagation(); setSelectedEvent(ev); }}
                               className="relative group rounded-lg overflow-hidden h-14 bg-slate-900 border border-white/5 cursor-pointer"
                               title={typeof ev.title === 'object' ? ev.title.name : ev.title}
@@ -646,7 +665,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                                 </div>
                               )}
                               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                              
+
                               <div className="absolute inset-x-0 bottom-0 p-1.5 flex flex-col justify-end">
                                 <p className="text-[7px] font-black text-white truncate leading-tight uppercase tracking-tighter">
                                   {typeof ev.title === 'object' ? ev.title.name : ev.title}
@@ -677,29 +696,30 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       {/* Event Details Modal */}
       <AnimatePresence>
         {selectedEvent && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-start justify-center p-6 pt-28 bg-black/90 backdrop-blur-md overflow-y-auto"
             onClick={() => setSelectedEvent(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="w-full max-w-xl relative"
               onClick={e => e.stopPropagation()}
             >
-              <button 
+              <button
                 onClick={() => setSelectedEvent(null)}
                 className="absolute -top-12 right-0 p-2 text-slate-400 hover:text-white transition-colors"
               >
                 <XIcon size={24} />
               </button>
-              
-              <EventCard 
-                event={selectedEvent} 
+
+              <EventCard
+                event={selectedEvent}
                 participants={rsvps[selectedEvent.id] || []}
                 isJoined={isJoined(selectedEvent.id)}
                 canDelete={canManageEvents}

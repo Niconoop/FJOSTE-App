@@ -11,17 +11,34 @@ import https from 'node:https'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optimize Electron RAM footprint
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128');
+// V8: lower heap ceiling + prefer smaller code over peak speed
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=96 --optimize-for-size');
+// One renderer process shared across same-origin pages
 app.commandLine.appendSwitch('process-per-site');
+// Disable APIs the app doesn't use
 app.commandLine.appendSwitch('disable-speech-api');
 app.commandLine.appendSwitch('disable-voice-input');
 app.commandLine.appendSwitch('disable-notifications');
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('no-first-run');
+// Disable Chromium subsystems that carry invisible RAM overhead
+// BackForwardCache keeps full rendered pages in RAM for back/forward – useless in a SPA
+// AudioServiceOutOfProcess spins up a separate audio process – keep it in-process
+// MediaRouter / DialMediaRouteProvider / HardwareMediaKeyHandling – not needed
+// IntensiveWakeUpThrottling – Chrome feature that, after 5 min in background, throttles ALL
+//   timers to fire at most once per minute. Without this disabled, notification polling
+//   (every 30s) would be delayed up to 60s when the user is gaming.
+app.commandLine.appendSwitch('disable-features',
+  'BackForwardCache,TranslateUI,AudioServiceOutOfProcess,MediaRouter,DialMediaRouteProvider,HardwareMediaKeyHandling,IntensiveWakeUpThrottling'
+);
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
 
 let win: BrowserWindow | null;
+let splashWin: BrowserWindow | null = null;
 let overlayWin: BrowserWindow | null = null;
 let logoWin: BrowserWindow | null = null;
 let driversWin: BrowserWindow | null = null;
@@ -91,7 +108,7 @@ let jobStartFuel = 0;
 let jobTotalSpeed = 0;
 let jobSpeedTicks = 0;
 
-function loadSettings() {
+async function loadSettings() {
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
       const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
@@ -137,7 +154,7 @@ function loadSettings() {
           ...saved.overlaySettings
         };
       }
-
+      console.log('📦 Settings: Einstellungen geladen');
     }
   } catch (e) {
     console.error('❌ Settings: Fehler beim Laden der Einstellungen', e);
@@ -184,6 +201,185 @@ loadSettings();
 
 
 
+function createSplashScreen() {
+  splashWin = new BrowserWindow({
+    width: 480,
+    height: 380,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    center: true,
+    show: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  let logoBase64 = '';
+  try {
+    const logoPath = path.join(process.env.VITE_PUBLIC, 'logo.png');
+    if (fs.existsSync(logoPath)) {
+      logoBase64 = fs.readFileSync(logoPath).toString('base64');
+    }
+  } catch (err) {
+    console.error('Failed to read logo.png for splash screen:', err);
+  }
+
+  const splashHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Unbounded:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+    .card {
+      width: 360px;
+      height: 260px;
+      background: #000000;
+      border: 1px solid rgba(43, 161, 185, 0.45);
+      box-shadow: 0 0 4px rgba(43, 161, 185, 0.9),
+                  0 0 12px rgba(43, 161, 185, 0.6);
+      border-radius: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .logo-container {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-glow {
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      background: #2ba1b9;
+      border-radius: 50%;
+      filter: blur(25px);
+      opacity: 0.55;
+      animation: pulse 2s infinite ease-in-out;
+    }
+    .logo {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(43,161,185,0.4));
+    }
+    .title {
+      font-family: 'Unbounded', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin: 0;
+      text-shadow: 0 0 10px rgba(255,255,255,0.1);
+    }
+    .subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      color: #2ba1b9;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 4px;
+      margin-bottom: 24px;
+      opacity: 0.85;
+    }
+    .status {
+      font-size: 12px;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      margin: 0;
+      animation: pulse 1.5s infinite ease-in-out;
+    }
+    .progress-track {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(43, 161, 185, 0.08);
+      overflow: hidden;
+    }
+    .progress-bar {
+      position: absolute;
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(90deg, transparent, #2ba1b9, transparent);
+      animation: loading-slide 1.5s infinite linear;
+      box-shadow: 0 0 10px rgba(43, 161, 185, 0.5), 0 0 4px rgba(43, 161, 185, 0.2);
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.96); }
+      50% { opacity: 0.7; transform: scale(1.04); }
+    }
+    @keyframes loading-slide {
+      0% {
+        left: -40%;
+      }
+      100% {
+        left: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-container">
+      <div class="logo-glow"></div>
+      ${logoBase64 ? `<img class="logo" src="data:image/png;base64,${logoBase64}" />` : `<div style="font-size: 40px;">🚚</div>`}
+    </div>
+    <div class="title">FJOSTE</div>
+    <div class="subtitle">Tracker</div>
+    <div class="status">Wird gestartet...</div>
+    <div class="progress-track">
+      <div class="progress-bar"></div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const tempSplashPath = path.join(app.getPath('temp'), 'fjoste_splash.html');
+  try {
+    fs.writeFileSync(tempSplashPath, splashHTML, 'utf8');
+    splashWin.loadFile(tempSplashPath);
+  } catch (err) {
+    console.error('Failed to write/load splash.html:', err);
+    // Fallback in case of disk write failures
+    splashWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(splashHTML));
+  }
+
+  splashWin.on('closed', () => {
+    try { fs.unlinkSync(tempSplashPath); } catch (e) { }
+    splashWin = null;
+  });
+}
+
 function createWindow() {
   app.name = 'FJOSTE App';
   win = new BrowserWindow({
@@ -195,11 +391,13 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       preload: path.join(__dirname, 'preload.js'),
-      spellcheck: false
+      spellcheck: false,
+      webSecurity: false,
     },
     autoHideMenuBar: true,
     backgroundColor: '#050507',
     frame: false,
+    show: false,
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -209,8 +407,15 @@ function createWindow() {
   }
 
   win.webContents.on('did-finish-load', () => {
+    if (splashWin && !splashWin.isDestroyed()) {
+      splashWin.close();
+    }
     win?.show();
     setTimeout(loginRpc, 3000);
+    // Clear HTTP cache every 30 minutes to prevent unbounded growth
+    setInterval(() => {
+      win?.webContents.session.clearCache().catch(() => { });
+    }, 30 * 60 * 1000);
   });
 }
 
@@ -334,12 +539,12 @@ async function loginRpc() {
     rpc = null;
   }
 
-
+  console.log('🎮 RPC: Verbindungsversuch...');
 
   try {
     rpc = new DiscordRPC.Client({ transport: 'ipc' });
     rpc.on('ready', () => {
-
+      console.log('🎮 RPC: Bereit!');
       isRpcConnected = true;
       updateRpc();
       win?.webContents.send('rpc-status-changed', true);
@@ -407,7 +612,7 @@ ipcMain.handle('rpc-get-status', () => isRpcActive);
 ipcMain.handle('rpc-status', () => isRpcConnected);
 
 ipcMain.on('rpc-update-city', (_, city) => {
-
+  console.log('📍 RPC Standort Update:', city);
   currentCity = city;
   updateRpc();
 });
@@ -456,7 +661,7 @@ ipcMain.on('rpc-page-changed', (_, page, details) => {
 });
 
 ipcMain.on('set-auth-username', (_, username) => {
-
+  console.log('👤 Benutzer erkannt:', username);
   currentUsername = username;
   updateRpc();
 });
@@ -562,7 +767,7 @@ public class SCSTelemetry {
                         result["posX"] = BitConverter.ToDouble(raw, 2200);
                         result["posY"] = BitConverter.ToDouble(raw, 2208);
                         result["posZ"] = BitConverter.ToDouble(raw, 2216);
-                        result["heading"] = BitConverter.ToDouble(raw, 2224) * 2 * Math.PI;
+                        result["heading"] = BitConverter.ToDouble(raw, 2224);
 
                         result["income"] = BitConverter.ToUInt64(raw, 4000);
                         result["plannedDistance"] = BitConverter.ToUInt32(raw, 100);
@@ -647,6 +852,15 @@ function startTelemetryBridge() {
           prevJobActive = initialCargo.length > 0 && initialCargo.toLowerCase() !== 'none';
         }
         handleTrackingLogic(parsed, telemetryData);
+
+        const isCurrentlyMoving = parsed &&
+          parsed.gameVersion > 0 &&
+          Math.round(parsed.speed || 0) > 1;
+
+        if (isCurrentlyMoving) {
+          lastMovementTime = Date.now();
+        }
+
         telemetryData = parsed;
         updateOverlayWindowVisibility(parsed);
       } catch (e: any) {
@@ -967,11 +1181,8 @@ function createSingleOverlayWindow() {
       contextIsolation: false,
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false, // Ensure page doesn't lag when game is in focus
+      webSecurity: false,
     },
-  });
-
-  overlayWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
-    console.log(`🖥️ [Overlay Console] ${message} (at ${sourceId}:${line})`);
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -1325,6 +1536,7 @@ let afkConfig: {
   hotkey: "F9"
 };
 let isAfkRunning = false;
+let lastMovementTime = Date.now();
 
 function playBotSound(type: 'start' | 'stop') {
   const fileName = type === 'start' ? 'start.mp3' : 'stop.mp3';
@@ -1341,14 +1553,26 @@ function runAfkTask() {
     telemetryData.gameVersion > 0 &&
     Math.round(telemetryData.speed || 0) > 1;
 
-  let pool = isDriving ? afkConfig.drivingTexts : afkConfig.pausedTexts;
+  if (isDriving) {
+    lastMovementTime = Date.now();
+  }
+
+  const stationaryTimeMs = Date.now() - lastMovementTime;
+  const isStationaryOver2Min = stationaryTimeMs >= 120000;
+
+  let pool = isStationaryOver2Min ? afkConfig.pausedTexts : afkConfig.drivingTexts;
   if (!pool || pool.length === 0) {
-    pool = isDriving ? afkConfig.pausedTexts : afkConfig.drivingTexts;
+    pool = isStationaryOver2Min ? afkConfig.drivingTexts : afkConfig.pausedTexts;
   }
   if (!pool || pool.length === 0) return;
 
   const text = pool[Math.floor(Math.random() * pool.length)];
-  console.log(`🤖 AFK-Bot: Sende Nachricht... "${text}" (Fahren: ${!!isDriving})`);
+
+  if (isStationaryOver2Min) {
+    console.log(`🤖 AFK-Bot: Sende Inaktivitäts-Nachricht... "${text}" (Stillstand: ${Math.round(stationaryTimeMs / 1000)}s)`);
+  } else {
+    console.log(`🤖 AFK-Bot: Sende Aktiv-Nachricht... "${text}" (Letzte Bewegung vor ${Math.round(stationaryTimeMs / 1000)}s)`);
+  }
 
   const psScript = `
  Add-Type @"
@@ -1379,14 +1603,24 @@ if ($title -match "Euro Truck Simulator 2" -or $title -match "TruckersMP") {
     
     Start-Sleep -m 800
     
-    $wshell = New-Object -ComObject WScript.Shell
-    # Sonderzeichen für SendKeys maskieren
-    $cleanText = "${text}".Replace("{", "{{}").Replace("}", "{}}").Replace("+", "{+}").Replace("^", "{^}").Replace("%", "{%}").Replace("~", "{~}").Replace("(", "{(}").Replace(")", "{)}")
-    $wshell.SendKeys($cleanText)
+    # Text in die Zwischenablage kopieren (unterstützt Emojis)
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.Clipboard]::SetText(@"
+${text}
+"@, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+    
+    Start-Sleep -m 200
+    
+    # Ctrl+V zum Einfügen (0xA2 = LCtrl, 0x56 = V)
+    [WindowHelper]::keybd_event(0xA2, 0, 0, 0)      # LCtrl Down
+    [WindowHelper]::keybd_event(0x56, 0, 0, 0)      # V Down
+    Start-Sleep -m 50
+    [WindowHelper]::keybd_event(0x56, 0, 2, 0)      # V Up
+    [WindowHelper]::keybd_event(0xA2, 0, 2, 0)      # LCtrl Up
     
     Start-Sleep -m 500
     
-    # Enter senden via keybd_event (sicherer als SendKeys in Spielen)
+    # Enter senden via keybd_event
     [WindowHelper]::keybd_event(0x0D, 0, 0, 0) # Enter Down
     Start-Sleep -m 50
     [WindowHelper]::keybd_event(0x0D, 0, 2, 0) # Enter Up
@@ -1396,7 +1630,8 @@ if ($title -match "Euro Truck Simulator 2" -or $title -match "TruckersMP") {
 `;
 
   const tempPath = path.join(app.getPath('temp'), 'afk_task.ps1');
-  fs.writeFileSync(tempPath, psScript, 'utf8');
+  // Manually add the UTF-8 BOM to ensure PowerShell reads the file with the correct encoding for special characters.
+  fs.writeFileSync(tempPath, '\uFEFF' + psScript, 'utf8');
 
   exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempPath}"`, (err, stdout) => {
     if (stdout) console.log('💻 PowerShell:', stdout.trim());
@@ -1408,6 +1643,7 @@ function toggleAfkBot() {
   isAfkRunning = !isAfkRunning;
 
   if (isAfkRunning) {
+    lastMovementTime = Date.now(); // reset on start
     playBotSound('start');
     console.log("🤖 AFK-Bot gestartet. Erste Nachricht in 5s...");
     afkStartTimeout = setTimeout(() => {
@@ -1769,6 +2005,7 @@ ipcMain.on('install-app-update', async (event) => {
 });
 
 app.whenReady().then(() => {
+  createSplashScreen();
   createWindow();
   if (isOverlayActive) {
     syncOverlayWindows();
@@ -1782,7 +2019,12 @@ app.on('before-quit', async (e) => {
   // Clear all intervals
   clearInterval(rpcInterval);
   if (telemetryProcess) {
-    telemetryProcess.kill();
+    try {
+      if (telemetryProcess.pid) {
+        execSync(`taskkill /pid ${telemetryProcess.pid} /f /t`);
+      }
+      telemetryProcess.kill();
+    } catch (e) { }
   }
 
   // Stop Discord RPC
@@ -1800,21 +2042,20 @@ app.on('will-quit', () => {
   // Kill Telemetry Process
   if (telemetryProcess) {
     try {
-      telemetryProcess.kill();
-      // Force kill on windows if needed
       if (telemetryProcess.pid) {
-        exec(`taskkill /pid ${telemetryProcess.pid} /f /t`);
+        execSync(`taskkill /pid ${telemetryProcess.pid} /f /t`);
       }
+      telemetryProcess.kill();
     } catch (e) { }
   }
 
   // Kill SMTC Process
   if (smtcProcess) {
     try {
-      smtcProcess.kill();
       if (smtcProcess.pid) {
-        exec(`taskkill /pid ${smtcProcess.pid} /f /t`);
+        execSync(`taskkill /pid ${smtcProcess.pid} /f /t`);
       }
+      smtcProcess.kill();
     } catch (e) { }
   }
 

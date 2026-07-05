@@ -61,10 +61,10 @@ const Reports = () => {
       link.click();
       window.URL.revokeObjectURL(url);
       toast.success(`${format.toUpperCase()} Report exportiert`);
-    } catch { 
-      toast.error("Fehler beim Export"); 
-    } finally { 
-      setExporting(false); 
+    } catch {
+      toast.error("Fehler beim Export");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -82,16 +82,16 @@ const Reports = () => {
           <h1 className="font-unbounded text-2xl font-bold text-white tracking-tight italic">Berichte</h1>
           <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Wöchentliche Auswertung & Archiv</p>
         </div>
-        
+
         <div className="flex items-center gap-1 bg-[#000000] p-1 rounded-xl border border-white/5">
-          <button 
-            onClick={() => setView('current')} 
+          <button
+            onClick={() => setView('current')}
             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover-glow ${view === 'current' ? 'bg-primary text-black' : 'text-slate-500 hover:text-white'}`}
           >
             Aktuell
           </button>
-          <button 
-            onClick={() => setView('archive')} 
+          <button
+            onClick={() => setView('archive')}
             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover-glow ${view === 'archive' ? 'bg-primary text-black' : 'text-slate-500 hover:text-white'}`}
           >
             Archiv
@@ -101,7 +101,7 @@ const Reports = () => {
 
       <AnimatePresence mode="wait">
         {view === 'current' ? (
-          <motion.div 
+          <motion.div
             key="current"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -159,12 +159,12 @@ const Reports = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} />
                       <YAxis hide />
-                      <Tooltip 
+                      <Tooltip
                         cursor={{ fill: '#ffffff05' }}
                         contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '10px' }}
                       />
                       <Bar dataKey="jobs" radius={[4, 4, 0, 0]} barSize={40}>
-                        { [1,2,3,4,5,6,7].map((_, i) => <Cell key={i} fill={i === 4 ? '#22D1EE' : '#22D1EE30'} />) }
+                        {[1, 2, 3, 4, 5, 6, 7].map((_, i) => <Cell key={i} fill={i === 4 ? '#22D1EE' : '#22D1EE30'} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -217,7 +217,7 @@ const Reports = () => {
             </div>
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             key="archive"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -237,8 +237,8 @@ const Reports = () => {
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {reports.map((rep: any) => (
-                  <motion.div 
-                    key={rep.id} 
+                  <motion.div
+                    key={rep.id}
                     className="glass-card flex items-center justify-between group hover:border-white/20 transition-all hover-glow"
                   >
                     <div className="flex items-center gap-4 flex-1">
@@ -255,21 +255,21 @@ const Reports = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <button 
+                      <button
                         onClick={() => viewReportDetails(rep.id)}
                         disabled={loadingReport}
                         className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary hover:bg-white/5 rounded-xl transition-all disabled:opacity-50 hover-glow"
                       >
                         {loadingReport ? <Loader2 size={12} className="animate-spin" /> : <><Eye size={12} /> Ansehen</>}
                       </button>
-                      <button 
+                      <button
                         onClick={() => exportReport(rep.id, 'csv')}
                         disabled={exporting}
                         className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary hover:bg-white/5 rounded-xl transition-all disabled:opacity-50 hover-glow"
                       >
                         {exporting ? <Loader2 size={12} className="animate-spin" /> : <><Download size={12} /> CSV</>}
                       </button>
-                      <button 
+                      <button
                         onClick={() => exportReport(rep.id, 'pdf')}
                         disabled={exporting}
                         className="flex items-center gap-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary hover:bg-white/5 rounded-xl transition-all disabled:opacity-50 border border-transparent hover:border-primary/20 hover-glow"
@@ -288,7 +288,7 @@ const Reports = () => {
       <AnimatePresence>
         {selectedReport && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -300,7 +300,7 @@ const Reports = () => {
                   <h3 className="font-unbounded text-xs font-black text-white uppercase tracking-tight italic">{selectedReport.title}</h3>
                   <p className="text-[9px] text-primary font-black uppercase tracking-widest italic mt-1">{selectedReport.period}</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedReport(null)}
                   className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
                 >

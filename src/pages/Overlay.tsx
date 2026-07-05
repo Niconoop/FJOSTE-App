@@ -944,9 +944,9 @@ const OverlayPage: React.FC = () => {
         connected={telemetry?.connected}
         accentColor={
           settings.style === 'carbon' ? '#f59e0b' :
-          settings.style === 'minimal' ? '#ffffff' :
-          settings.style === 'custom' ? (settings.customAccentColor || '#22D1EE') :
-          '#22D1EE'
+            settings.style === 'minimal' ? '#ffffff' :
+              settings.style === 'custom' ? (settings.customAccentColor || '#22D1EE') :
+                '#22D1EE'
         }
         width={mapW}
         height={mapH}

@@ -140,7 +140,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         id: 'background',
         type: 'background',
         paint: {
-          'background-color': '#0a0b0d',
+          'background-color': '#050508',
         },
       },
       {
@@ -149,7 +149,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'water',
         paint: {
-          'fill-color': '#060708',
+          'fill-color': '#000000',
         },
       },
       // ETS2 map areas (land polygons)
@@ -163,11 +163,11 @@ function createEts2Style(): maplibregl.StyleSpecification {
         paint: {
           'fill-color': [
             'match', ['get', 'color'],
-            0, '#060708',  // water
-            1, '#0a0b0d',  // land
+            0, '#000000',  // water
+            1, '#050508',  // land
             2, '#14171f',  // road surface
             3, '#050507',  // building
-            '#0a0b0d',
+            '#050508',
           ],
           'fill-opacity': 0.95,
         },
@@ -398,7 +398,15 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
       setMapReady(true);
     });
 
-    map.on('dragstart', () => setFollowing(false));
+    // Nur echte User-Interaktionen deaktivieren 'following'
+    map.on('dragstart', () => {
+      setFollowing(false);
+    });
+    map.on('rotatestart', (e: any) => {
+      if (e.originalEvent) {
+        setFollowing(false);
+      }
+    });
 
     // Wenn der User die Karte manuell rotiert, syncen wir unseren tracked bearing
     map.on('rotateend', () => {
@@ -451,12 +459,35 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
     const [lat, lng] = pos;
     lastPos.current = pos;
 
-    // Heading-Konvertierung: ETS2 Radiant → MapLibre Bearing (Grad)
-    // ETS2: heading in Radiant, wir negieren für CW-Konvention der Karte
     const rawHeading = heading ?? lastRawHeading.current ?? 0;
     if (heading != null) lastRawHeading.current = heading;
 
-    const desiredBearing = normalizeBearing(-(rawHeading * 180 / Math.PI));
+    // Meridian-Konvergenz-Korrektur: Da die Karte in Web Mercator projiziert ist und das Spiel eine 
+    // Lambert Conformal Conic Projektion nutzt, weicht die geografische Richtung auf der Karte von 
+    // der Spiel-Raster-Richtung ab (besonders abseits des Zentralmeridians 15°).
+    // Wir projizieren einen Punkt 1000m vor dem Spieler und berechnen das geografische Bearing.
+    const theta = (0.5 - rawHeading) * Math.PI * 2 + Math.PI / 2;
+    const lookX = gameX + 1000 * Math.cos(theta);
+    const lookY = gameY + 1000 * Math.sin(theta);
+    const lookPos = projectGameToLatLng(lookX, lookY);
+
+    let desiredBearing = 0;
+    if (pos && lookPos) {
+      const [lat1, lon1] = pos;
+      const [lat2, lon2] = lookPos;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const lat1Rad = lat1 * Math.PI / 180;
+      const lat2Rad = lat2 * Math.PI / 180;
+
+      const yVal = Math.sin(dLon) * Math.cos(lat2Rad);
+      const xVal = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+        Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+
+      const brng = Math.atan2(yVal, xVal) * 180 / Math.PI;
+      desiredBearing = normalizeBearing(brng);
+    } else {
+      desiredBearing = normalizeBearing(-(rawHeading * 360));
+    }
 
     // Marker erstellen oder Position aktualisieren
     if (!markerRef.current) {

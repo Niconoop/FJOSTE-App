@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Upload, Trash2, Image as ImageIcon, Loader2, Pencil, Check, X, Search, Plus } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, Loader2, Pencil, Check, X, Search, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +29,39 @@ const Gallery = () => {
   const [uploadCaption, setUploadCaption] = useState("");
   const [editingCaption, setEditingCaption] = useState<string | null>(null);
   const [captionDraft, setCaptionDraft] = useState("");
+  const showNextImage = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!selectedImage || images.length === 0) return;
+    const currentIndex = images.findIndex(img => img.id === selectedImage.id);
+    if (currentIndex === -1) return;
+    const nextIndex = (currentIndex + 1) % images.length;
+    setSelectedImage(images[nextIndex]);
+  }, [selectedImage, images]);
+
+  const showPrevImage = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!selectedImage || images.length === 0) return;
+    const currentIndex = images.findIndex(img => img.id === selectedImage.id);
+    if (currentIndex === -1) return;
+    const prevIndex = (currentIndex - 1 + images.length) % images.length;
+    setSelectedImage(images[prevIndex]);
+  }, [selectedImage, images]);
+
+  useEffect(() => {
+    if (!selectedImage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        showNextImage();
+      } else if (e.key === 'ArrowLeft') {
+        showPrevImage();
+      } else if (e.key === 'Escape') {
+        setSelectedImage(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage, showNextImage, showPrevImage]);
+
 
   const fetchImages = useCallback(() => {
     setLoading(true);
@@ -44,7 +78,7 @@ const Gallery = () => {
   useEffect(() => {
     images.forEach(img => {
       if (!blobUrls[img.id]) {
-        axios.get(`${API_URL}/gallery/image/${img.id}`, { 
+        axios.get(`${API_URL}/gallery/image/${img.id}`, {
           responseType: "blob",
           headers: { Authorization: `Bearer ${token}` }
         })
@@ -52,7 +86,7 @@ const Gallery = () => {
             const url = URL.createObjectURL(r.data);
             setBlobUrls((prev: any) => ({ ...prev, [img.id]: url }));
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     });
   }, [images, token]);
@@ -65,11 +99,11 @@ const Gallery = () => {
         const formData = new FormData();
         formData.append("file", file);
         if (uploadCaption.trim()) formData.append("caption", uploadCaption.trim());
-        await axios.post(`${API_URL}/gallery/upload`, formData, { 
-          headers: { 
+        await axios.post(`${API_URL}/gallery/upload`, formData, {
+          headers: {
             "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${token}`
-          } 
+          }
         });
       }
       toast.success(`${files.length} Bild(er) hochgeladen`);
@@ -114,34 +148,34 @@ const Gallery = () => {
           <p className="text-slate-500 font-medium mt-1">Das visuelle Archiv deiner VTC • {images.length} Aufnahmen</p>
         </div>
         <div className="flex items-center gap-3">
-          <input 
+          <input
             type="text"
             placeholder="Upload-Caption..."
             value={uploadCaption}
             onChange={e => setUploadCaption(e.target.value)}
             className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:border-primary/30 outline-none text-white hidden sm:block w-48"
           />
-          <button 
+          <button
             onClick={() => (document.getElementById('file-upload') as any).click()}
             className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-black px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
           >
             <Plus size={16} />
             Upload
           </button>
-          <input 
-            id="file-upload" 
-            type="file" 
-            className="hidden" 
-            multiple 
-            accept="image/*" 
-            onChange={(e) => e.target.files && handleUpload(Array.from(e.target.files))} 
+          <input
+            id="file-upload"
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/*"
+            onChange={(e) => e.target.files && handleUpload(Array.from(e.target.files))}
           />
         </div>
       </div>
 
       {loading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="h-48 bg-black/40 rounded-3xl animate-pulse" />)}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-48 bg-black/40 rounded-3xl animate-pulse" />)}
         </div>
       )}
 
@@ -156,7 +190,7 @@ const Gallery = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {images.map((img) => (
             <div key={img.id} className="group relative">
-              <div 
+              <div
                 className="glass-card !p-0 overflow-hidden cursor-pointer hover-glow transition-all aspect-video flex items-center justify-center bg-black/40"
                 onClick={() => setSelectedImage(img)}
               >
@@ -183,7 +217,7 @@ const Gallery = () => {
               <div className="mt-3 flex items-start justify-between gap-2 px-1">
                 {editingCaption === img.id ? (
                   <div className="flex items-center gap-1 w-full">
-                    <input 
+                    <input
                       value={captionDraft}
                       onChange={e => setCaptionDraft(e.target.value)}
                       className="bg-white/10 border border-primary/20 rounded-lg px-2 py-1 text-[10px] text-white outline-none w-full"
@@ -198,8 +232,8 @@ const Gallery = () => {
                 )}
                 {canManageImage(img) && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                     <button onClick={() => {setEditingCaption(img.id); setCaptionDraft(img.caption || "");}} className="p-1 text-slate-400 hover:text-primary"><Pencil size={12} /></button>
-                     <button onClick={() => handleDelete(img.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                    <button onClick={() => { setEditingCaption(img.id); setCaptionDraft(img.caption || ""); }} className="p-1 text-slate-400 hover:text-primary"><Pencil size={12} /></button>
+                    <button onClick={() => handleDelete(img.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
                   </div>
                 )}
               </div>
@@ -209,37 +243,66 @@ const Gallery = () => {
       )}
 
       {/* Lightbox */}
-      <AnimatePresence>
-        {selectedImage && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-10"
-            onClick={() => setSelectedImage(null)}
-          >
-            <button className="absolute top-10 right-10 p-3 bg-white/5 rounded-full hover:bg-white/10 text-white transition-all">
-              <X size={32} />
-            </button>
-            <img 
-              src={blobUrls[selectedImage.id]} 
-              className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl" 
-              onClick={(e) => e.stopPropagation()}
-            />
-            <div className="mt-8 text-center space-y-2" onClick={(e) => e.stopPropagation()}>
-              {selectedImage.caption && (
-                <p className="mt-8 font-unbounded text-lg font-bold text-white tracking-tight uppercase italic">{selectedImage.caption}</p>
-              )}
-              <div className="flex items-center justify-center gap-2 text-slate-500 font-black uppercase tracking-widest text-[10px] italic">
-                <span>Hochgeladen von</span>
-                <span className="text-primary">{selectedImage.uploaded_by || 'Unbekannt'}</span>
-                <span>•</span>
-                <span>{new Date(selectedImage.created_at).toLocaleDateString("de-DE")}</span>
+      {createPortal(
+        <AnimatePresence>
+          {selectedImage && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] lightbox-backdrop flex items-center justify-center p-4"
+              onClick={() => setSelectedImage(null)}
+            >
+              {/* Left Navigation Button */}
+              <button
+                className="absolute left-6 top-1/2 -translate-y-1/2 p-3 lightbox-btn border border-white/10 hover:border-primary rounded-full text-slate-300 hover:text-white shadow-[0_0_8px_rgba(43,161,185,0.2)] hover:shadow-[0_0_15px_rgba(43,161,185,0.5)] transition-all duration-300 z-20"
+                onClick={showPrevImage}
+              >
+                <ChevronLeft size={24} />
+              </button>
+
+              {/* Right Navigation Button */}
+              <button
+                className="absolute right-6 top-1/2 -translate-y-1/2 p-3 lightbox-btn border border-white/10 hover:border-primary rounded-full text-slate-300 hover:text-white shadow-[0_0_8px_rgba(43,161,185,0.2)] hover:shadow-[0_0_15px_rgba(43,161,185,0.5)] transition-all duration-300 z-20"
+                onClick={showNextImage}
+              >
+                <ChevronRight size={24} />
+              </button>
+
+              <div
+                className="relative bg-black backdrop-blur-2xl border-2 border-[#2ba1b9]/20 w-[95vw] max-w-7xl p-2 rounded-xl shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  className="absolute right-4 top-4 p-1.5 lightbox-btn border border-primary/30 hover:border-primary rounded-full text-white shadow-[0_0_8px_rgba(43,161,185,0.35)] hover:shadow-[0_0_15px_rgba(43,161,185,0.6)] transition-all duration-300 z-10"
+                  onClick={() => setSelectedImage(null)}
+                >
+                  <X size={14} />
+                </button>
+                <img
+                  src={blobUrls[selectedImage.id]}
+                  alt=""
+                  className="w-full h-auto max-h-[85vh] object-contain rounded-xl"
+                />
+                <div className="mt-4 text-center space-y-2 pb-2">
+                  {selectedImage.caption && (
+                    <p className="text-sm text-slate-300 px-4">
+                      {selectedImage.caption}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-center gap-2 text-slate-500 font-black uppercase tracking-widest text-[10px] italic">
+                    <span>Hochgeladen von</span>
+                    <span className="text-primary">{selectedImage.uploaded_by || 'Unbekannt'}</span>
+                    <span>•</span>
+                    <span>{new Date(selectedImage.created_at).toLocaleDateString("de-DE")}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 };

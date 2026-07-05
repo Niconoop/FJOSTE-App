@@ -1,8 +1,8 @@
 {
   "name": "FJOSTE-APP",
   "private": true,
-  "version": "1.5.3",
-  "description": "Job Tracker und DriversHUB der FJOSTE Group",
+  "version": "1.0.1",
+  "description": "FJOSTE App",
   "author": "FJOSTE",
   "type": "module",
   "main": "dist-electron/main.js",
@@ -23,6 +23,7 @@
     "files": [
       "dist",
       "dist-electron",
+      "public/logo.png",
       "package.json",
       "!**/*.md",
       "!**/*.map",
@@ -53,7 +54,8 @@
           ]
         }
       ],
-      "icon": "public/logo.png"
+      "icon": "public/logo.png",
+      "executableName": "FJOSTE App"
     }
   },
   "dependencies": {
@@ -88,7 +90,7 @@
     "autoprefixer": "^10.5.0",
     "axios": "^1.16.0",
     "date-fns": "^4.1.0",
-    "electron": "^41.5.0",
+    "electron": "^41.7.2",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
@@ -96,7 +98,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "framer-motion": "^12.38.0",
     "globals": "^17.5.0",
-    "lucide-react": "^1.14.0",
+    "lucide-react": "^0.507.0",
     "maplibre-gl": "^5.24.0",
     "pmtiles": "^4.4.1",
     "postcss": "^8.5.14",

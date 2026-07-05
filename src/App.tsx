@@ -4,11 +4,7 @@ import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as Map
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import News from './pages/News';
-import Chat from './pages/Chat';
-import AfkBot from './pages/AfkBot';
 import OverlayPage from './pages/Overlay';
-import OverlaySettings from './pages/OverlaySettings';
 
 // Lazy load heavy components
 const Map = lazy(() => import('./pages/Map'));
@@ -19,6 +15,10 @@ const Team = lazy(() => import('./pages/Team'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Events = lazy(() => import('./pages/Events'));
 const Gallery = lazy(() => import('./pages/Gallery'));
+const News = lazy(() => import('./pages/News'));
+const Chat = lazy(() => import('./pages/Chat'));
+const AfkBot = lazy(() => import('./pages/AfkBot'));
+const OverlaySettings = lazy(() => import('./pages/OverlaySettings'));
 
 import { useAuth } from './context/AuthContext';
 import { AnimatedBackground } from './components/AnimatedBackground';
@@ -26,9 +26,53 @@ import { apiService } from './services/api';
 import { API_BASE_URL, getAvatarUrl } from './config';
 import { toast } from 'sonner';
 
+const PAGE_ORDER = [
+  'dashboard',
+  'events',
+  'news',
+  'chat',
+  'map',
+  'gallery',
+  'statistiken',
+  'team',
+  'afkbot',
+  'overlay-settings',
+  'profile',
+  'reports',
+  'admin'
+];
+
+const slideVariants = {
+  enter: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? 80 : -80,
+    scale: 0.99
+  }),
+  center: {
+    opacity: 1,
+    x: 0,
+    scale: 1
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? -80 : 80,
+    scale: 0.99
+  })
+};
+
 function App() {
   const { user, loading, logout, hasRole } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [pageState, setPageState] = useState({ current: currentPage, prev: null as string | null });
+
+  if (currentPage !== pageState.current) {
+    setPageState({ current: currentPage, prev: pageState.current });
+  }
+
+  const prevIdx = PAGE_ORDER.indexOf(pageState.prev || 'dashboard');
+  const currIdx = PAGE_ORDER.indexOf(pageState.current);
+  const direction = currIdx >= prevIdx ? 1 : -1;
+
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | number | 'me'>('me');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -62,9 +106,9 @@ function App() {
       document.body?.classList.add('is-overlay-body');
       return;
     }
-    
+
     document.body?.classList.remove('is-overlay-body');
-    
+
     const applyTheme = (currentTheme: 'dark' | 'light' | 'system') => {
       if (currentTheme === 'system') {
         const isSystemLight = window.matchMedia('(prefers-color-scheme: light)').matches;
@@ -111,7 +155,7 @@ function App() {
           ipcRenderer.send('rpc-page-changed', currentPage);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [currentPage]);
 
   const [telemetry, setTelemetry] = useState<any>(null);
@@ -127,6 +171,7 @@ function App() {
   const [updatingApp, setUpdatingApp] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateStatus, setUpdateStatus] = useState('');
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
   useEffect(() => {
     const checkServer = async () => {
@@ -147,7 +192,7 @@ function App() {
     try {
       const { ipcRenderer } = window.require('electron');
       if (ipcRenderer) {
-        ipcRenderer.invoke('rpc-status').then(setRpcActive).catch(() => {});
+        ipcRenderer.invoke('rpc-status').then(setRpcActive).catch(() => { });
         const listener = (_: any, status: boolean) => setRpcActive(status);
         ipcRenderer.on('rpc-status-changed', listener);
 
@@ -160,12 +205,22 @@ function App() {
           }
         };
         ipcRenderer.on('rpc-error', rpcErrorListener);
-        
-        ipcRenderer.invoke('telemetry-status').then(setTelemetry).catch(() => {});
-        const teleListener = (_: any, data: any) => setTelemetry(data);
+
+        ipcRenderer.invoke('telemetry-status').then(setTelemetry).catch(() => { });
+        let lastUpdate = 0;
+        let lastConnected = false;
+        const teleListener = (_: any, data: any) => {
+          const now = Date.now();
+          const isConnectionChanged = (data?.connected ?? false) !== lastConnected;
+          if (isConnectionChanged || now - lastUpdate >= 1000) {
+            setTelemetry(data);
+            lastUpdate = now;
+            lastConnected = data?.connected ?? false;
+          }
+        };
         ipcRenderer.on('telemetry-update', teleListener);
 
-        ipcRenderer.invoke('overlay-status').then(setIsOverlayOpen).catch(() => {});
+        ipcRenderer.invoke('overlay-status').then(setIsOverlayOpen).catch(() => { });
         const overlayListener = (_: any, status: boolean) => setIsOverlayOpen(status);
         ipcRenderer.on('overlay-status-changed', overlayListener);
 
@@ -180,8 +235,8 @@ function App() {
             content = event.content || '';
           } else {
             title = event.type === 'start' ? 'Job Gestartet' : event.type === 'delivered' ? 'Job Abgeliefert' : event.type === 'cancelled' ? 'Job Abgebrochen' : event.type === 'resumed' ? 'Job Fortgesetzt' : title;
-            content = event.type === 'start' 
-              ? `${event.cargo} von ${event.source} nach ${event.dest}` 
+            content = event.type === 'start'
+              ? `${event.cargo} von ${event.source} nach ${event.dest}`
               : `Fahrt beendet. Status: ${event.type === 'delivered' ? 'Erfolgreich' : 'Abgebrochen'}`;
           }
 
@@ -196,37 +251,37 @@ function App() {
           // Trigger visual toast notifications
           if (event.type === 'system') {
             toast(event.title || 'System-Meldung', {
-               description: event.content || '',
-               duration: 5000,
-               className: 'custom-toast toast-resumed glass-card',
-             });
+              description: event.content || '',
+              duration: 5000,
+              className: 'custom-toast toast-resumed glass-card',
+            });
           } else if (event.type === 'start' || event.type === 'delivered') {
             const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
             toast.success(title, {
-               description: content,
-               duration: 5000,
-               className: `custom-toast ${toastClass} glass-card`,
+              description: content,
+              duration: 5000,
+              className: `custom-toast ${toastClass} glass-card`,
             });
           } else if (event.type === 'cancelled') {
             toast.error(title, {
-               description: content,
-               duration: 5000,
-               className: 'custom-toast toast-cancelled glass-card',
+              description: content,
+              duration: 5000,
+              className: 'custom-toast toast-cancelled glass-card',
             });
           } else if (event.type === 'resumed') {
-              toast.info(title, {
-                description: content,
-                duration: 5000,
-                className: 'custom-toast glass-card',
-              });
-            }
+            toast.info(title, {
+              description: content,
+              duration: 5000,
+              className: 'custom-toast glass-card',
+            });
+          }
 
           if (event.type !== 'system' && event.type !== 'chat' && event.type !== 'chat_group') {
             setNotifications(prev => [newNotif, ...prev]);
             // Play sound for real-time notifications
             const audio = new Audio('sounds/start.mp3');
             audio.volume = 0.15;
-            audio.play().catch(() => {});
+            audio.play().catch(() => { });
           }
         };
         ipcRenderer.on('job-notification', jobEventListener);
@@ -244,36 +299,53 @@ function App() {
         const playNotificationSound = () => {
           const audio = new Audio('sounds/start.mp3');
           audio.volume = 0.15;
-          audio.play().catch(() => {});
+          audio.play().catch(() => { });
         };
 
         // Initial AFK Bot Config Sync
-        const savedHotkey = localStorage.getItem('afk_hotkey');
-        const savedInterval = localStorage.getItem('afk_interval');
-        const savedTexts = localStorage.getItem('afk_texts');
-        if (savedHotkey && savedInterval && savedTexts) {
-          try {
-            ipcRenderer.send('afk-configure', {
-              interval: Number(savedInterval) * 1000,
-              texts: JSON.parse(savedTexts),
-              hotkey: savedHotkey
-            });
-          } catch (e) {}
+        const savedHotkey = localStorage.getItem('afk_hotkey') || 'F9';
+        const savedInterval = localStorage.getItem('afk_interval') || '60';
+
+        let drivingTextsList = ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
+        const savedDriving = localStorage.getItem('afk_driving_texts');
+        if (savedDriving) {
+          try { drivingTextsList = JSON.parse(savedDriving); } catch (e) { }
+        } else {
+          const single = localStorage.getItem('afk_driving_text');
+          if (single) drivingTextsList = [single];
         }
+
+        let pausedTextsList = ['Bin kurz AFK', 'Pause...', '/fix'];
+        const savedPaused = localStorage.getItem('afk_paused_texts');
+        if (savedPaused) {
+          try { pausedTextsList = JSON.parse(savedPaused); } catch (e) { }
+        } else {
+          const single = localStorage.getItem('afk_paused_text');
+          if (single) pausedTextsList = [single];
+        }
+
+        try {
+          ipcRenderer.send('afk-configure', {
+            interval: Number(savedInterval) * 1000,
+            drivingTexts: drivingTextsList,
+            pausedTexts: pausedTextsList,
+            hotkey: savedHotkey
+          });
+        } catch (e) { }
 
         // Check Plugin Status
         const checkPlugins = async () => {
           try {
             const status = await ipcRenderer.invoke('check-plugin-status');
             setPluginStatus(status);
-            
+
             const missing = status.some((s: any) => !s.installed);
             const ignored = localStorage.getItem('ignore_plugin_warning') === 'true';
-            
+
             if (missing && !ignored) {
               setShowPluginPopup(true);
             }
-          } catch (e) {}
+          } catch (e) { }
         };
         checkPlugins();
 
@@ -285,7 +357,7 @@ function App() {
               setUpdateNotes(updateInfo.releaseNotes);
               setShowUpdatePopup(true);
             }
-          } catch (e) {}
+          } catch (e) { }
         };
         checkAppUpdate();
 
@@ -307,14 +379,14 @@ function App() {
     setInstallingPlugin(true);
     setInstallProgress(0);
     setInstallStatus('Initialisierung...');
-    
+
     try {
       const { ipcRenderer } = window.require('electron');
-      
+
       const progressListener = (_: any, data: any) => {
         setInstallProgress(data.progress);
         setInstallStatus(data.status);
-        
+
         if (data.progress === 100 && data.success) {
           ipcRenderer.removeListener('install-plugin-progress', progressListener);
           setTimeout(async () => {
@@ -331,10 +403,10 @@ function App() {
           alert("Fehler: " + data.status);
         }
       };
-      
+
       ipcRenderer.on('install-plugin-progress', progressListener);
       ipcRenderer.send('install-plugin', gameId);
-      
+
     } catch (e) {
       console.error(e);
       setInstallingPlugin(false);
@@ -348,11 +420,11 @@ function App() {
 
     try {
       const { ipcRenderer } = window.require('electron');
-      
+
       const progressListener = (_: any, data: any) => {
         setUpdateProgress(data.progress);
         setUpdateStatus(data.status);
-        
+
         if (data.progress === 100 && data.success) {
           ipcRenderer.removeListener('install-update-progress', progressListener);
         } else if (data.error) {
@@ -361,7 +433,7 @@ function App() {
           alert("Fehler bei der Aktualisierung: " + data.status);
         }
       };
-      
+
       ipcRenderer.on('install-update-progress', progressListener);
       ipcRenderer.send('install-app-update');
     } catch (e: any) {
@@ -386,7 +458,7 @@ function App() {
       if (showNotifications && notifRef.current && !notifRef.current.contains(event.target as Node)) {
         const bellButton = document.getElementById('notif-bell');
         if (bellButton && bellButton.contains(event.target as Node)) return;
-        
+
         handleMarkAllRead();
         setShowNotifications(false);
       }
@@ -420,12 +492,12 @@ function App() {
             relatedId: n.ref_id
           };
         });
-        
+
         // Detect new notifications for overlay
         if (formatted.length > 0) {
           const newest = formatted[0];
           const lastId = lastProcessedId.current;
-          
+
           if (lastId !== null && newest.id !== lastId && !newest.read) {
             try {
               window.require('electron').ipcRenderer.send('job-notification', {
@@ -434,12 +506,12 @@ function App() {
                 title: newest.title,
                 content: newest.content
               });
-              
+
               // Play sound for new API notifications
               const audio = new Audio('sounds/start.mp3');
               audio.volume = 0.15;
-              audio.play().catch(() => {});
-            } catch(e) {}
+              audio.play().catch(() => { });
+            } catch (e) { }
           }
           if (newest.id !== lastId) {
             lastProcessedId.current = newest.id;
@@ -470,7 +542,7 @@ function App() {
       setNotifications(n => n.map(x => ({ ...x, read: true })));
       try {
         window.require('electron').ipcRenderer.send('clear-notifications');
-      } catch(e) {}
+      } catch (e) { }
     } catch (err) { }
   };
 
@@ -479,7 +551,7 @@ function App() {
   const handleNotificationClick = (n: any) => {
     setShowNotifications(false);
     handleMarkAllRead();
-    
+
     if (n.relatedId) {
       setSelectedId(n.relatedId);
     }
@@ -560,53 +632,149 @@ function App() {
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black border-b-2 border-[#2ba1b9]/20 z-50 drag">
         <div className="max-w-[1800px] mx-auto h-full px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 shrink-0">
-            <button className="lg:hidden p-2 text-slate-300 hover:text-white bg-black rounded-xl border-2 border-[#2ba1b9]/20 hover:border-primary transition-all no-drag" onClick={() => setMenuOpen(!menuOpen)} data-testid="hamburger-btn">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="xl:hidden p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#2ba1b9]/20 hover:border-primary transition-all no-drag"
+              onClick={() => setMenuOpen(!menuOpen)}
+              data-testid="hamburger-btn"
+            >
               <Menu size={20} />
-            </button>
-            <img src="logo.png" alt="FJOSTE Logo" className="w-8 h-8 object-contain" />
+            </motion.button>
+            <motion.img
+              src="logo.png"
+              alt="FJOSTE Logo"
+              className="w-8 h-8 object-contain cursor-pointer"
+              whileHover={{ rotate: 360, scale: 1.15 }}
+              transition={{ type: "spring", stiffness: 180, damping: 12 }}
+            />
             <span className="font-unbounded font-bold text-xs tracking-tight hidden xl:block uppercase">Drivers Hub</span>
           </div>
 
-          <div className="hidden lg:flex items-center justify-center flex-1 min-w-0 no-drag">
-            <div className="flex items-center gap-0.5 bg-black p-1 rounded-2xl border border-[#2ba1b9]/20 overflow-x-auto no-scrollbar">
-              {navItems.map((item) => (
-                  <button
+          <div className="hidden xl:flex items-center flex-1 min-w-0 no-drag">
+            <motion.div
+              onWheel={(e) => {
+                const container = e.currentTarget;
+                container.scrollLeft += e.deltaY;
+              }}
+              onMouseLeave={() => setHoveredTab(null)}
+              variants={{
+                hidden: {},
+                show: {
+                  transition: {
+                    staggerChildren: 0.035
+                  }
+                }
+              }}
+              initial="hidden"
+              animate="show"
+              className="mx-auto flex items-center gap-1 min-[1400px]:gap-1.5 overflow-x-auto no-scrollbar max-w-full py-3 px-4"
+            >
+              {navItems.map((item) => {
+                const isActive = currentPage === item.id;
+                const isExpanded = isActive || hoveredTab === item.id;
+                return (
+                  <motion.button
                     key={item.id}
                     onClick={() => setCurrentPage(item.id)}
-                    className={`nav-pill whitespace-nowrap text-[10px] px-2 min-[1400px]:px-2.5 py-1.5 flex items-center gap-1.5 shrink-0 transition-all hover-glow ${currentPage === item.id ? 'active bg-primary/20 text-primary' : 'text-slate-400 hover:text-white hover:bg-primary/10'}`}
+                    onMouseEnter={() => setHoveredTab(item.id)}
+                    variants={{
+                      hidden: { opacity: 0, y: 8, scale: 0.95 },
+                      show: { opacity: 1, y: 0, scale: 1 }
+                    }}
+                    transition={{ type: "spring", stiffness: 350, damping: 20 }}
+                    whileHover={{ y: -2, scale: 1.05 }}
+                    whileTap={{ scale: 0.97 }}
+                    className={`group relative whitespace-nowrap text-[10px] px-2 min-[1400px]:px-3 py-1.5 flex items-center rounded-xl shrink-0 transition-colors duration-300 font-medium select-none ${isActive
+                        ? 'text-white font-semibold nav-item-active'
+                        : 'text-slate-400 hover:text-white'
+                      }`}
                   >
-                    <item.icon size={13} />
-                    <span className="hidden min-[1600px]:inline">{item.name}</span>
-                    {currentPage === item.id && <span className="min-[1600px]:hidden">{item.name}</span>}
-                  </button>
-              ))}
-            </div>
+                    {isActive && (
+                      <motion.span
+                        layoutId="activeNavPill"
+                        className="absolute inset-0 bg-gradient-to-r from-primary/20 via-[#2ba1b9]/30 to-primary/10 border border-primary/45 rounded-xl -z-10 shadow-[0_0_20px_rgba(43,161,185,0.3),inset_0_1px_1px_rgba(255,255,255,0.1)]"
+                        transition={{ type: "spring", stiffness: 380, damping: 25 }}
+                      />
+                    )}
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeNavLine"
+                        className="absolute bottom-0.5 left-[15%] right-[15%] h-[2.5px] bg-gradient-to-r from-primary via-[#38bdf8] to-primary rounded-full shadow-[0_0_12px_rgba(43,161,185,0.9)]"
+                        transition={{ type: "spring", stiffness: 300, damping: 18, mass: 0.8 }}
+                      />
+                    )}
+                    {hoveredTab === item.id && !isActive && (
+                      <motion.span
+                        layoutId="hoverNavPill"
+                        className="absolute inset-0 nav-hover-pill rounded-xl -z-10"
+                        transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                      />
+                    )}
+                    <motion.div
+                      className="flex items-center justify-center"
+                      animate={{
+                        scale: isActive ? 1.15 : 1,
+                        rotate: isActive ? 0 : 0
+                      }}
+                      whileHover={{ scale: 1.25, rotate: -10 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                    >
+                      <item.icon size={13} className={`nav-icon ${isActive ? 'text-primary' : 'text-slate-400'}`} />
+                    </motion.div>
+                    <motion.span
+                      animate={{
+                        width: isExpanded ? "auto" : 0,
+                        opacity: isExpanded ? 1 : 0,
+                        marginLeft: isExpanded ? 6 : 0
+                      }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 24,
+                        opacity: { duration: 0.15 }
+                      }}
+                      className="nav-text-container"
+                    >
+                      {item.name}
+                    </motion.span>
+                  </motion.button>
+                );
+              })}
+            </motion.div>
           </div>
 
           <div className="flex items-center gap-3 shrink-0 relative no-drag">
 
 
             {/* Combined Status Pill Vertical */}
-            <div className="hidden lg:flex flex-row bg-black border-2 border-[#2ba1b9]/20 rounded-lg px-2 py-1 gap-2.5 no-drag mr-2 items-center">
-              <div className="flex flex-col gap-0.5 border-r border-white/10 pr-2.5">
-                <div className="flex items-center gap-1.5" title={serverOnline ? "Server Online" : "Server Offline"}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${serverOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
-                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">API</span>
+            <div className="hidden xl:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 gap-3 no-drag mr-2 items-center shadow-md">
+              <div className="flex flex-col gap-1 border-r border-white/10 pr-3">
+                <div className="flex items-center gap-2" title={serverOnline ? "Server Online" : "Server Offline"}>
+                  <div className="relative flex h-1.5 w-1.5">
+                    {serverOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${serverOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
+                  </div>
+                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">API</span>
                 </div>
-                <div className="flex items-center gap-1.5" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
-                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">RPC</span>
+                <div className="flex items-center gap-2" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
+                  <div className="relative flex h-1.5 w-1.5">
+                    {rpcActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
+                  </div>
+                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">RPC</span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5" title={telemetry?.gameVersion > 0 ? "SDK Verbunden" : "SDK Nicht Verbunden"}>
-                <div className={`w-1.5 h-1.5 rounded-full ${telemetry?.gameVersion > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
-                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">SDK</span>
+              <div className="flex items-center gap-2" title={telemetry?.gameVersion > 0 ? "SDK Verbunden" : "SDK Nicht Verbunden"}>
+                <div className="relative flex h-1.5 w-1.5">
+                  {telemetry?.gameVersion > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${telemetry?.gameVersion > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
+                </div>
+                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">SDK</span>
               </div>
             </div>
 
-
-
-            <button
+            <motion.button
               id="notif-bell"
               onClick={() => {
                 if (showNotifications) {
@@ -614,13 +782,23 @@ function App() {
                 }
                 setShowNotifications(!showNotifications);
               }}
+              whileHover={{
+                scale: 1.1,
+                rotate: [0, -15, 12, -10, 8, -4, 0]
+              }}
+              whileTap={{ scale: 0.9 }}
+              transition={{
+                rotate: { type: "keyframes", ease: "easeInOut", duration: 0.5 },
+                scale: { type: "spring", stiffness: 350, damping: 15 },
+                default: { type: "spring", stiffness: 350, damping: 15 }
+              }}
               className={`p-2 rounded-xl transition-all relative ${showNotifications ? 'bg-primary/20 text-primary' : 'text-slate-400 hover:text-white hover:bg-primary/10'}`}
             >
               <Bell size={18} />
               {notifications.some(n => !n.read) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-black animate-pulse" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-background animate-pulse" />
               )}
-            </button>
+            </motion.button>
 
             {/* Notification Dropdown */}
             <AnimatePresence>
@@ -630,6 +808,7 @@ function App() {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
                   className="absolute top-full right-0 mt-4 w-80 bg-black backdrop-blur-[60px] saturate-[200%] border-2 border-[#2ba1b9]/20 rounded-2xl shadow-[0_40px_100px_rgba(0,0,0,0.9)] z-[100] overflow-hidden"
                 >
                   <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black">
@@ -648,8 +827,8 @@ function App() {
                       </div>
                     ) : (
                       notifications.map(n => (
-                        <div 
-                          key={n.id} 
+                        <div
+                          key={n.id}
                           onClick={() => handleNotificationClick(n)}
                           className={`p-4 transition-all hover:bg-white/[0.04] cursor-pointer group/notif ${!n.read ? 'bg-primary/[0.03]' : 'opacity-40 grayscale-[0.5]'}`}
                         >
@@ -666,11 +845,14 @@ function App() {
               )}
             </AnimatePresence>
 
-            <div
+            <motion.div
               onClick={() => { setCurrentPage('profile'); setSelectedMemberId('me'); }}
-              className="flex items-center gap-3 bg-black border-2 border-[#2ba1b9]/20 rounded-xl px-3 py-1.5 hover:border-[#2ba1b9] hover:bg-black transition-all cursor-pointer group"
+              whileHover={{ scale: 1.02, y: -1 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              className="flex items-center gap-3 bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 hover:border-primary/50 transition-all cursor-pointer group"
             >
-              <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden">
+              <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-110">
                 {getAvatarUrlLocal(user?.avatar_url) ? <img src={getAvatarUrlLocal(user.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
               </div>
               <div className="hidden sm:block text-left">
@@ -684,20 +866,23 @@ function App() {
               >
                 <LogOut size={14} />
               </button>
-            </div>
-            <button
+            </motion.div>
+            <motion.button
               onClick={() => setTheme(prev => {
                 if (prev === 'dark') return 'light';
                 if (prev === 'light') return 'system';
                 return 'dark';
               })}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 350, damping: 15 }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-1 shrink-0"
               title={
                 theme === 'dark'
                   ? 'Design: Dunkel (klicken für Helles Design)'
                   : theme === 'light'
-                  ? 'Design: Hell (klicken für System-Einstellung)'
-                  : 'Design: System (klicken für Dunkles Design)'
+                    ? 'Design: Hell (klicken für System-Einstellung)'
+                    : 'Design: System (klicken für Dunkles Design)'
               }
             >
               {theme === 'dark' ? (
@@ -707,28 +892,35 @@ function App() {
               ) : (
                 <Monitor size={18} />
               )}
-            </button>
-            <button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch(e){} }}
+            </motion.button>
+            <motion.button
+              onClick={() => { try { window.require('electron').ipcRenderer.send('window-minimize') } catch (e) { } }}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-2"
               title="Minimieren"
             >
               <Minus size={18} />
-            </button>
-            <button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-maximize') } catch(e){} }}
+            </motion.button>
+            <motion.button
+              onClick={() => { try { window.require('electron').ipcRenderer.send('window-maximize') } catch (e) { } }}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
               title="Vollbild"
             >
               <Square size={16} />
-            </button>
-            <button
-              onClick={() => { try { window.require('electron').ipcRenderer.send('window-close') } catch(e){} }}
+            </motion.button>
+            <motion.button
+              onClick={() => { try { window.require('electron').ipcRenderer.send('window-close') } catch (e) { } }}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 300, damping: 15 }}
               className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
               title="Schließen"
             >
               <X size={18} />
-            </button>
+            </motion.button>
           </div>
         </div>
       </nav>
@@ -737,25 +929,43 @@ function App() {
 
       {/* Main Content */}
       <main className="relative z-10 pt-20 px-6 max-w-[1600px] mx-auto pb-10">
-        <Suspense fallback={
-          <div className="flex items-center justify-center h-[60vh]">
-            <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          </div>
-        }>
-          {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} telemetry={telemetry} />}
-          {currentPage === 'team' && <Team onViewProfile={viewProfile} />}
-          {currentPage === 'statistiken' && <Stats />}
-          {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} />}
-          {currentPage === 'events' && <Events selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
-          {currentPage === 'map' && <Map onViewProfile={viewProfile} initialSelectedId={targetMapId} onClearInitialId={() => setTargetMapId(null)} theme={theme} />}
-          {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
-          {currentPage === 'gallery' && <Gallery />}
-          {currentPage === 'chat' && <Chat selectedChannelId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
-          {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => setCurrentPage('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
-          { currentPage === 'afkbot' && <AfkBot /> }
-          { currentPage === 'reports' && <Reports /> }
-          { currentPage === 'overlay-settings' && <OverlaySettings /> }
-        </Suspense>
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={currentPage}
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{
+              x: { type: "tween", duration: 0.25, ease: [0.25, 0.1, 0.25, 1] },
+              scale: { type: "tween", duration: 0.2, ease: "easeOut" },
+              opacity: { duration: 0.2, ease: "easeOut" }
+            }}
+            style={{ willChange: 'transform, opacity' }}
+            className="w-full min-h-[calc(100vh-7.5rem)]"
+          >
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-[60vh]">
+                <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              </div>
+            }>
+              {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} telemetry={telemetry} />}
+              {currentPage === 'team' && <Team onViewProfile={viewProfile} />}
+              {currentPage === 'statistiken' && <Stats />}
+              {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} />}
+              {currentPage === 'events' && <Events selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
+              {currentPage === 'map' && <Map onViewProfile={viewProfile} initialSelectedId={targetMapId} onClearInitialId={() => setTargetMapId(null)} theme={theme} />}
+              {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
+              {currentPage === 'gallery' && <Gallery />}
+              {currentPage === 'chat' && <Chat selectedChannelId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
+              {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => setCurrentPage('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
+              {currentPage === 'afkbot' && <AfkBot />}
+              {currentPage === 'reports' && <Reports />}
+              {currentPage === 'overlay-settings' && <OverlaySettings />}
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Mobile Menu Sidebar - Moved to bottom for absolute top-layer priority */}
@@ -773,7 +983,7 @@ function App() {
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
               className="absolute top-0 left-0 bottom-0 w-[300px] bg-black border-r-2 border-[#2ba1b9]/20 p-6 pt-6 shadow-[50px_0_100px_rgba(0,0,0,0.9)] flex flex-col gap-3 no-drag pointer-events-auto"
             >
               <div className="flex items-center justify-between mb-8 no-drag">
@@ -831,15 +1041,16 @@ function App() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
             >
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/0 via-primary to-primary/0" />
-              
+
               <div className="p-8">
                 <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                   <Download className="text-primary" size={32} />
                 </div>
-                
+
                 <h2 className="text-xl font-unbounded font-bold text-white text-center mb-2 uppercase tracking-tight">Plugin fehlt</h2>
                 <p className="text-slate-400 text-center text-sm mb-8 leading-relaxed">
                   Für eine einwandfreie Telemetrie-Übertragung wird das SCS-Plugin benötigt. Möchtest du es jetzt installieren?
@@ -872,11 +1083,11 @@ function App() {
                             <span className="text-[10px] font-black text-white/40 tabular-nums">{installProgress}%</span>
                           </div>
                           <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                            <motion.div 
+                            <motion.div
                               initial={{ width: 0 }}
                               animate={{ width: `${installProgress}%` }}
                               transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]" 
+                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]"
                             />
                           </div>
                         </div>
@@ -894,8 +1105,8 @@ function App() {
                   </button>
                 </div>
               </div>
-              
-              <button 
+
+              <button
                 onClick={() => setShowPluginPopup(false)}
                 className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white transition-all"
               >
@@ -921,15 +1132,16 @@ function App() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-3xl overflow-hidden shadow-[0_30px_100px_rgba(0,0,0,0.8)]"
             >
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/0 via-primary to-primary/0" />
-              
+
               <div className="p-8">
                 <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                   <Download className="text-primary" size={32} />
                 </div>
-                
+
                 <h2 className="text-xl font-unbounded font-bold text-white text-center mb-2 uppercase tracking-tight">App Update</h2>
                 <p className="text-slate-400 text-center text-sm mb-4 leading-relaxed">
                   Eine neue Version ({updateVersion}) des FJOSTE Trackers ist verfügbar.
@@ -966,11 +1178,11 @@ function App() {
                           <span className="text-[10px] font-black text-white/40 tabular-nums">{updateProgress}%</span>
                         </div>
                         <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                          <motion.div 
+                          <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${updateProgress}%` }}
                             transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                            className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]" 
+                            className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]"
                           />
                         </div>
                       </div>
@@ -978,9 +1190,9 @@ function App() {
                   )}
                 </div>
               </div>
-              
+
               {!updatingApp && (
-                <button 
+                <button
                   onClick={() => setShowUpdatePopup(false)}
                   className="absolute top-4 right-4 p-2 text-slate-500 hover:text-white transition-all"
                 >

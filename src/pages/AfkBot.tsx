@@ -9,15 +9,21 @@ const AfkBot = () => {
   const [activeTab, setActiveTab] = useState<'driving' | 'paused'>('driving');
   const [drivingTexts, setDrivingTexts] = useState<string[]>(() => {
     const saved = localStorage.getItem('afk_driving_texts');
-    if (saved) return JSON.parse(saved);
-    const old = localStorage.getItem('afk_texts');
-    return old ? JSON.parse(old) : ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e){}
+    }
+    const single = localStorage.getItem('afk_driving_text');
+    if (single) return [single];
+    return ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
   });
   const [pausedTexts, setPausedTexts] = useState<string[]>(() => {
     const saved = localStorage.getItem('afk_paused_texts');
-    if (saved) return JSON.parse(saved);
-    const old = localStorage.getItem('afk_texts');
-    return old ? JSON.parse(old) : ['Bin kurz AFK', 'Pause...', '/fix'];
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e){}
+    }
+    const single = localStorage.getItem('afk_paused_text');
+    if (single) return [single];
+    return ['Bin kurz AFK', 'Pause...', '/fix'];
   });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem('afk_sound_enabled') !== 'false');
   const [newText, setNewText] = useState('');
@@ -58,11 +64,18 @@ const AfkBot = () => {
   };
 
   const addText = () => {
-    if (!newText.trim()) return;
+    const trimmedText = newText.trim();
+    if (!trimmedText) return;
+
+    if (trimmedText.length > 200) {
+      toast.error("Die Nachricht darf maximal 200 Zeichen lang sein.");
+      return;
+    }
+
     if (activeTab === 'driving') {
-      setDrivingTexts([...drivingTexts, newText.trim()]);
+      setDrivingTexts([...drivingTexts, trimmedText]);
     } else {
-      setPausedTexts([...pausedTexts, newText.trim()]);
+      setPausedTexts([...pausedTexts, trimmedText]);
     }
     setNewText('');
   };
@@ -196,10 +209,11 @@ const AfkBot = () => {
           </div>
 
           <div className="space-y-4 pt-4 border-t border-white/5">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                <MessageSquare size={12} /> Nachrichten-Pools
-              </label>
+            <div className="flex items-center gap-2 pb-2">
+              <MessageSquare size={16} className="text-primary" />
+              <h3 className="font-unbounded font-bold text-xs text-white uppercase italic tracking-widest">
+                Nachrichten-Pools
+              </h3>
             </div>
             
             {/* Tabs */}
@@ -210,7 +224,7 @@ const AfkBot = () => {
                 className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'driving' ? 'bg-primary text-black shadow-lg shadow-primary/10' : 'text-slate-400 hover:text-white'}`}
               >
                 <Truck size={12} />
-                Beim Fahren
+                Aktiv (Fahrt)
               </button>
               <button
                 type="button"
@@ -218,28 +232,38 @@ const AfkBot = () => {
                 className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'paused' ? 'bg-primary text-black shadow-lg shadow-primary/10' : 'text-slate-400 hover:text-white'}`}
               >
                 <Coffee size={12} />
-                Pause / Stand
+                Inaktiv (Stand &gt;= 2 Min.)
               </button>
             </div>
 
             <p className="text-[10px] text-slate-400">
               {activeTab === 'driving' 
-                ? 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn du fährst (Geschwindigkeit > 1 km/h).' 
-                : 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn dein Lkw steht oder das Spiel pausiert ist.'}
+                ? 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn du fährst oder dich vor weniger als 2 Min. bewegt hast.' 
+                : 'Der Bot wählt zufällig eine dieser Nachrichten aus, wenn du dich seit mindestens 2 Min. (120 Sek.) nicht bewegt hast.'}
             </p>
             
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newText}
-                onChange={e => setNewText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addText()}
-                className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/50 outline-none"
-                placeholder={activeTab === 'driving' ? "Neue Fahr-Nachricht..." : "Neue Stand-Nachricht..."}
-              />
-              <button onClick={addText} className="bg-primary/20 text-primary border border-primary/30 px-4 rounded-xl hover:bg-primary hover:text-black transition-all">
-                <Plus size={18} />
-              </button>
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newText}
+                  maxLength={200}
+                  onChange={e => setNewText(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addText()}
+                  className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/50 outline-none"
+                  placeholder={activeTab === 'driving' ? "Neue Aktiv-Nachricht..." : "Neue Inaktiv-Nachricht..."}
+                />
+                <button 
+                  onClick={addText} 
+                  disabled={!newText.trim() || newText.length > 200}
+                  className="bg-primary/20 text-primary border border-primary/30 px-4 rounded-xl hover:bg-primary hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/20 disabled:hover:text-primary"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+              <p className={`text-right text-xs mt-1.5 pr-2 ${newText.length > 200 ? 'text-red-500 font-bold' : 'text-slate-500'}`}>
+                {newText.length} / 200
+              </p>
             </div>
 
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">

@@ -16,7 +16,7 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await register(username, password, inviteCode);
+      await register(username.trim(), password, inviteCode.trim());
       toast.success('Account erstellt! Willkommen!');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Registrierung fehlgeschlagen. Prüfe deinen Einladungscode.');

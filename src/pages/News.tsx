@@ -6,6 +6,18 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const staggerContainer = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.08 }
+  }
+};
+
+const staggerChild = {
+  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 260, damping: 20 } }
+};
+
 const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
   const [expanded, setExpanded] = useState(false);
   const hasFullContent = item.content && item.excerpt && item.content !== item.excerpt;
@@ -13,9 +25,10 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
   return (
     <motion.article
       id={`news-${item.id}`}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glass-card bg-black/40 !p-0 overflow-hidden group hover-glow shadow-xl transition-all flex flex-col"
+      variants={staggerChild}
+      whileHover={{ y: -5, scale: 1.015 }}
+      whileTap={{ scale: 0.995 }}
+      className="glass-card bg-black/40 !p-0 overflow-hidden group hover-glow shadow-xl transition-all flex flex-col cursor-pointer"
     >
       {imageUrl && (
         <div className="h-48 overflow-hidden relative">
@@ -51,8 +64,22 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
         </h3>
 
         <p className="text-sm text-slate-400 leading-relaxed mb-4 font-medium">
-          {expanded ? item.content : (item.excerpt || (item.content?.length > 150 ? item.content.slice(0, 150) + "..." : item.content))}
+          {item.excerpt || (item.content?.length > 150 ? item.content.slice(0, 150) + "..." : item.content)}
         </p>
+
+        <AnimatePresence>
+          {expanded && hasFullContent && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <p className="text-sm text-slate-350 leading-relaxed mb-4 whitespace-pre-wrap font-medium">{item.content}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {hasFullContent && (
           <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-[10px] font-black text-primary uppercase tracking-widest mb-6 hover:underline">
@@ -63,7 +90,6 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
 
         <div className="mt-auto pt-6 border-t border-white/5 flex items-center justify-between">
            <div className="flex items-center gap-3">
-
               <div>
                  <p className="text-[10px] font-black text-white uppercase tracking-tight">{item.author || "FJOSTE TEAM"}</p>
                  <p className="text-[9px] font-bold text-slate-600 uppercase">{new Date(item.created_at).toLocaleDateString("de-DE")}</p>
@@ -104,7 +130,6 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
       const data = Array.isArray(r.data) ? r.data : [];
       setNews(data);
       
-      // Load images
       data.forEach(item => {
         if (item.image_id && !imageUrls[item.image_id]) {
           axios.get(`${API_URL}/news/${item.image_id}/image`, { responseType: "blob" })
@@ -198,6 +223,7 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
               initial={{ scale: 0.9, y: 20 }} 
               animate={{ scale: 1, y: 0 }} 
               exit={{ scale: 0.9, y: 20 }} 
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
               className="glass-card bg-black/95 w-full max-w-3xl !p-0 overflow-hidden shadow-2xl border border-white/10"
               onClick={e => e.stopPropagation()}
             >
@@ -210,49 +236,54 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
                </div>
 
                <form onSubmit={handleCreate} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto no-scrollbar">
-                 <div className="space-y-2 md:col-span-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titel *</label>
-                   <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Neues Firmen-Event" required />
-                 </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Titel *</label>
+                    <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="z.B. Neues Firmen-Event" required />
+                  </div>
 
-                 <div className="space-y-2 md:col-span-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Inhalt *</label>
-                   <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none min-h-[150px]" placeholder="Schreibe hier die Details..." required />
-                 </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Inhalt *</label>
+                    <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none min-h-[150px]" placeholder="Schreibe hier die Details..." required />
+                  </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Kurzfassung (Optional)</label>
-                   <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="Wird in der Vorschau angezeigt" />
-                 </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Kurzfassung (Optional)</label>
+                    <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/30 outline-none" placeholder="Wird in der Vorschau angezeigt" />
+                  </div>
 
-                 <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sichtbarkeit</label>
-                   <div className="flex gap-2">
-                      <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-primary/10 border-primary/30 text-primary" : "bg-black/40 border-white/10 text-slate-600"}`}><Eye size={14} /> Public</button>
-                      <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-black/40 border-white/10 text-slate-600"}`}><Lock size={14} /> Intern</button>
-                   </div>
-                 </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sichtbarkeit</label>
+                    <div className="flex gap-2">
+                       <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-primary/10 border-primary/30 text-primary" : "bg-black/40 border-white/10 text-slate-600"}`}><Eye size={14} /> Public</button>
+                       <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-black/40 border-white/10 text-slate-600"}`}><Lock size={14} /> Intern</button>
+                    </div>
+                  </div>
 
-                 <div className="space-y-2 md:col-span-2">
-                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vorschaubild (Optional)</label>
-                   <div className="relative h-40 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
-                      <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                      {imageFile ? <img src={URL.createObjectURL(imageFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild auswählen</div>}
-                   </div>
-                 </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Vorschaubild (Optional)</label>
+                    <div className="relative h-40 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-primary/30 transition-all cursor-pointer overflow-hidden">
+                       <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                       {imageFile ? <img src={URL.createObjectURL(imageFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-600 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50" /> Bild auswählen</div>}
+                    </div>
+                  </div>
 
-                 <div className="md:col-span-2 pt-4">
-                   <button disabled={submitting} className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs hover:bg-white transition-all flex items-center justify-center gap-3">
-                      {submitting ? <Loader2 className="animate-spin" /> : "News Veröffentlichen"}
-                   </button>
-                 </div>
-              </form>
+                  <div className="md:col-span-2 pt-4">
+                    <button disabled={submitting} className="w-full bg-primary text-black py-4 rounded-2xl font-black uppercase italic tracking-widest text-xs hover:bg-white transition-all flex items-center justify-center gap-3">
+                       {submitting ? <Loader2 className="animate-spin" /> : "News Veröffentlichen"}
+                    </button>
+                  </div>
+               </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <motion.div 
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 md:grid-cols-2 gap-8"
+      >
         {loading ? (
           [1,2,3,4].map(i => <div key={i} className="h-64 bg-black/40 rounded-3xl animate-pulse" />)
         ) : news.length === 0 ? (
@@ -269,7 +300,7 @@ const News = ({ selectedId, onClearSelectedId }: any) => {
             onDelete={handleDelete}
           />
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 };

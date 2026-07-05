@@ -39,7 +39,16 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         id: 'background',
         type: 'background',
         paint: {
-          'background-color': isLight ? '#f1f3f5' : '#0a0b0d',
+          'background-color': isLight ? '#f1f3f5' : '#000000ff',
+        },
+      },
+      {
+        id: 'world-land',
+        type: 'fill',
+        source: 'world',
+        'source-layer': 'land',
+        paint: {
+          'fill-color': isLight ? '#e9ecef' : '#050505ff',
         },
       },
       {
@@ -48,7 +57,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'water',
         paint: {
-          'fill-color': isLight ? '#c4d7ec' : '#060708',
+          'fill-color': isLight ? '#c4d7ec' : '#000000',
         },
       },
       {
@@ -70,11 +79,11 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
             ]
             : [
               'match', ['get', 'color'],
-              0, '#060708',  // water
-              1, '#0a0b0d',  // land
+              0, '#000000',  // water
+              1, '#0d1015',  // land – very dark gray, not black
               2, '#14171f',  // road surface
-              3, '#050507',  // building
-              '#0a0b0d',
+              3, '#0a0c10',  // building
+              '#0d1015',
             ],
           'fill-opacity': 0.95,
         },
@@ -143,7 +152,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'states',
         paint: {
-          'line-color': isLight ? '#cbd5e1' : '#10131a',
+          'line-color': isLight ? '#cbd5e1' : '#262d3eff',
           'line-width': 1,
           'line-opacity': 0.8,
           'line-dasharray': [2, 2],
@@ -156,7 +165,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'countries',
         filter: ['!=', ['get', 'name'], 'Serbia-Kosovo'],
         paint: {
-          'line-color': isLight ? '#94a3b8' : '#1a1f29',
+          'line-color': isLight ? '#94a3b8' : '#161822ff',
           'line-width': 1.5,
           'line-opacity': 0.9,
         },
