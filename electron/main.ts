@@ -868,13 +868,15 @@ public class SCSTelemetry {
 }
 "@
 
+$checkCounter = 0
 while($true) {
-    if ($ParentPid -gt 0) {
+    if ($ParentPid -gt 0 -and $checkCounter -eq 0) {
         $parent = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
         if (-not $parent) {
             exit
         }
     }
+    $checkCounter = ($checkCounter + 1) % 50
     try {
         [SCSTelemetry]::GetData() | ConvertTo-Json -Compress
     } catch {
@@ -914,8 +916,8 @@ function startTelemetryBridge() {
       if (!line) continue;
       try {
         const parsed = JSON.parse(line);
-        // Send updates if data changed
-        if (Date.now() - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL || JSON.stringify(parsed) !== JSON.stringify(telemetryData)) {
+        // Send updates throttled by the update interval to prevent high CPU usage on IPC & frontend rendering
+        if (Date.now() - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL) {
           lastTelemetryUpdate = Date.now();
           safeSend(win, 'telemetry-update', parsed);
           safeSend(overlayWin, 'telemetry-update', parsed);
