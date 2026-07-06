@@ -63,6 +63,19 @@ export default defineConfig({
         onstart(options) {
           options.reload()
         },
+        vite: {
+          build: {
+            lib: {
+              entry: 'electron/preload.ts',
+              formats: ['cjs'],
+            },
+            rollupOptions: {
+              output: {
+                entryFileNames: '[name].cjs',
+              },
+            },
+          },
+        },
       },
     ]),
     electronRendererPlugin(),

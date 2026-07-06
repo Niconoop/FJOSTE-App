@@ -1,0 +1,4 @@
+
+📦 Settings: Einstellungen geladen
+🎮 RPC: Verbindungsversuch...
+🎮 RPC: Bereit!
