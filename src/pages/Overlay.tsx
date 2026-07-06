@@ -464,14 +464,17 @@ const OverlayPage: React.FC = () => {
 
     const fetchOnlineDrivers = async () => {
       try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const [mapRes, usersRes] = await Promise.all([
-          axios.get(`${API_URL}/trucky/live-map`),
-          axios.get(`${API_URL}/management/users`).catch(() => ({ data: [] }))
+          axios.get(`${API_URL}/trucky/live-map`, { headers }),
+          axios.get(`${API_URL}/management/users`, { headers }).catch(() => ({ data: [] }))
         ]);
         const liveData = Array.isArray(mapRes.data) ? mapRes.data : [];
         const users = Array.isArray(usersRes.data) ? usersRes.data : [];
 
         const active = users
+          .filter((u: any) => u !== null && u !== undefined)
           .map((u: any) => {
             const live = liveData.find((l: any) => l && (l.id == u.id || (l.trucky_id && l.trucky_id == u.trucky_driver_id)));
             return {
@@ -499,9 +502,11 @@ const OverlayPage: React.FC = () => {
 
     const fetchEvent = async () => {
       try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const [res1, res2] = await Promise.all([
-          axios.get(`${API_URL}/trucky/events`).catch(() => ({ data: [] })),
-          axios.get(`${API_URL}/events/custom`).catch(() => ({ data: [] }))
+          axios.get(`${API_URL}/trucky/events`, { headers }).catch(() => ({ data: [] })),
+          axios.get(`${API_URL}/events/custom`, { headers }).catch(() => ({ data: [] }))
         ]);
         const all = [
           ...(Array.isArray(res1.data) ? res1.data : []),
@@ -510,8 +515,12 @@ const OverlayPage: React.FC = () => {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const upcoming = all
-          .filter((e: any) => e.start_date && new Date(e.start_date) >= startOfToday)
-          .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+          .filter((e: any) => e && e.start_date && new Date(e.start_date) >= startOfToday)
+          .sort((a: any, b: any) => {
+            const timeA = new Date(a.start_date).getTime();
+            const timeB = new Date(b.start_date).getTime();
+            return timeA - timeB;
+          });
 
         if (upcoming.length > 0) {
           const e = upcoming[0];

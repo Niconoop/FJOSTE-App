@@ -455,6 +455,11 @@ function createWindow() {
       win?.webContents.session.clearCache().catch(() => { });
     }, 30 * 60 * 1000);
   });
+
+  win.on('closed', () => {
+    win = null;
+    app.quit();
+  });
 }
 
 ipcMain.on('window-close', (event) => {
@@ -1227,8 +1232,8 @@ function updateOverlayWindowVisibility(data: any) {
 }
 
 function createSingleOverlayWindow() {
-  if (overlayWin) {
-    overlayWin.focus();
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    updateOverlayWindowVisibility(telemetryData);
     return;
   }
 
@@ -1247,6 +1252,7 @@ function createSingleOverlayWindow() {
     resizable: false,
     hasShadow: false,
     skipTaskbar: true,
+    focusable: false, // Prevent the overlay from taking focus from other windows/games
     show: false, // Start hidden to prevent startup DWM composition lag
     webPreferences: {
       nodeIntegration: true,
@@ -1256,6 +1262,9 @@ function createSingleOverlayWindow() {
       webSecurity: false,
     },
   });
+
+  // Ensure it ignores mouse events immediately on creation to prevent blocking window controls
+  overlayWin.setIgnoreMouseEvents(true, { forward: true });
 
   if (process.env.VITE_DEV_SERVER_URL) {
     overlayWin.loadURL(`${process.env.VITE_DEV_SERVER_URL}#overlay-main`);

@@ -46,6 +46,28 @@ $headers = @{
     "Accept" = "application/vnd.github.v3+json"
 }
 
+# 2.2. Manage Gemini API Key (for AI changelog generation)
+$geminiKeyFile = "../.gemini_key"
+$geminiKey = ""
+if (Test-Path $geminiKeyFile) {
+    $geminiKey = (Get-Content $geminiKeyFile -Raw).Trim()
+}
+
+if (-not $geminiKey) {
+    write-host "Kein gespeicherter Gemini API Key gefunden."
+    write-host "Bitte erstelle einen kostenlosen API-Key unter: https://aistudio.google.com/"
+    write-host ""
+    $geminiKey = Read-Host -Prompt "Gemini API Key eingeben"
+    if (-not $geminiKey) {
+        write-error "Kein Gemini API Key angegeben. AI-Changelog-Generierung abgebrochen."
+        exit 1
+    }
+    $geminiKey = $geminiKey.Trim()
+    $geminiKey | Out-File -FilePath $geminiKeyFile -NoNewline -Encoding utf8
+    write-host "Key wurde lokal in .gemini_key gespeichert."
+}
+
+
 # 2.5. Generate and push CHANGELOG.md if not already present
 $changelogPath = "../CHANGELOG.md"
 if (Test-Path $changelogPath) {
@@ -67,89 +89,78 @@ if (Test-Path $changelogPath) {
             }
         } catch {}
         
-        # Gather commits
-        $commits = @()
+        # Generate Git Diff to analyze changes (excluding lockfiles, built outputs, etc.)
+        $gitDiff = ""
         try {
             if ($lastTag) {
-                write-host "Lese Commits zwischen $lastTag und HEAD..."
-                $commits = git log "$lastTag..HEAD" --pretty=format:"- %s (%h)"
+                write-host "Generiere Git-Diff zwischen $lastTag und HEAD..."
+                $gitDiff = git diff "$lastTag..HEAD" -- . ":(exclude)package-lock.json" ":(exclude)*.map" ":(exclude)dist*" ":(exclude)node_modules*"
             } else {
-                write-host "Kein vorheriger Tag gefunden. Lese die letzten 20 Commits..."
-                $commits = git log -n 20 --pretty=format:"- %s (%h)"
+                write-host "Kein vorheriger Tag gefunden. Generiere Diff der letzten 5 Commits..."
+                $gitDiff = git diff "HEAD~5..HEAD" -- . ":(exclude)package-lock.json" ":(exclude)*.map" ":(exclude)dist*" ":(exclude)node_modules*"
             }
         } catch {
-            write-warning "Git-Commits konnten nicht ausgelesen werden."
+            write-warning "Git-Diff konnte nicht generiert werden."
         }
-        
+
+        # Query Gemini API to summarize changes
+        $releaseBody = ""
+        if ($gitDiff) {
+            write-host "Rufe Gemini API auf, um Änderungen automatisch zu analysieren und zusammenzufassen..."
+            try {
+                $prompt = @"
+Du bist ein professioneller Release-Manager. Deine Aufgabe ist es, aus dem folgenden Git-Diff ein übersichtliches, gut strukturiertes und professionelles Changelog in deutscher Sprache für die App-Version v$version zu generieren.
+
+Regeln:
+1. Gruppiere die Änderungen in die folgenden Abschnitte (nur wenn relevante Änderungen vorhanden sind):
+   - ### 🚀 Neue Features
+   - ### 🐛 Fehlerbehebungen
+   - ### 🗑️ Entfernt
+   - ### 🔄 Änderungen und Verbesserungen
+2. Schreibe für jede Änderung einen kurzen, prägnanten Stichpunkt auf Deutsch.
+3. Nenne konkrete technische Verbesserungen (z. B. welche Dateipfade, APIs oder Funktionen geändert wurden), aber halte es für Anwender verständlich.
+4. Ignoriere rein kosmetische Änderungen (wie Leerzeilen, Formatierung, kleine Kommentar-Updates), es sei denn, sie sind wichtig.
+5. Gib NUR das reine Markdown zurück (keine Code-Blöcke drumherum, fange direkt mit den Überschriften an).
+
+Hier ist der Git-Diff:
+$gitDiff
+"@
+
+                $body = @{
+                    contents = @(
+                        @{
+                            parts = @(
+                                @{
+                                    text = $prompt
+                                }
+                            )
+                        }
+                    )
+                } | ConvertTo-Json -Depth 10
+
+                $uri = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiKey"
+                $response = Invoke-RestMethod -Uri $uri -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8"
+                
+                $releaseBody = $response.candidates[0].content.parts[0].text
+                
+                # Strip markdown code block wrappers if Gemini included them
+                if ($releaseBody -match '(?s)^\s*```(?:markdown)?\r?\n?(.*?)\s*```\s*$') {
+                    $releaseBody = $Matches[1].Trim()
+                }
+                $releaseBody = $releaseBody.Trim()
+            } catch {
+                write-warning "Fehler bei der Kommunikation mit der Gemini API: $_"
+            }
+        }
+
+        if (-not $releaseBody) {
+            write-host "Gemini-Changelog fehlgeschlagen. Nutze Fallback..."
+            $releaseBody = "### 🔄 Änderungen und Verbesserungen`r`n- Wartungsarbeiten und kleinere Verbesserungen"
+        }
+
         # Format the new entry
         $dateStr = Get-Date -Format "dd-MM-yyyy"
-        
-        $added = @()
-        $fixed = @()
-        $removed = @()
-        $other = @()
-        
-        if ($commits) {
-            foreach ($commit in $commits) {
-                $cleanCommit = $commit.Trim()
-                if (-not $cleanCommit) { continue }
-                
-                # Group commits based on semantic keywords
-                if ($cleanCommit -match "(?i)\b(feat|add|new|implement|hinzugef|neu|create)\b") {
-                    $added += $cleanCommit
-                } elseif ($cleanCommit -match "(?i)\b(fix|bug|resolve|korrigiert|behoben|fehler|error)\b") {
-                    $fixed += $cleanCommit
-                } elseif ($cleanCommit -match "(?i)\b(remove|delete|entfernt|gel\w*scht|deprecate)\b") {
-                    $removed += $cleanCommit
-                } else {
-                    $other += $cleanCommit
-                }
-            }
-        }
-        
-        $newEntry = "## [$version] - $dateStr`r`n`r`n"
-        $commitCount = 0
-        
-        if ($added.Count -gt 0) {
-            $newEntry += "### 🚀 Neue Features`r`n"
-            foreach ($item in $added) {
-                $newEntry += "$item`r`n"
-                $commitCount++
-            }
-            $newEntry += "`r`n"
-        }
-        
-        if ($fixed.Count -gt 0) {
-            $newEntry += "### 🐛 Fehlerbehebungen`r`n"
-            foreach ($item in $fixed) {
-                $newEntry += "$item`r`n"
-                $commitCount++
-            }
-            $newEntry += "`r`n"
-        }
-        
-        if ($removed.Count -gt 0) {
-            $newEntry += "### 🗑️ Entfernt`r`n"
-            foreach ($item in $removed) {
-                $newEntry += "$item`r`n"
-                $commitCount++
-            }
-            $newEntry += "`r`n"
-        }
-        
-        if ($other.Count -gt 0) {
-            $newEntry += "### 🔄 Änderungen und Verbesserungen`r`n"
-            foreach ($item in $other) {
-                $newEntry += "$item`r`n"
-                $commitCount++
-            }
-            $newEntry += "`r`n"
-        }
-        
-        if ($commitCount -eq 0) {
-            $newEntry += "### 🔄 Änderungen und Verbesserungen`r`n"
-            $newEntry += "- Wartungsarbeiten und kleinere Verbesserungen`r`n`r`n"
-        }
+        $newEntry = "## [$version] - $dateStr`r`n`r`n" + $releaseBody + "`r`n`r`n"
         
         # Prepend entry to the existing changelog content
         $updatedChangelog = $newEntry + $currentChangelog
