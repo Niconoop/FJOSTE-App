@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell, net as electronNet } from 'electron'
 import { exec, execSync, spawn } from 'node:child_process'
 import net from 'node:net'
 import DiscordRPC from 'discord-rpc'
@@ -1940,30 +1940,31 @@ function downloadAndApplyUpdate(url: string, event: any) {
   }
 
   const file = fs.createWriteStream(tempUpdatePath, { highWaterMark: 1024 * 1024 });
-  const options = {
-    headers: {
-      'User-Agent': 'FJOSTE-App',
-      'Accept': 'application/octet-stream'
-    }
-  };
 
-  https.get(url, options, (response) => {
-    if (response.statusCode === 301 || response.statusCode === 302) {
-      downloadAndApplyUpdate(response.headers.location as string, event);
-      return;
-    }
+  const request = electronNet.request({
+    method: 'GET',
+    url: url,
+  });
 
+  request.setHeader('User-Agent', 'FJOSTE-App');
+  request.setHeader('Accept', 'application/octet-stream');
+
+  request.on('response', (response) => {
     if (response.statusCode !== 200) {
       event.sender.send('install-update-progress', { progress: 0, status: `Download Fehler: HTTP ${response.statusCode}`, error: true });
+      file.close();
+      try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
       return;
     }
 
-    const totalBytes = parseInt(response.headers['content-length'] || '0', 10);
+    const totalBytes = parseInt(response.headers['content-length'] as string || '0', 10);
     let downloadedBytes = 0;
     let lastUpdate = 0;
 
     response.on('data', (chunk) => {
       downloadedBytes += chunk.length;
+      file.write(chunk);
+
       if (totalBytes > 0) {
         const now = Date.now();
         if (now - lastUpdate > 100 || downloadedBytes === totalBytes) {
@@ -1974,60 +1975,73 @@ function downloadAndApplyUpdate(url: string, event: any) {
       }
     });
 
-    response.pipe(file);
-
-    file.on('finish', () => {
-      file.close();
-
-      event.sender.send('install-update-progress', { progress: 95, status: 'Bereite Anwendung vor...' });
-
-      if (!app.isPackaged) {
-        setTimeout(() => {
-          event.sender.send('install-update-progress', { progress: 100, status: 'Erfolgreich! (Dev-Mode Simulation)', success: true });
-        }, 1500);
-        return;
-      }
-
-      try {
-        const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
-        const exeName = path.basename(targetExe);
-        const updateBatPath = path.join(app.getPath('temp'), 'fjoste_update.bat');
-
-        const batContent = `@echo off\r\n` +
-          `timeout /t 2 /nobreak > NUL\r\n` +
-          `taskkill /f /im "${exeName}" > NUL 2>&1\r\n` +
-          `:loop\r\n` +
-          `copy /Y "${tempUpdatePath}" "${targetExe}" > NUL\r\n` +
-          `if %errorlevel% neq 0 (\r\n` +
-          `  timeout /t 1 /nobreak > NUL\r\n` +
-          `  goto loop\r\n` +
-          `)\r\n` +
-          `start "" "${targetExe}"\r\n` +
-          `del "%~f0"\r\n`;
-
-        fs.writeFileSync(updateBatPath, batContent, 'utf8');
-
-        const child = spawn('cmd.exe', ['/c', updateBatPath], {
-          detached: true,
-          windowsHide: true,
-          stdio: 'ignore'
-        });
-        child.unref();
-
-        event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
-
-        setTimeout(() => {
-          app.quit();
-        }, 1000);
-      } catch (err: any) {
-        console.error('Failed to run update script:', err);
-        event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
-      }
+    response.on('end', () => {
+      file.end();
     });
-  }).on('error', (err) => {
-    try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
-    event.sender.send('install-update-progress', { progress: 0, status: `Download Fehler: ${err.message}`, error: true });
+
+    response.on('error', (err) => {
+      event.sender.send('install-update-progress', { progress: 0, status: `Download Fehler: ${err.message}`, error: true });
+      file.close();
+      try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
+    });
   });
+
+  request.on('error', (err) => {
+    event.sender.send('install-update-progress', { progress: 0, status: `Netzwerkfehler: ${err.message}`, error: true });
+    file.close();
+    try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
+  });
+
+  file.on('finish', () => {
+    file.close();
+
+    event.sender.send('install-update-progress', { progress: 95, status: 'Bereite Anwendung vor...' });
+
+    if (!app.isPackaged) {
+      setTimeout(() => {
+        event.sender.send('install-update-progress', { progress: 100, status: 'Erfolgreich! (Dev-Mode Simulation)', success: true });
+      }, 1500);
+      return;
+    }
+
+    try {
+      const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
+      const exeName = path.basename(targetExe);
+      const updateBatPath = path.join(app.getPath('temp'), 'fjoste_update.bat');
+
+      const batContent = `@echo off\r\n` +
+        `timeout /t 2 /nobreak > NUL\r\n` +
+        `taskkill /f /im "${exeName}" > NUL 2>&1\r\n` +
+        `:loop\r\n` +
+        `copy /Y "${tempUpdatePath}" "${targetExe}" > NUL\r\n` +
+        `if %errorlevel% neq 0 (\r\n` +
+        `  timeout /t 1 /nobreak > NUL\r\n` +
+        `  goto loop\r\n` +
+        `)\r\n` +
+        `start "" "${targetExe}"\r\n` +
+        `del "%~f0"\r\n`;
+
+      fs.writeFileSync(updateBatPath, batContent, 'utf8');
+
+      const child = spawn('cmd.exe', ['/c', updateBatPath], {
+        detached: true,
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+
+      event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+
+      setTimeout(() => {
+        app.quit();
+      }, 1000);
+    } catch (err: any) {
+      console.error('Failed to run update script:', err);
+      event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
+    }
+  });
+
+  request.end();
 }
 
 ipcMain.on('install-app-update', async (event) => {
