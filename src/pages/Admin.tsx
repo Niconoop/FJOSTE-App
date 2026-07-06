@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Key, Users, Link2, Unlink, RefreshCw, Trash2, Crown, Loader2, ShieldCheck, ShieldOff, Check, X, Settings as SettingsIcon, User, MapPin, Inbox, BarChart3, Globe, Save, AlertTriangle, Server, Database, ExternalLink } from 'lucide-react';
+import { Key, Users, Link2, Unlink, RefreshCw, Trash2, Crown, Loader2, ShieldCheck, ShieldOff, Check, X, Settings as SettingsIcon, User, MapPin, Inbox, BarChart3, Globe, Save, AlertTriangle, Server, Database, ExternalLink, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -34,7 +34,7 @@ const itemVariants = {
   }
 };
 
-const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void }) => {
+const Admin = ({ onViewProfile, onNavigate }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void }) => {
   const { token, user, isAdmin, hasRole } = useAuth();
   const HR_ROLES = ["hr team", "hr-team", "personal team", "personal-team"];
   const canSeeAdmin = isAdmin || hasRole(HR_ROLES);
@@ -493,7 +493,7 @@ const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void
                   <p className="text-xs text-slate-500 font-medium mt-1">Direkter Zugriff auf die Server- und Datenbank-Infrastruktur von FJOSTE.</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <a
                     href="https://pm2.fjostegroup.de"
                     target="_blank"
@@ -524,13 +524,30 @@ const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors">Datenbank</h3>
+                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-tight group-hover:text-emerald-400 transition-colors">Datenbank Panel</h3>
                         <ExternalLink size={12} className="text-slate-600 group-hover:text-emerald-400 transition-colors" />
                       </div>
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PocketBase Verwaltungsoberfläche</p>
                       <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest mt-2">db.fjostegroup.de</p>
                     </div>
                   </a>
+
+                  <div
+                    onClick={() => onNavigate('database')}
+                    className="flex items-start gap-5 p-6 bg-black/40 border border-[#2ba1b9]/25 rounded-2xl hover:border-[#2ba1b9]/50 hover:bg-[#2ba1b9]/5 transition-all group cursor-pointer hover-glow"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-[#2ba1b9]/10 border border-[#2ba1b9]/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                      <Database size={24} className="text-[#2ba1b9]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-tight group-hover:text-[#2ba1b9] transition-colors">Interne Datenbank</h3>
+                        <ChevronRight size={14} className="text-slate-600 group-hover:text-[#2ba1b9] transition-colors" />
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Integrierten Datenbank-Viewer öffnen</p>
+                      <p className="text-[9px] font-bold text-slate-700 uppercase tracking-widest mt-2">Direkt im Drivers Hub verwalten</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -714,7 +731,5 @@ const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void
     </motion.div>
   );
 };
-
-const ChevronRight = ({ size, className }: any) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6" /></svg>;
 
 export default Admin;

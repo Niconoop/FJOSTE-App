@@ -1,4 +1,4 @@
-﻿# PowerShell Script to automate GitHub Release creation and asset upload
+# PowerShell Script to automate GitHub Release creation and asset upload
 
 $ErrorActionPreference = "Stop"
 
@@ -46,143 +46,29 @@ $headers = @{
     "Accept" = "application/vnd.github.v3+json"
 }
 
-# 2.2. Manage Gemini API Key (for AI changelog generation)
-$geminiKeyFile = "../.gemini_key"
-$geminiKey = ""
-if (Test-Path $geminiKeyFile) {
-    $geminiKey = (Get-Content $geminiKeyFile -Raw).Trim()
-}
-
-if (-not $geminiKey) {
-    write-host "Kein gespeicherter Gemini API Key gefunden."
-    write-host "Bitte erstelle einen kostenlosen API-Key unter: https://aistudio.google.com/"
-    write-host ""
-    $geminiKey = Read-Host -Prompt "Gemini API Key eingeben"
-    if (-not $geminiKey) {
-        write-error "Kein Gemini API Key angegeben. AI-Changelog-Generierung abgebrochen."
-        exit 1
-    }
-    $geminiKey = $geminiKey.Trim()
-    $geminiKey | Out-File -FilePath $geminiKeyFile -NoNewline -Encoding utf8
-    write-host "Key wurde lokal in .gemini_key gespeichert."
-}
-
-
-# 2.5. Generate and push CHANGELOG.md if not already present
+# 2.5. Verify version is the top entry in CHANGELOG.md
 $changelogPath = "../CHANGELOG.md"
-if (Test-Path $changelogPath) {
-    $currentChangelog = Get-Content -Raw -Encoding UTF8 $changelogPath
-    # Check if the version header is already in the file (supporting ## [1.0.2] or ## 1.0.2 or ## [v1.0.2] formats)
-    if ($currentChangelog -notmatch "##\s*\[?v?$($version.Replace('.', '\.'))\]?") {
-        write-host "Version v$version nicht im CHANGELOG.md gefunden. Generiere automatischen Eintrag..."
-        
-        # Get the previous tag name to gather commits since then
-        $lastTag = ""
-        try {
-            $tags = git tag --sort=-v:refname
-            foreach ($t in $tags) {
-                # Look for a tag that is not the current version tag
-                if ($t -ne "v$version" -and $t -ne $version) {
-                    $lastTag = $t
-                    break
-                }
-            }
-        } catch {}
-        
-        # Generate Git Diff to analyze changes (excluding lockfiles, built outputs, etc.)
-        $gitDiff = ""
-        try {
-            if ($lastTag) {
-                write-host "Generiere Git-Diff zwischen $lastTag und HEAD..."
-                $gitDiff = git diff "$lastTag..HEAD" -- . ":(exclude)package-lock.json" ":(exclude)*.map" ":(exclude)dist*" ":(exclude)node_modules*"
-            } else {
-                write-host "Kein vorheriger Tag gefunden. Generiere Diff der letzten 5 Commits..."
-                $gitDiff = git diff "HEAD~5..HEAD" -- . ":(exclude)package-lock.json" ":(exclude)*.map" ":(exclude)dist*" ":(exclude)node_modules*"
-            }
-        } catch {
-            write-warning "Git-Diff konnte nicht generiert werden."
-        }
+if (-not (Test-Path $changelogPath)) {
+    write-error "CHANGELOG.md nicht gefunden! Bitte stelle sicher, dass die Datei im Hauptverzeichnis existiert."
+    exit 1
+}
 
-        # Query Gemini API to summarize changes
-        $releaseBody = ""
-        if ($gitDiff) {
-            write-host "Rufe Gemini API auf, um Änderungen automatisch zu analysieren und zusammenzufassen..."
-            try {
-                $prompt = @"
-Du bist ein professioneller Release-Manager. Deine Aufgabe ist es, aus dem folgenden Git-Diff ein übersichtliches, gut strukturiertes und professionelles Changelog in deutscher Sprache für die App-Version v$version zu generieren.
-
-Regeln:
-1. Gruppiere die Änderungen in die folgenden Abschnitte (nur wenn relevante Änderungen vorhanden sind):
-   - ### 🚀 Neue Features
-   - ### 🐛 Fehlerbehebungen
-   - ### 🗑️ Entfernt
-   - ### 🔄 Änderungen und Verbesserungen
-2. Schreibe für jede Änderung einen kurzen, prägnanten Stichpunkt auf Deutsch.
-3. Nenne konkrete technische Verbesserungen (z. B. welche Dateipfade, APIs oder Funktionen geändert wurden), aber halte es für Anwender verständlich.
-4. Ignoriere rein kosmetische Änderungen (wie Leerzeilen, Formatierung, kleine Kommentar-Updates), es sei denn, sie sind wichtig.
-5. Gib NUR das reine Markdown zurück (keine Code-Blöcke drumherum, fange direkt mit den Überschriften an).
-
-Hier ist der Git-Diff:
-$gitDiff
-"@
-
-                $body = @{
-                    contents = @(
-                        @{
-                            parts = @(
-                                @{
-                                    text = $prompt
-                                }
-                            )
-                        }
-                    )
-                } | ConvertTo-Json -Depth 10
-
-                $uri = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiKey"
-                $response = Invoke-RestMethod -Uri $uri -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "application/json; charset=utf-8"
-                
-                $releaseBody = $response.candidates[0].content.parts[0].text
-                
-                # Strip markdown code block wrappers if Gemini included them
-                if ($releaseBody -match '(?s)^\s*```(?:markdown)?\r?\n?(.*?)\s*```\s*$') {
-                    $releaseBody = $Matches[1].Trim()
-                }
-                $releaseBody = $releaseBody.Trim()
-            } catch {
-                write-warning "Fehler bei der Kommunikation mit der Gemini API: $_"
-            }
-        }
-
-        if (-not $releaseBody) {
-            write-host "Gemini-Changelog fehlgeschlagen. Nutze Fallback..."
-            $releaseBody = "### 🔄 Änderungen und Verbesserungen`r`n- Wartungsarbeiten und kleinere Verbesserungen"
-        }
-
-        # Format the new entry
-        $dateStr = Get-Date -Format "dd-MM-yyyy"
-        $newEntry = "## [$version] - $dateStr`r`n`r`n" + $releaseBody + "`r`n`r`n"
-        
-        # Prepend entry to the existing changelog content
-        $updatedChangelog = $newEntry + $currentChangelog
-        [System.IO.File]::WriteAllText((Resolve-Path $changelogPath), $updatedChangelog, [System.Text.Encoding]::UTF8)
-        write-host "[OK] CHANGELOG.md erfolgreich mit $commitCount Eintraegen aktualisiert."
-        
-        # Commit and push updated CHANGELOG.md to the current branch using the parent repository context
-        try {
-            write-host "Committe und pushe aktualisierten CHANGELOG.md..."
-            $branch = (git -C .. branch --show-current).Trim()
-            if (-not $branch) { $branch = "main" }
-            git -C .. add CHANGELOG.md
-            git -C .. commit -m "docs: update CHANGELOG.md for v$version [skip ci]"
-            git -C .. push origin $branch
-            write-host "[OK] CHANGELOG.md committed and pushed to origin/$branch."
-        } catch {
-            write-warning "Fehler beim Committen/Pushen des CHANGELOG.md: $_"
-        }
-    } else {
-        write-host "Version v$version bereits im CHANGELOG.md vorhanden."
+# Read lines of CHANGELOG.md to find the first version header
+$lines = Get-Content -Encoding UTF8 $changelogPath
+$topVersion = ""
+foreach ($line in $lines) {
+    if ($line -match "^##\s*\[?v?([0-9]+\.[0-9]+\.[0-9]+)\]?") {
+        $topVersion = $Matches[1]
+        break
     }
 }
+
+if ($topVersion -ne $version) {
+    write-error "Die Version v$version aus package.json stimmt nicht mit der neuesten Version v$topVersion im CHANGELOG.md ueberein! Bitte pflege die Version v$version zuerst als obersten Eintrag im CHANGELOG.md ein."
+    exit 1
+}
+
+write-host "Version v$version erfolgreich als oberster Eintrag im CHANGELOG.md validiert."
 
 # 3. Create and push Git Tag
 write-host ""

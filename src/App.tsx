@@ -19,6 +19,7 @@ const News = lazy(() => import('./pages/News'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AfkBot = lazy(() => import('./pages/AfkBot'));
 const OverlaySettings = lazy(() => import('./pages/OverlaySettings'));
+const Database = lazy(() => import('./pages/Database').then(m => ({ default: m.DatabasePage })));
 
 import { useAuth } from './context/AuthContext';
 import { AnimatedBackground } from './components/AnimatedBackground';
@@ -39,7 +40,8 @@ const PAGE_ORDER = [
   'overlay-settings',
   'profile',
   'reports',
-  'admin'
+  'admin',
+  'database'
 ];
 
 const slideVariants = {
@@ -955,7 +957,8 @@ function App() {
               {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} telemetry={telemetry} />}
               {currentPage === 'team' && <Team onViewProfile={viewProfile} />}
               {currentPage === 'statistiken' && <Stats />}
-              {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} />}
+              {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} onNavigate={setCurrentPage} />}
+              {currentPage === 'database' && isAdmin && <Database onBack={() => setCurrentPage('admin')} />}
               {currentPage === 'events' && <Events selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
               {currentPage === 'map' && <Map onViewProfile={viewProfile} initialSelectedId={targetMapId} onClearInitialId={() => setTargetMapId(null)} theme={theme} />}
               {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
