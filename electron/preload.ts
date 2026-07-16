@@ -25,6 +25,13 @@ const apiObject = {
     return () => ipcRenderer.removeListener('telemetry-update', listener);
   },
   getTelemetryStatus: () => ipcRenderer.invoke('telemetry-status'),
+  // Generic IPC bridge so the renderer never has to rely on `window.require`
+  // (which is unavailable when the page's own nodeIntegration is off, e.g. in
+  // some packaged builds). The preload always runs in a Node-enabled context.
+  send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+  on: (channel: string, listener: (...args: any[]) => void) => ipcRenderer.on(channel, listener),
+  removeListener: (channel: string, listener: (...args: any[]) => void) => ipcRenderer.removeListener(channel, listener),
 };
 
 if (process.contextIsolated) {
@@ -36,7 +43,10 @@ if (process.contextIsolated) {
 } else {
   try {
     (window as any).electronAPI = apiObject;
+    // Re-expose Node's require on the page so `window.require('electron')`
+    // keeps working even if the renderer's own nodeIntegration is disabled.
+    (window as any).require = require;
   } catch (e) {
-    console.error('Failed to expose electronAPI on window object:', e);
+    console.error('Failed to expose electronAPI / require on window object:', e);
   }
 }

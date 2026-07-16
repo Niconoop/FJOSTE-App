@@ -5,7 +5,7 @@ import { AlertTriangle, Info } from "lucide-react";
 
 /**
  * Hook that replaces window.confirm() / window.alert() with a styled modal
- * matching the app's existing modal design (glass-card, Unbounded font, etc.).
+ * matching the app's existing modal design (frosted-card, Unbounded font, etc.).
  */
 export function useConfirmDialog() {
   const [open, setOpen] = useState(false);
@@ -71,7 +71,7 @@ export function useConfirmDialog() {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
               transition={{ type: "spring", stiffness: 400, damping: 28 }}
-              className={`glass-card w-full max-w-sm !p-0 overflow-hidden shadow-2xl ${
+              className={`frosted-card w-full max-w-sm !p-0 overflow-hidden shadow-2xl ${
                 mode === "confirm"
                   ? "!border-red-500/20"
                   : "!border-primary/20"
@@ -139,3 +139,4 @@ export function useConfirmDialog() {
 
   return { confirm, alert, ConfirmDialog };
 }
+

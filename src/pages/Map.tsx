@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RefreshCw, Truck, MapPin, Clock, Users, X, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe } from 'lucide-react';
+import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, getAvatarUrl } from '../config';
@@ -39,7 +39,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         id: 'background',
         type: 'background',
         paint: {
-          'background-color': isLight ? '#f1f3f5' : '#000000ff',
+          'background-color': isLight ? '#f1f3f5' : '#0a1622',
         },
       },
       {
@@ -48,7 +48,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'land',
         paint: {
-          'fill-color': isLight ? '#e9ecef' : '#050505ff',
+          'fill-color': isLight ? '#e9ecef' : '#12180f',
         },
       },
       {
@@ -57,7 +57,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'water',
         paint: {
-          'fill-color': isLight ? '#c4d7ec' : '#000000',
+          'fill-color': isLight ? '#c4d7ec' : '#123a5e',
         },
       },
       {
@@ -79,11 +79,11 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
             ]
             : [
               'match', ['get', 'color'],
-              0, '#000000',  // water
-              1, '#0d1015',  // land – very dark gray, not black
-              2, '#14171f',  // road surface
-              3, '#0a0c10',  // building
-              '#0d1015',
+              0, '#123a5e',  // water – deep ocean blue
+              1, '#141b12',  // land – dark with subtle green tint
+              2, '#1b2130',  // road surface – bluish slate
+              3, '#10140d',  // building
+              '#141b12',
             ],
           'fill-opacity': 0.95,
         },
@@ -95,7 +95,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
         paint: {
-          'fill-color': isLight ? '#cbd5e1' : '#14171f',
+          'fill-color': isLight ? '#cbd5e1' : '#1b2130',
           'fill-opacity': 0.9
         },
       },
@@ -140,7 +140,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'ferry']],
         paint: {
-          'line-color': isLight ? '#0ea5e9' : '#2ba1b9',
+          'line-color': isLight ? '#0ea5e9' : '#38bdf8',
           'line-width': 1.5,
           'line-dasharray': [4, 4],
           'line-opacity': 0.6,
@@ -152,7 +152,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'states',
         paint: {
-          'line-color': isLight ? '#cbd5e1' : '#262d3eff',
+          'line-color': isLight ? '#cbd5e1' : '#2b3852',
           'line-width': 1,
           'line-opacity': 0.8,
           'line-dasharray': [2, 2],
@@ -165,9 +165,9 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'countries',
         filter: ['!=', ['get', 'name'], 'Serbia-Kosovo'],
         paint: {
-          'line-color': isLight ? '#94a3b8' : '#161822ff',
-          'line-width': 1.5,
-          'line-opacity': 0.9,
+          'line-color': isLight ? '#64748b' : '#c3ccd9',
+          'line-width': 1.8,
+          'line-opacity': 0.95,
         },
       },
       {
@@ -177,9 +177,9 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'countries',
         filter: ['==', ['get', 'name'], 'Serbia-Kosovo'],
         paint: {
-          'line-color': isLight ? '#94a3b8' : '#1a1f29',
-          'line-width': 1.5,
-          'line-opacity': 0.9,
+          'line-color': isLight ? '#64748b' : '#c3ccd9',
+          'line-width': 1.8,
+          'line-opacity': 0.95,
           'line-dasharray': [3, 2],
         },
       },
@@ -322,6 +322,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [search, setSearch] = useState("");
 
   const getAvatarUrlLocal = (url?: string) => getAvatarUrl(url);
 
@@ -338,10 +339,10 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       ]);
 
       const liveData = Array.isArray(mapRes.data) ? mapRes.data : [];
-      const fjosteUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
+      const openpipeclubUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
 
-      // Merge: Use fjosteUsers as base to include everyone
-      const merged = fjosteUsers.map((u: any) => {
+      // Merge: Use openpipeclubUsers as base to include everyone
+      const merged = openpipeclubUsers.map((u: any) => {
         const live = liveData.find((l: any) => l.id == u.id || (l.trucky_id && l.trucky_id == u.trucky_driver_id));
         return {
           ...u,
@@ -355,7 +356,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         };
       });
 
-      // Add live users that might not be in fjosteUsers
+      // Add live users that might not be in openpipeclubUsers
       liveData.forEach((l: any) => {
         if (!merged.find(m => m.id == l.id || m.trucky_driver_id == l.id)) {
           merged.push({
@@ -394,7 +395,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     });
     map.setMinZoom(4.5);
     map.setMaxZoom(14);
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
     mapRef.current = map;
     return () => map.remove();
   }, []);
@@ -494,7 +495,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         seenPositions[posKey] = 1;
       }
 
-      const borderColor = member.online ? "#10b981" : (member.role_color || "#22D1EE");
+      const borderColor = member.online ? "#10b981" : "#f59e0b";
 
       const el = document.createElement("div");
       el.className = "map-marker";
@@ -518,14 +519,16 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
   const onlineCount = mapData.filter(m => m.online).length;
 
+  const filteredDrivers = mapData.filter(m => (m.name || "").toLowerCase().includes(search.trim().toLowerCase()));
+
   return (
-    <div className="flex h-[calc(100vh-140px)] glass-card !p-0 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+    <div className="flex h-full w-full !p-0 overflow-hidden relative">
       <div className="flex-1 relative">
         <div ref={mapContainer} className="w-full h-full" />
 
         {/* Map Overlays */}
-        <div className="absolute top-6 left-6 z-30 flex flex-col gap-2">
-          <div className="glass-card !p-4 backdrop-blur-xl shadow-2xl">
+        <div className="absolute top-24 left-6 z-30 flex flex-col gap-2">
+          <div className="frosted-card !p-4 backdrop-blur-xl shadow-2xl border border-white/5">
             <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest mb-1">Live Karte</h3>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -535,7 +538,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
           <button
             onClick={() => { setLoading(true); fetchData(); }}
-            className="glass-card !w-10 !h-10 !p-0 backdrop-blur-xl flex items-center justify-center text-slate-400 hover:text-white transition-all shadow-xl"
+            className="frosted-card !w-10 !h-10 !p-0 backdrop-blur-xl flex items-center justify-center text-slate-400 hover:text-white transition-all shadow-xl border border-white/5"
           >
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
@@ -543,15 +546,26 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       </div>
 
       {/* Sidebar */}
-      <div className={`w-80 border-l-2 border-[#2ba1b9]/20 bg-[#000000] backdrop-blur-2xl flex flex-col shrink-0 transition-all duration-500 z-30 ${sidebarOpen ? "mr-0" : "-mr-80"}`}>
+      <div className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-30 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
         <div className="p-6 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Fahrer ({mapData.length})</h2>
+          <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Fahrer ({filteredDrivers.length})</h2>
           <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-white/5 rounded-lg text-slate-500">
             <X size={18} />
           </button>
         </div>
+        <div className="p-4 border-b border-white/5">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Fahrer suchen..."
+              className="w-full bg-black/30 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-[#f59e0b]/30 outline-none transition-all"
+            />
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {mapData.map(m => {
+          {filteredDrivers.map(m => {
             const hasPos = (m.online && m.live_location) || m.last_position;
             const loc = m.online ? m.live_location : m.last_position;
             return (
@@ -573,10 +587,10 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                     }
                   }
                 }}
-                className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all border ${selectedDriver?.id === m.id ? "bg-primary/10 border-primary/20" : "bg-black/60 border-transparent hover:bg-white/5"}`}
+                className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all border ${selectedDriver?.id === m.id ? "bg-primary/10 border-primary/20" : "bg-white/[0.02] border-white/5 hover:bg-white/5"}`}
               >
                 <div className="relative">
-                  <div className={`w-10 h-10 rounded-full bg-black border-2 overflow-hidden flex items-center justify-center transition-all ${m.online ? "border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-[pulse_2s_infinite]" : "border-white/10"}`}>
+                  <div className={`w-10 h-10 rounded-full bg-zinc-900 border-2 overflow-hidden flex items-center justify-center transition-all ${m.online ? "border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-[pulse_2s_infinite]" : "border-white/10"}`}>
                     {getAvatarUrlLocal(m.avatar_url) ? <img src={getAvatarUrlLocal(m.avatar_url)!} className="w-full h-full object-cover" /> : <Truck size={18} className="text-slate-600" />}
                   </div>
                 </div>
@@ -612,6 +626,9 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
               </button>
             );
           })}
+          {filteredDrivers.length === 0 && (
+            <p className="text-center text-[10px] font-bold text-slate-600 uppercase tracking-widest py-8">Keine Fahrer gefunden</p>
+          )}
         </div>
       </div>
 
@@ -623,7 +640,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, scale: 0.95 }}
             style={{ right: sidebarOpen ? "340px" : "24px" }}
-            className="absolute bottom-6 z-[40] w-80 glass-card !p-0 border-primary/20 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
+            className="absolute bottom-6 z-[40] w-80 frosted-card !p-0 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
           >
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
@@ -633,7 +650,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                   className="flex items-center gap-3 cursor-pointer group/profile"
                   onClick={() => onViewProfile?.(selectedDriver.id)}
                 >
-                  <div className={`w-14 h-14 rounded-2xl bg-black border-2 overflow-hidden flex items-center justify-center transition-all ${selectedDriver.online ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "border-white/10"} group-hover/profile:border-primary/50 transition-colors`}>
+                  <div className={`w-14 h-14 rounded-2xl bg-zinc-900 border-2 overflow-hidden flex items-center justify-center transition-all ${selectedDriver.online ? "border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "border-white/10"} group-hover/profile:border-primary/50 transition-colors`}>
                     {getAvatarUrlLocal(selectedDriver.avatar_url) ? (
                       <img src={getAvatarUrlLocal(selectedDriver.avatar_url)!} className="w-full h-full object-cover" />
                     ) : (
@@ -683,7 +700,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                   </div>
                 )}
                 {/* Location */}
-                <div className="flex items-start gap-3.5 p-4 bg-black/60 border border-white/5 rounded-2xl relative overflow-hidden group/loc">
+                <div className="flex items-start gap-3.5 p-4 bg-white/[0.02] border border-white/5 rounded-2xl relative overflow-hidden group/loc">
                   <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-full -mr-8 -mt-8 blur-2xl group-hover/loc:bg-primary/10 transition-colors" />
                   <MapPin size={18} className="text-primary shrink-0 mt-0.5 relative z-10" />
                   <div className="min-w-0 relative z-10">
@@ -743,7 +760,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="absolute top-6 right-6 z-20 w-10 h-10 bg-primary text-black rounded-xl flex items-center justify-center shadow-2xl transition-all hover:scale-110"
+          className="absolute top-24 right-6 z-30 w-10 h-10 bg-primary text-black rounded-xl flex items-center justify-center shadow-2xl transition-all hover:scale-110"
         >
           <Users size={20} />
         </button>
@@ -756,6 +773,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
           100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
         .maplibregl-ctrl-bottom-right { margin-right: 20px; margin-bottom: 20px; }
+        .maplibregl-ctrl-bottom-left { margin-left: 20px; margin-bottom: 20px; }
         .maplibregl-ctrl-attrib { display: none !important; }
         .maplibregl-ctrl-group { background: rgba(0,0,0,0.6) !important; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 12px !important; }
         .maplibregl-ctrl-group button { border-color: rgba(255,255,255,0.05) !important; }

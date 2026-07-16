@@ -215,7 +215,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'ferry']],
         paint: {
-          'line-color': '#2ba1b9',
+          'line-color': '#f59e0b',
           'line-width': 1.5,
           'line-dasharray': [4, 4],
           'line-opacity': 0.6,
@@ -346,7 +346,7 @@ function normalizeBearing(deg: number): number {
 
 const GameMapWidget: React.FC<GameMapWidgetProps> = ({
   gameX, gameY, heading, source, dest, city,
-  navDistance, connected, accentColor = '#22D1EE',
+  navDistance, connected, accentColor = '#f59e0b',
   width = 300, height = 200,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -737,7 +737,7 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           border-radius: 16px;
           overflow: hidden;
           background: #0d1117;
-          border: 1px solid rgba(43,161,185,0.2);
+          border: 1px solid rgba(245, 158, 11,0.2);
           box-shadow: 0 8px 32px rgba(0,0,0,0.6);
         }
         .game-map-container {
@@ -782,8 +782,8 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           width: 5px;
           height: 5px;
           border-radius: 50%;
-          background: var(--gm-accent, #22D1EE);
-          box-shadow: 0 0 6px var(--gm-accent, #22D1EE);
+          background: var(--gm-accent, #f59e0b);
+          box-shadow: 0 0 6px var(--gm-accent, #f59e0b);
         }
         .gm-dest-badge {
           display: flex;
@@ -791,7 +791,7 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           gap: 3px;
           font-size: 8px;
           font-weight: 700;
-          color: var(--gm-accent, #22D1EE);
+          color: var(--gm-accent, #f59e0b);
           opacity: 0.8;
           margin-left: auto;
         }
@@ -809,10 +809,10 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           width: 28px;
           height: 28px;
           border-radius: 8px;
-          border: 1px solid rgba(43,161,185,0.3);
+          border: 1px solid rgba(245, 158, 11,0.3);
           background: rgba(13,17,23,0.85);
           backdrop-filter: blur(8px);
-          color: var(--gm-accent, #22D1EE);
+          color: var(--gm-accent, #f59e0b);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -821,9 +821,9 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           pointer-events: auto;
         }
         .gm-recenter-btn:hover {
-          background: rgba(43,161,185,0.2);
-          border-color: var(--gm-accent, #22D1EE);
-          box-shadow: 0 0 12px rgba(43,161,185,0.3);
+          background: rgba(245, 158, 11,0.2);
+          border-color: var(--gm-accent, #f59e0b);
+          box-shadow: 0 0 12px rgba(245, 158, 11,0.3);
         }
 
         /* Player marker */
@@ -839,14 +839,14 @@ const GameMapWidget: React.FC<GameMapWidgetProps> = ({
           width: 28px;
           height: 28px;
           border-radius: 50%;
-          border: 2px solid var(--gm-accent, #22D1EE);
+          border: 2px solid var(--gm-accent, #f59e0b);
           background: rgba(13,17,23,0.8);
           display: flex;
           align-items: center;
           justify-content: center;
           transition: transform 0.3s ease;
           z-index: 2;
-          box-shadow: 0 0 12px rgba(34,209,238,0.4);
+          box-shadow: 0 0 12px rgba(245, 158, 11,0.4);
         }
         .gm-marker-pulse {
           position: absolute;

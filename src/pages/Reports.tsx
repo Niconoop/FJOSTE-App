@@ -69,21 +69,50 @@ const Reports = () => {
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-20">
-      <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-      <p className="text-slate-500 font-unbounded text-[10px] font-bold uppercase tracking-widest animate-pulse">Lade Berichte...</p>
+    <div className="space-y-8 pb-10 animate-pulse">
+      <div className="mb-1">
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-4 bg-amber-400 rounded-full" />
+          <div className="h-7 w-40 bg-white/5 rounded" />
+        </div>
+        <div className="h-3 w-56 bg-white/5 rounded mt-2" />
+      </div>
+
+      <div className="flex items-center gap-1 bg-[#000000] p-1 rounded-xl border-2 border-[#f59e0b]/20 w-56">
+        <div className="h-8 bg-white/5 rounded-lg flex-1" />
+        <div className="h-8 bg-white/5 rounded-lg flex-1" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="frosted-card p-4 h-[72px] flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-white/5" />
+            <div className="flex-1 space-y-2">
+              <div className="h-2 bg-white/5 rounded w-1/2" />
+              <div className="h-4 bg-white/5 rounded w-3/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 frosted-card h-[380px] rounded-2xl" />
+        <div className="frosted-card h-[400px] rounded-2xl" />
+      </div>
     </div>
   );
 
   return (
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-unbounded text-2xl font-bold text-white tracking-tight italic">Berichte</h1>
-          <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Wöchentliche Auswertung & Archiv</p>
+      <div className="mb-1">
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-4 bg-amber-400 rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">Berichte</h1>
         </div>
+        <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Wöchentliche Auswertung & Archiv</p>
+      </div>
 
-        <div className="flex items-center gap-1 bg-[#000000] p-1 rounded-xl border border-white/5">
+      <div className="flex items-center gap-1 w-fit bg-black/40 backdrop-blur-xl p-1 rounded-xl border-2 border-[#f59e0b]/20">
           <button
             onClick={() => setView('current')}
             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover-glow ${view === 'current' ? 'bg-primary text-black' : 'text-slate-500 hover:text-white'}`}
@@ -95,43 +124,42 @@ const Reports = () => {
             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover-glow ${view === 'archive' ? 'bg-primary text-black' : 'text-slate-500 hover:text-white'}`}
           >
             Archiv
-          </button>
-        </div>
-      </div>
+           </button>
+         </div>
 
-      <AnimatePresence mode="wait">
+       <AnimatePresence mode="wait">
         {view === 'current' ? (
           <motion.div
             key="current"
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 1, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="space-y-8"
           >
             {/* Weekly KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="glass-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
                 <div className="p-3 rounded-xl bg-primary/10"><Users className="w-5 h-5 text-primary" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Gesamt</p>
                   <p className="text-xl font-black text-white">{weeklyReport?.total_members || stats?.members || "0"}</p>
                 </div>
               </div>
-              <div className="glass-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
                 <div className="p-3 rounded-xl bg-emerald-500/10"><UserCheck className="w-5 h-5 text-emerald-400" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Aktiv (7d)</p>
                   <p className="text-xl font-black text-emerald-400">{weeklyReport?.active_members || "0"}</p>
                 </div>
               </div>
-              <div className="glass-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
                 <div className="p-3 rounded-xl bg-red-500/10"><UserX className="w-5 h-5 text-red-400" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Inaktiv</p>
                   <p className="text-xl font-black text-red-400">{weeklyReport?.inactive_members || "0"}</p>
                 </div>
               </div>
-              <div className="glass-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
                 <div className="p-3 rounded-xl bg-amber-500/10"><Coins className="w-5 h-5 text-amber-400" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Gesamt $</p>
@@ -142,7 +170,7 @@ const Reports = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Activity Chart */}
-              <div className="lg:col-span-2 glass-card hover-glow transition-all">
+              <div className="lg:col-span-2 frosted-card hover-glow transition-all">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest italic">Aktivitäts-Trend</h3>
@@ -164,7 +192,7 @@ const Reports = () => {
                         contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '10px' }}
                       />
                       <Bar dataKey="jobs" radius={[4, 4, 0, 0]} barSize={40}>
-                        {[1, 2, 3, 4, 5, 6, 7].map((_, i) => <Cell key={i} fill={i === 4 ? '#22D1EE' : '#22D1EE30'} />)}
+                        {[1, 2, 3, 4, 5, 6, 7].map((_, i) => <Cell key={i} fill={i === 4 ? '#f59e0b' : '#f59e0b30'} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -172,8 +200,8 @@ const Reports = () => {
               </div>
 
               {/* Driver Activity Table */}
-              <div className="glass-card overflow-hidden !p-0 flex flex-col h-[400px]">
-                <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/80">
+              <div className="frosted-card overflow-hidden !p-0 flex flex-col h-[400px]">
+                <div className="p-5 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
                   <h3 className="font-unbounded text-[10px] font-black text-white uppercase tracking-widest italic">Fahrer-Aktivität</h3>
                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
@@ -182,9 +210,9 @@ const Reports = () => {
                 </div>
                 <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-white/5">
                   {(weeklyReport?.members || []).map((m: any) => (
-                    <div key={m.id} className="p-4 hover:bg-black/60 transition-colors flex items-center justify-between hover-glow">
+                    <div key={m.id} className="p-4 hover:bg-white/[0.02] transition-colors flex items-center justify-between hover-glow">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-black border border-white/5 overflow-hidden">
+                        <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/5 overflow-hidden">
                           {getAvatarUrl(m.avatar_url) ? <img src={getAvatarUrl(m.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
                         </div>
                         <div>
@@ -230,7 +258,7 @@ const Reports = () => {
             </div>
 
             {reports.length === 0 ? (
-              <div className="glass-card flex flex-col items-center justify-center py-20 opacity-30 border-dashed border-2">
+              <div className="frosted-card flex flex-col items-center justify-center py-20 opacity-30 border-dashed border-2">
                 <Calendar size={48} className="mb-4" />
                 <p className="text-[10px] font-bold uppercase tracking-widest">Keine archivierten Reports gefunden</p>
               </div>
@@ -239,10 +267,10 @@ const Reports = () => {
                 {reports.map((rep: any) => (
                   <motion.div
                     key={rep.id}
-                    className="glass-card flex items-center justify-between group hover:border-white/20 transition-all hover-glow"
+                    className="frosted-card flex items-center justify-between group hover:border-white/20 transition-all hover-glow"
                   >
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="w-12 h-12 rounded-xl bg-black border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
+                      <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
                         <FileText size={24} className="text-primary" />
                       </div>
                       <div className="flex-1">
@@ -287,12 +315,12 @@ const Reports = () => {
 
       <AnimatePresence>
         {selectedReport && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-4xl bg-black/90 border border-white/10 rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col backdrop-blur-md"
+              className="relative w-full max-w-4xl bg-zinc-950/95 border border-white/10 rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden flex flex-col backdrop-blur-md"
             >
               {/* Header */}
               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
@@ -349,3 +377,4 @@ const Reports = () => {
 };
 
 export default Reports;
+

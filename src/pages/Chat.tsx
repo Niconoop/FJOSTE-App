@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Send, Hash, MessageCircle, Trash2, Loader2, Menu, X, Plus, LogOut as LogOutIcon, UserPlus, ChevronRight } from 'lucide-react';
+import { Send, Hash, MessageCircle, Trash2, Loader2, Menu, X, Plus, Search, LogOut as LogOutIcon, UserPlus, ChevronRight } from 'lucide-react';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -29,6 +29,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
   const [busyGroup, setBusyGroup] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [search, setSearch] = useState("");
 
   // Load basic data
   useEffect(() => {
@@ -151,7 +152,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
     try {
       const r = await axios.post(`${API_URL}/chat/groups`, { name: groupName, member_ids: selectedMemberIds });
       const ch = r.data;
-      const cRes = await axios.get('http://127.0.0.1:8000/api/chat/channels');
+      const cRes = await axios.get(`${API_URL}/chat/channels`);
       setChannels(cRes.data);
       setActiveChannel(ch);
       setShowCreateGroup(false);
@@ -226,17 +227,28 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
   let lastDate = "";
 
   return (
-    <div className="flex h-[calc(100vh-140px)] glass-card !p-0 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 relative shadow-2xl backdrop-blur-xl">
+    <div className="flex h-full w-full !p-0 overflow-hidden relative">
       {/* Sidebar */}
-      <div className={`w-64 border-r-2 border-[#2ba1b9]/20 bg-[#000000] backdrop-blur-3xl flex flex-col shrink-0 transition-all duration-300 ${drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} absolute md:static inset-y-0 z-40 shadow-2xl`}>
+      <div className={`w-64 border-r border-white/5 bg-zinc-950/95 backdrop-blur-3xl flex flex-col shrink-0 transition-all duration-300 ${drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} absolute md:static inset-y-0 z-40 shadow-2xl`}>
         <div className="p-6 border-b border-white/5 flex items-center justify-between">
           <h2 className="font-unbounded text-[10px] font-black text-white uppercase tracking-widest italic">Kanäle</h2>
-          <button onClick={() => setShowCreateGroup(true)} className="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-all">
+          <button onClick={() => setShowCreateGroup(true)} className="p-1.5 hover:bg-[#f59e0b]/10 rounded-lg text-[#f59e0b] transition-all">
             <Plus size={18} />
           </button>
         </div>
+        <div className="p-4 border-b border-white/5">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Suchen..."
+              className="w-full bg-black/30 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-[#f59e0b]/30 outline-none transition-all"
+            />
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-1 no-scrollbar">
-          {channels.map(ch => {
+          {channels.filter(ch => (ch.name || "").toLowerCase().includes(search.trim().toLowerCase())).map(ch => {
             const isDM = !ch.is_group;
             const peerAvatar = isDM ? ch.avatar_url : null;
 
@@ -277,15 +289,15 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-[#000000]">
+      <div className="flex-1 flex flex-col bg-white/[0.05] backdrop-blur-2xl backdrop-saturate-150">
         {/* Chat Header */}
-        <div className="h-16 border-b border-white/10 flex items-center px-6 shrink-0 bg-[#000000] gap-4">
+        <div className="h-16 border-b border-white/5 flex items-center px-6 shrink-0 bg-black/20 gap-4">
           <button onClick={() => setDrawerOpen(true)} className="md:hidden p-2 hover:bg-white/5 rounded-xl text-slate-500">
             <Menu size={20} />
           </button>
           <div className="flex-1">
             <h3 className="font-unbounded text-xs font-black text-white uppercase tracking-widest italic flex items-center gap-2">
-              {activeChannel ? (activeChannel.is_group ? <Hash size={14} className="text-primary" /> : <MessageCircle size={14} className="text-primary" />) : null}
+              {activeChannel ? (activeChannel.is_group ? <Hash size={14} className="text-amber-400" /> : <MessageCircle size={14} className="text-amber-400" />) : null}
               {activeChannel?.name || "Wähle einen Chat"}
             </h3>
             {activeChannel?.is_group && activeChannel.members_info && (
@@ -366,10 +378,10 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
                     )}
                     <div className={`space-y-1 ${isOwn ? "items-end" : "items-start"}`}>
                       {!isOwn && (<p className="text-[10px] font-black text-primary uppercase tracking-widest ml-1 flex items-center gap-1">{msg.username} <span className="text-[9px] font-normal text-slate-400 uppercase">({users.find(u => u.id === msg.user_id)?.role?.name ?? users.find(u => u.id === msg.user_id)?.role ?? ''})</span></p>)}
-                      <div className={`px-4 py-2.5 rounded-2xl text-sm relative transition-all ${isOwn ? "bg-primary text-black font-bold shadow-[0_5px_15px_rgba(34,209,238,0.2)] rounded-tr-none" : "bg-[#000000] border-2 border-[#2ba1b9]/20 text-slate-200 rounded-tl-none hover:border-[#2ba1b9]/60"}`}>
+                      <div className={`px-4 py-3 rounded-2xl text-sm relative transition-all border ${isOwn ? "bg-gradient-to-br from-amber-500/10 to-yellow-500/5 border-amber-500/20 text-white rounded-tr-none" : "bg-white/[0.02] border-white/5 text-zinc-300 rounded-tl-none hover:border-white/10"}`}>
                         {msg.content}
                         <div className={`flex items-center gap-2 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
-                          <span className={`text-[8px] font-black uppercase tracking-tighter ${isOwn ? "text-black/40" : "text-slate-600"}`}>
+                          <span className={`text-[8px] font-black uppercase tracking-tighter ${isOwn ? "text-white/40" : "text-slate-600"}`}>
                             {new Date(msg.created_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           {(canManageChat || isOwn) && (
@@ -392,8 +404,8 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
         </div>
 
         {activeChannel && (
-          <div className="p-6 bg-[#000000] border-t border-white/10">
-            <form onSubmit={handleSend} className="chat-form flex gap-3 items-center bg-black border-2 border-[#2ba1b9]/20 rounded-2xl p-2 focus-within:border-primary transition-all shadow-inner">
+          <div className="p-6 bg-black/40 border-t border-white/5">
+            <form onSubmit={handleSend} className="chat-form flex gap-3 items-center bg-white/[0.01] border border-white/5 rounded-2xl p-2 focus-within:border-[#f59e0b]/30 transition-all shadow-inner">
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -403,7 +415,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
-                className="w-10 h-10 rounded-xl bg-primary text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                className="w-10 h-10 rounded-xl bg-amber-400 hover:bg-white text-black flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
               >
                 {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </button>
@@ -416,7 +428,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
       <AnimatePresence>
         {showCreateGroup && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => { setShowCreateGroup(false); setSelectedMemberIds([]); }}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-[#2ba1b9]/20 rounded-[32px] p-8 w-full max-w-md shadow-2xl backdrop-blur-2xl" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-zinc-950/95 border border-white/10 rounded-[32px] p-8 w-full max-w-md shadow-2xl backdrop-blur-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest italic mb-6">Neue Gruppe erstellen</h3>
               <div className="space-y-6">
                 <div>
@@ -426,7 +438,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Mitglieder auswählen</label>
                   <div className="max-h-48 overflow-y-auto space-y-1 bg-black/20 rounded-xl p-2 border border-white/5 no-scrollbar">
-                    {users.filter(u => u.id !== user?.user_id).map(u => (
+            {users.filter(u => u.id !== user?.user_id && (u.username || "").toLowerCase().includes(search.trim().toLowerCase())).map(u => (
                       <button
                         key={u.id}
                         onClick={() => setSelectedMemberIds(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])}
@@ -451,7 +463,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
 
         {showAddMembers && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => { setShowAddMembers(false); setSelectedMemberIds([]); }}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-[#2ba1b9]/20 rounded-[32px] p-8 w-full max-w-md shadow-2xl backdrop-blur-2xl" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] p-8 w-full max-w-md shadow-2xl backdrop-blur-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest italic mb-2">Mitglieder hinzufügen</h3>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-6 ml-1">Gruppe: {activeChannel?.name}</p>
               <div className="space-y-6">
@@ -491,7 +503,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
 
         {showLeaveConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowLeaveConfirm(false)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="glass-card w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="frosted-card w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <LogOutIcon className="text-red-500" size={32} />
               </div>
@@ -509,7 +521,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
 
         {showDeleteConfirm && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowDeleteConfirm(false)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="glass-card w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="frosted-card w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <Trash2 className="text-red-500" size={32} />
               </div>
@@ -532,3 +544,4 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
 const Check = ({ size }: any) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
 
 export default Chat;
+

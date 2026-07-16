@@ -84,6 +84,10 @@ export const apiService = {
   getSpotifyCurrentTrack: (headers?: any) => api.get('/spotify/current-track', { headers }),
   getSpotifyQueue: (headers?: any) => api.get('/spotify/queue', { headers }),
 
+  // TruckersMP Session
+  getMyTruckersMPSession: (headers?: any) => api.get('/truckersmp/my-session', { headers }),
+  getUserTruckersMPSession: (userId: string, headers?: any) => api.get(`/truckersmp/session/${userId}`, { headers }),
+
   // Admin
   getInviteCodes: (headers?: any) => api.get('/management/invite-codes', { headers }),
   createInviteCode: (headers?: any) => api.post('/management/invite-codes', {}, { headers }),

@@ -19,15 +19,16 @@ createRoot(document.getElementById('root')!).render(
           position="top-center"
           toastOptions={{
             style: {
-              background: 'var(--glass-card-bg)',
+              background: 'var(--frosted-card-bg)',
               backdropFilter: 'blur(20px)',
               border: '2px solid var(--border)',
               color: 'var(--foreground)',
             },
-            className: 'glass-card',
+            className: 'frosted-card',
           }}
         />
       </AuthProvider>
     )}
   </StrictMode>,
 )
+

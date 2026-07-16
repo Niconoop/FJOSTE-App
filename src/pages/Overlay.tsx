@@ -132,7 +132,7 @@ const DEFAULT_SETTINGS: Settings = {
   showGameMap: true,
   widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify', 'gameMap'],
   zoom: 100,
-  bgOpacity: 80,
+  bgOpacity: 0,
   showGear: true,
   showSpeed: true,
   showFuel: true,
@@ -149,7 +149,7 @@ const DEFAULT_SETTINGS: Settings = {
     gameMap: { w: 300, h: 200 }
   },
   singleRowHud: false,
-  customAccentColor: '#22d1ee',
+  customAccentColor: '#f59e0b',
   blockCollisions: true
 };
 
@@ -200,7 +200,7 @@ const OverlayPage: React.FC = () => {
 
   const [settings, setSettings] = useState<Settings>(() => {
     let base = DEFAULT_SETTINGS;
-    const saved = localStorage.getItem('fjoste_overlay_settings');
+    const saved = localStorage.getItem('openpipeclub_overlay_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -214,7 +214,7 @@ const OverlayPage: React.FC = () => {
 
     // Merge correct sizes
     const isSingle = base.singleRowHud || false;
-    const sizeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+    const sizeKey = isSingle ? 'openpipeclub_overlay_widget_sizes_single' : 'openpipeclub_overlay_widget_sizes';
     const savedSizes = localStorage.getItem(sizeKey);
     if (savedSizes) {
       try {
@@ -225,14 +225,14 @@ const OverlayPage: React.FC = () => {
   });
 
   const [positions, setPositions] = useState<Positions>(() => {
-    const savedSettings = localStorage.getItem('fjoste_overlay_settings');
+    const savedSettings = localStorage.getItem('openpipeclub_overlay_settings');
     let isSingle = false;
     if (savedSettings) {
       try {
         isSingle = !!JSON.parse(savedSettings).singleRowHud;
       } catch (e) { }
     }
-    const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+    const posKey = isSingle ? 'openpipeclub_overlay_positions_single' : 'openpipeclub_overlay_positions';
     const saved = localStorage.getItem(posKey);
     const defaultPositions = {
       logo: { x: 40, y: 40 },
@@ -323,6 +323,18 @@ const OverlayPage: React.FC = () => {
       };
       ipcRenderer.on('overlay-positions-updated', positionsListener);
 
+      // Pull the current overlay state explicitly. The main process also pushes
+      // this during `did-finish-load`, but that fires before these listeners are
+      // registered (React mounts afterwards) — on a cold start that push is
+      // missed. Requesting it here guarantees a correctly configured overlay
+      // on every launch, no matter the bundle cache state.
+      ipcRenderer.invoke('overlay-get-state').then((state: any) => {
+        if (!state) return;
+        if (typeof state.lock === 'boolean') setIsLocked(state.lock);
+        if (state.settings) settingsListener(_, state.settings);
+        if (state.positions) setPositions((prev: Positions) => ({ ...prev, ...state.positions }));
+      }).catch(() => { });
+
       return () => {
         ipcRenderer.removeListener('overlay-settings-updated', settingsListener);
         ipcRenderer.removeListener('overlay-lock-changed', lockListener);
@@ -335,13 +347,13 @@ const OverlayPage: React.FC = () => {
   // Fallback listener for localStorage settings sync in standard web browser tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'fjoste_overlay_settings') {
+      if (e.key === 'openpipeclub_overlay_settings') {
         try {
           const newSettings = JSON.parse(e.newValue || '');
           if (newSettings) {
             // Correctly load and merge the active widget sizes for the current singleRowHud setting
             const isSingle = newSettings.singleRowHud || false;
-            const sizeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+            const sizeKey = isSingle ? 'openpipeclub_overlay_widget_sizes_single' : 'openpipeclub_overlay_widget_sizes';
             const savedSizes = localStorage.getItem(sizeKey);
             if (savedSizes) {
               try {
@@ -351,10 +363,10 @@ const OverlayPage: React.FC = () => {
             setSettings(prev => ({ ...prev, ...newSettings }));
           }
         } catch (err) { }
-      } else if (e.key === 'fjoste_overlay_widget_sizes' || e.key === 'fjoste_overlay_widget_sizes_single') {
+      } else if (e.key === 'openpipeclub_overlay_widget_sizes' || e.key === 'openpipeclub_overlay_widget_sizes_single') {
         // Also listen to widget size changes directly
         const isSingle = settings.singleRowHud || false;
-        const activeKey = isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+        const activeKey = isSingle ? 'openpipeclub_overlay_widget_sizes_single' : 'openpipeclub_overlay_widget_sizes';
         if (e.key === activeKey) {
           try {
             const newSizes = JSON.parse(e.newValue || '');
@@ -372,7 +384,7 @@ const OverlayPage: React.FC = () => {
   // Load/switch positions when singleRowHud changes in Overlay page
   useEffect(() => {
     const isSingle = settings.singleRowHud || false;
-    const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+    const posKey = isSingle ? 'openpipeclub_overlay_positions_single' : 'openpipeclub_overlay_positions';
 
     const savedPos = localStorage.getItem(posKey);
     let resolvedPos = {
@@ -418,26 +430,26 @@ const OverlayPage: React.FC = () => {
           toast(event.title || 'System-Meldung', {
             description: event.content || '',
             duration: 5000,
-            className: 'custom-toast toast-resumed glass-card',
+            className: 'custom-toast toast-resumed frosted-card',
           });
         } else if (event.type === 'start' || event.type === 'delivered') {
           const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
           toast.success(title, {
             description: content,
             duration: 5000,
-            className: `custom-toast ${toastClass} glass-card`,
+            className: `custom-toast ${toastClass} frosted-card`,
           });
         } else if (event.type === 'cancelled') {
           toast.error(title, {
             description: content,
             duration: 5000,
-            className: 'custom-toast toast-cancelled glass-card',
+            className: 'custom-toast toast-cancelled frosted-card',
           });
         } else if (event.type === 'resumed') {
           toast.info(title, {
             description: content,
             duration: 5000,
-            className: 'custom-toast glass-card',
+            className: 'custom-toast frosted-card',
           });
         }
 
@@ -563,7 +575,7 @@ const OverlayPage: React.FC = () => {
         }
       };
       const isSingle = settings.singleRowHud || false;
-      const posKey = isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
+      const posKey = isSingle ? 'openpipeclub_overlay_positions_single' : 'openpipeclub_overlay_positions';
       localStorage.setItem(posKey, JSON.stringify(updated));
       return updated;
     });
@@ -608,14 +620,14 @@ const OverlayPage: React.FC = () => {
       case 'neon':
       default:
         return {
-          card: 'border-2 border-[#2ba1b9]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
+          card: 'border-2 border-[#f59e0b]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
           textMuted: 'text-slate-500',
-          textActive: 'text-[#22D1EE]',
+          textActive: 'text-[#f59e0b]',
           primaryAccent: 'bg-primary',
-          borderAccent: 'border-[#2ba1b9]/20',
+          borderAccent: 'border-[#f59e0b]/20',
           barBg: 'bg-white/5 border border-white/5',
-          barFill: 'bg-gradient-to-r from-primary to-[#0ea5e9] shadow-[0_0_12px_rgba(43,161,185,0.4)]',
-          glow: 'shadow-[0_0_15px_rgba(43,161,185,0.3)]'
+          barFill: 'bg-gradient-to-r from-primary to-[#0ea5e9] shadow-[0_0_12px_rgba(245, 158, 11,0.4)]',
+          glow: 'shadow-[0_0_15px_rgba(245, 158, 11,0.3)]'
         };
     }
   };
@@ -649,8 +661,8 @@ const OverlayPage: React.FC = () => {
     <div className="flex-1 flex items-center justify-center p-2">
       <img
         src="logo.png"
-        alt="FJOSTE"
-        className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(43,161,185,0.4)]"
+        alt="Open Pipe Club"
+        className="h-16 w-16 object-contain opacity-80 filter drop-shadow-[0_0_8px_rgba(245, 158, 11,0.4)]"
       />
     </div>
   );
@@ -721,7 +733,7 @@ const OverlayPage: React.FC = () => {
                 className="h-full rounded-full transition-all duration-300"
                 style={{
                   width: `${Math.min(100, (rpm / 2000) * 100)}%`,
-                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9'
+                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#f59e0b'
                 }}
               />
             </div>
@@ -796,7 +808,7 @@ const OverlayPage: React.FC = () => {
                 className="h-full rounded-full transition-all duration-300"
                 style={{
                   width: `${Math.min(100, (rpm / 2000) * 100)}%`,
-                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#2ba1b9'
+                  backgroundColor: rpm > 1700 ? '#ef4444' : rpm > 1500 ? '#fbbf24' : '#f59e0b'
                 }}
               />
             </div>
@@ -954,8 +966,8 @@ const OverlayPage: React.FC = () => {
         accentColor={
           settings.style === 'carbon' ? '#f59e0b' :
             settings.style === 'minimal' ? '#ffffff' :
-              settings.style === 'custom' ? (settings.customAccentColor || '#22D1EE') :
-                '#22D1EE'
+              settings.style === 'custom' ? (settings.customAccentColor || '#f59e0b') :
+                '#f59e0b'
         }
         width={mapW}
         height={mapH}
@@ -1000,7 +1012,7 @@ const OverlayPage: React.FC = () => {
       {/* Visual Alignment Grid (only visible when unlocked) */}
       {!isLocked && (
         <div className="absolute inset-0 pointer-events-none opacity-20" style={{
-          backgroundImage: 'radial-gradient(rgba(43, 161, 185, 0.15) 1px, transparent 1px)',
+          backgroundImage: 'radial-gradient(rgba(245, 158, 11, 0.15) 1px, transparent 1px)',
           backgroundSize: '24px 24px'
         }} />
       )}
@@ -1009,8 +1021,8 @@ const OverlayPage: React.FC = () => {
 
       {/* Setup Mode Info Banner */}
       {!isLocked && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#2ba1b9]/30 px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#22D1EE] flex items-center gap-2 justify-center">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#f59e0b]/30 px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#f59e0b] flex items-center gap-2 justify-center">
             <Unlock size={12} className="animate-pulse" /> Vorschaumodus
           </p>
         </div>
@@ -1087,10 +1099,10 @@ const OverlayPage: React.FC = () => {
                 overflow: 'hidden',
                 backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
                 // Custom accent properties
-                '--custom-accent': settings.customAccentColor || '#22d1ee',
-                '--custom-border': `${settings.customAccentColor || '#22d1ee'}33`,
-                '--custom-glow': `${settings.customAccentColor || '#22d1ee'}80`,
-                '--custom-glow-subtle': `${settings.customAccentColor || '#22d1ee'}26`,
+                '--custom-accent': settings.customAccentColor || '#f59e0b',
+                '--custom-border': `${settings.customAccentColor || '#f59e0b'}33`,
+                '--custom-glow': `${settings.customAccentColor || '#f59e0b'}80`,
+                '--custom-glow-subtle': `${settings.customAccentColor || '#f59e0b'}26`,
               } as React.CSSProperties}
             >
 
@@ -1100,7 +1112,7 @@ const OverlayPage: React.FC = () => {
               {settings.style === 'carbon' && <div className="carbon-pattern" />}
               {/* Grab handle overlay (only visible when unlocked) */}
               {!isLocked && (
-                <div className="absolute inset-0 bg-primary/[0.02] border border-[#22D1EE]/20 rounded-[inherit] pointer-events-none group-hover:border-[#22D1EE]/40 transition-colors" />
+                <div className="absolute inset-0 bg-primary/[0.02] border border-[#f59e0b]/20 rounded-[inherit] pointer-events-none group-hover:border-[#f59e0b]/40 transition-colors" />
               )}
               {content}
             </div>
@@ -1117,7 +1129,7 @@ const OverlayPage: React.FC = () => {
             border: '2px solid var(--border)',
             color: 'var(--foreground)',
           },
-          className: 'glass-card',
+          className: 'frosted-card',
         }}
       />
 

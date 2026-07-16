@@ -161,3 +161,4 @@ const SpotifyWidget: React.FC<SpotifyWidgetProps> = ({ themeClasses: c, isLocked
 };
 
 export default SpotifyWidget;
+

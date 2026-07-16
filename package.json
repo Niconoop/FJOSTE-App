@@ -1,9 +1,9 @@
 {
-  "name": "FJOSTE-APP",
+  "name": "open-pipe-club-app",
   "private": true,
-  "version": "1.0.9",
-  "description": "FJOSTE App",
-  "author": "FJOSTE",
+  "version": "1.0.10",
+  "description": "Open Pipe Club App",
+  "author": "Open Pipe Club",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -13,10 +13,13 @@
     "dist": "set NODE_OPTIONS=--no-deprecation && vite build && electron-builder"
   },
   "build": {
-    "appId": "com.fjostegroup.tracker",
-    "productName": "FJOSTE App",
+    "appId": "com.openpipeclubgroup.tracker",
+    "productName": "Open Pipe Club App",
     "compression": "maximum",
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/discord-rpc/**"
+    ],
     "directories": {
       "output": "dist-app"
     },
@@ -55,7 +58,7 @@
         }
       ],
       "icon": "public/logo.png",
-      "executableName": "FJOSTE App"
+      "executableName": "Open Pipe Club App"
     }
   },
   "dependencies": {

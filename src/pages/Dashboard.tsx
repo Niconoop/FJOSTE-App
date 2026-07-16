@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, MapPin, Monitor } from 'lucide-react';
+import { 
+  Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, 
+  MapPin, Monitor, Award, Sparkles, UserCheck, Plus, ShieldAlert, Settings, Database, Package, Newspaper} from 'lucide-react';
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
+import { useAuth } from '../context/AuthContext';
 
 interface KpiProps {
   icon: any;
@@ -12,37 +15,21 @@ interface KpiProps {
   delay?: number;
 }
 
-const KpiCard = ({ icon: Icon, label, value, color = "#22D1EE", delay = 0 }: KpiProps) => (
+const KpiCard = ({ icon: Icon, label, value, color = "#f59e0b", delay = 0 }: KpiProps) => (
   <motion.div
-    initial={{ opacity: 0, y: 30, scale: 0.95 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ type: "spring", stiffness: 180, damping: 18, delay }}
-    whileHover={{ y: -4, scale: 1.02 }}
-    whileTap={{ scale: 0.98 }}
-    className="glass-card group transition-colors relative overflow-hidden cursor-default"
+    initial={{ opacity: 1, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay }}
+    className="frosted-card p-4"
   >
-    {/* Colorful Top Accent Border */}
-    <div
-      className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl transition-all duration-300 group-hover:h-[4px]"
-      style={{ backgroundColor: color }}
-    />
-
-    <div className="flex items-center gap-2.5 mb-3">
-      <motion.div
-        className="p-2.5 rounded-xl"
-        style={{ backgroundColor: `${color}15` }}
-        whileHover={{ scale: 1.15, rotate: 8 }}
-        transition={{ type: "spring", stiffness: 300, damping: 12 }}
-      >
-        <Icon className="w-4.5 h-4.5" style={{ color }} />
-      </motion.div>
-      <span className="text-[10px] text-slate-500 uppercase tracking-[0.2em] font-bold">{label}</span>
-    </div>
-    <div
-      className="font-unbounded text-2xl font-bold text-white tracking-tighter transition-all duration-300 text-glow-hover"
-      style={{ '--glow-color': `${color}55` } as React.CSSProperties}
-    >
-      {typeof value === "number" ? value.toLocaleString("de-DE") : value ?? "--"}
+    <div className="flex justify-between items-start">
+      <div>
+        <p className="text-xs text-slate-400 uppercase font-semibold">{label}</p>
+        <p className="text-2xl font-bold text-white">
+          {value}
+        </p>
+      </div>
+      <Icon className="w-5 h-5 text-slate-500" />
     </div>
   </motion.div>
 );
@@ -56,20 +43,42 @@ const staggerContainer = {
 };
 
 const staggerChild = {
-  hidden: { opacity: 0, y: 18 },
+  hidden: { opacity: 1, y: 18 },
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 20 } }
 };
 
-const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void, telemetry?: any }) => {
+const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void; onNewsCreate?: () => void; telemetry?: any }) => {
+  const { user, isAdmin, hasRole } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [dashboard, setDashboard] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [personalDriver, setPersonalDriver] = useState<any>(null);
+  const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [truckersmpSession, setTruckersmpSession] = useState<any>(null);
+
+  useEffect(() => {
+    // Poll TruckersMP session every 60s
+    const fetchSession = async () => {
+      try {
+        const res = await apiService.getMyTruckersMPSession();
+        setTruckersmpSession(res.data);
+      } catch (e) {
+        // ignore if not logged in
+      }
+    };
+    fetchSession();
+    const interval = setInterval(fetchSession, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   useEffect(() => {
     setLoading(true);
+    const isHR = isAdmin || (hasRole && hasRole(["hr team", "hr-team", "personal team", "personal-team"]));
+    const targetId = user?.user_id || user?.id;
+
     Promise.allSettled([
       apiService.getStats().then(r => setStats(r.data)),
       apiService.getDashboard().then(r => {
@@ -101,11 +110,52 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
       apiService.getNews().then(r => {
         const data = Array.isArray(r.data) ? r.data : [];
         setNews(data.slice(0, 1));
-      })
+      }),
+      targetId ? apiService.getMember(targetId).then(r => setPersonalDriver(r.data)) : Promise.resolve(),
+      isHR ? apiService.getApplications().then(r => setApplications(r.data)) : Promise.resolve()
     ]).finally(() => {
       setLoading(false);
     });
-  }, []);
+  }, [user, isAdmin, hasRole]);
+
+  const getGreeting = () => {
+    const hr = new Date().getHours();
+    if (hr < 5) return "Gute Nacht";
+    if (hr < 12) return "Guten Morgen";
+    if (hr < 18) return "Guten Tag";
+    return "Guten Abend";
+  };
+
+  const getRoleBadge = () => {
+    if (user?.is_admin) {
+      return (
+        <span className="flex items-center gap-1.5 px-3 py-1 text-[9px] font-black uppercase tracking-widest bg-red-500/10 text-red-400 border border-red-500/20 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+          System-Administrator
+        </span>
+      );
+    }
+    const isHR = hasRole && hasRole(["hr team", "hr-team", "personal team", "personal-team"]);
+    if (isHR) {
+      return (
+        <span className="flex items-center gap-1.5 px-3 py-1 text-[9px] font-black uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+          Personalabteilung (HR)
+        </span>
+      );
+    }
+    const isEvent = hasRole && hasRole(["event team", "event-team"]);
+    if (isEvent) {
+      return (
+        <span className="flex items-center gap-1.5 px-3 py-1 text-[9px] font-black uppercase tracking-widest bg-amber-500/10 text-[#f59e0b] border border-amber-500/20 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+          Event-Team
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1.5 px-3 py-1 text-[9px] font-black uppercase tracking-widest bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 rounded-full">
+        {typeof user?.role === 'object' ? user?.role?.name : (user?.role || "Fahrer")}
+      </span>
+    );
+  };
 
   const isGameRunning = telemetry && !telemetry.error;
   const hasData = isGameRunning && telemetry.gameVersion > 0;
@@ -114,10 +164,15 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
   const displayKm = stats?.distance || stats?.total_driven_distance_km || dashboard?.totalKm || 0;
   const displayRev = stats?.revenue || stats?.total_revenue || dashboard?.totalRevenue || 0;
 
+  const isHR = isAdmin || (hasRole && hasRole(["hr team", "hr-team", "personal team", "personal-team"]));
+  const isEvent = isAdmin || (hasRole && hasRole(["event team", "event-team"]));
+  const NEWS_ROLES = ["event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", "personal team", "personal-team"];
+  const canManageNews = isAdmin || (hasRole && hasRole(NEWS_ROLES));
+
   return (
     <div className="space-y-8 pb-10">
+      {/* Title & Telemetry Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-unbounded text-2xl font-bold text-white tracking-tight">Dashboard</h1>
         <div className="flex items-center gap-2">
           {isGameRunning && (
             <motion.div
@@ -129,7 +184,6 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
               {hasData ? "In-Game Telemetrie Aktiv" : "Warte auf Spieldaten..."}
             </motion.div>
           )}
-          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest bg-[#000000] px-3 py-1.5 rounded-lg border border-white/5">Live Data</div>
         </div>
       </div>
 
@@ -143,52 +197,79 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {/* KPIs */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-24" />
-              ))}
-            </div>
+             {/* Personalized Welcome Hero Card */}
+             <div className="frosted-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-white/5 rounded-2xl overflow-hidden animate-pulse">
+               <div className="flex items-center gap-4 md:gap-6 z-10">
+                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white/5 border border-white/5 shrink-0" />
+                 <div className="space-y-2.5 md:space-y-2">
+                   <div className="h-3 bg-white/5 rounded w-24" />
+                   <div className="h-6 bg-white/5 rounded w-56" />
+                   <div className="h-3 bg-white/5 rounded w-40" />
+                 </div>
+               </div>
+               <div className="flex flex-wrap gap-3 z-10 w-full sm:w-auto md:justify-end">
+                 <div className="h-10 bg-white/5 rounded-xl w-full sm:w-32" />
+                 <div className="h-10 bg-white/5 rounded-xl w-full sm:w-32" />
+               </div>
+             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column Skeletons */}
-              <div className="space-y-6">
-                <div className="glass-card hover-glow h-[240px] flex flex-col justify-between">
-                  <div className="animate-pulse bg-white/5 rounded h-4 w-32" />
-                  <div className="animate-pulse bg-white/5 rounded-2xl h-32" />
-                </div>
-                <div className="glass-card hover-glow h-[180px] flex flex-col justify-between">
-                  <div className="animate-pulse bg-white/5 rounded h-4 w-32" />
-                  <div className="animate-pulse bg-white/5 rounded-2xl h-24" />
-                </div>
-              </div>
+             {/* Personal Driver Stats Grid */}
+             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+               {[1, 2, 3, 4].map(i => (
+                 <div key={i} className="frosted-card p-4 animate-pulse">
+                   <div className="h-3 bg-white/5 rounded w-24 mb-3" />
+                   <div className="h-7 bg-white/5 rounded w-20" />
+                 </div>
+               ))}
+             </div>
 
-              {/* Right Column Skeletons */}
-              <div className="glass-card hover-glow h-full min-h-[440px] flex flex-col justify-between">
-                <div className="animate-pulse bg-white/5 rounded h-4 w-32" />
-                <div className="space-y-3 flex-1 mt-6">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-16" />
-                  ))}
-                </div>
-              </div>
-            </div>
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               {/* Upcoming Events */}
+               <div className="lg:col-span-2">
+                 <div className="flex items-center gap-3 mb-6">
+                   <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                   <div className="h-4 bg-white/5 rounded w-40 animate-pulse" />
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                   {[1, 2, 3, 4].map(i => (
+                     <div key={i} className="frosted-card p-5 rounded-2xl border border-white/5 animate-pulse flex flex-col">
+                       <div className="flex-grow space-y-3">
+                         <div className="h-2 bg-white/5 rounded w-24" />
+                         <div className="h-4 bg-white/5 rounded w-32" />
+                         <div className="space-y-2 pt-2">
+                           <div className="h-3 bg-white/5 rounded w-full" />
+                           <div className="h-3 bg-white/5 rounded w-3/4" />
+                         </div>
+                       </div>
+                       <div className="border-t border-white/5 mt-4 pt-4 space-y-2">
+                         <div className="h-3 bg-white/5 rounded w-full" />
+                         <div className="h-3 bg-white/5 rounded w-2/3" />
+                       </div>
+                       <div className="h-10 bg-white/5 rounded-lg mt-4" />
+                     </div>
+                   ))}
+                 </div>
+               </div>
 
-            {/* Map banner skeleton */}
-            <div className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-16" />
-
-            {/* Overlay banner skeleton */}
-            <div className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-16" />
-
-            {/* Recent Jobs Skeletons */}
-            <div className="glass-card hover-glow">
-              <div className="animate-pulse bg-white/5 rounded h-4 w-32 mb-6" />
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-24" />
-                ))}
-              </div>
-            </div>
+               {/* Latest News */}
+               <div className="lg:col-span-2">
+                 <div className="flex items-center gap-3 mb-6">
+                   <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                   <div className="h-4 bg-white/5 rounded w-40 animate-pulse" />
+                 </div>
+                 <div className="space-y-3">
+                   {[1].map(i => (
+                     <div key={i} className="frosted-card flex items-center gap-4 p-4 rounded-2xl border border-white/5 animate-pulse">
+                       <div className="p-3 rounded-xl bg-white/5 w-11 h-11 shrink-0" />
+                       <div className="flex-1 min-w-0 space-y-2">
+                         <div className="h-4 bg-white/5 rounded w-1/2" />
+                         <div className="h-3 bg-white/5 rounded w-1/3" />
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             </div>
           </motion.div>
         ) : (
           <motion.div
@@ -199,278 +280,233 @@ const Dashboard = ({ onViewProfile, onNavigate, telemetry }: { onViewProfile: (i
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
-            {/* KPIs */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard icon={Users} label="Mitglieder" value={stats?.members ?? (dashboard?.member_chart?.length || 0)} delay={0.02} />
-              <KpiCard icon={Briefcase} label="Jobs" value={displayJobs.toLocaleString("de-DE")} color="#0EA5E9" delay={0.04} />
-              <KpiCard icon={Route} label="Gesamt km" value={displayKm ? `${Math.round(displayKm / 1000)}k` : '0k'} color="#06B6D4" delay={0.06} />
-              <KpiCard icon={Coins} label="Umsatz" value={displayRev ? (displayRev >= 1000000 ? `${(displayRev / 1000000).toFixed(1)}M` : `${Math.round(displayRev / 1000)}k`) : '0k'} color="#10b981" delay={0.08} />
-            </div>
+            {/* Personalized Welcome Hero Card */}
+            <motion.div
+              variants={staggerChild}
+              className="relative frosted-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden shadow-2xl border border-white/5 rounded-2xl"
+            >
+              <div className="flex items-center gap-4 md:gap-6 z-10">
+                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                  {user?.avatar_url ? (
+                    <img src={getAvatarUrl(user.avatar_url)} alt={user.username} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-[#f59e0b]/20 flex items-center justify-center text-2xl font-black text-[#f59e0b] italic">
+                      {user?.username?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1 md:space-y-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h2 className="text-xl md:text-3xl font-unbounded font-black italic uppercase tracking-wider text-white">
+                      {getGreeting()}, {user?.username}!
+                    </h2>
+                    {getRoleBadge()}
+                  </div>
+                  <p className="text-zinc-400 text-xs md:text-sm font-medium">
+                    Willkommen zurück.
+                  </p>
+                </div>
+              </div>
+
+              {/* Role Dependent Action Board */}
+              <div className="flex flex-wrap gap-3 z-10 w-full sm:w-auto md:flex-1 md:min-w-0 md:justify-end">
+                {user?.is_admin && (
+                  <button
+                    onClick={() => onNavigate('database')}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900/50 border border-white/10 hover:bg-white/10 text-xs font-bold uppercase tracking-widest text-white transition-all"
+                  >
+                    <Database className="w-4 h-4" />
+                    Datenbank
+                  </button>
+                )}
+                {isHR && (
+                  <button
+                    onClick={() => onNavigate('applications')}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900/50 border border-white/10 hover:bg-white/10 text-xs font-bold uppercase tracking-widest text-white transition-all"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Bewerbungen
+                  </button>
+                )}
+                {isEvent && (
+                  <button
+                    onClick={() => onNavigate('events')}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 text-black text-xs font-bold uppercase tracking-widest transition-all hover:bg-amber-500"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Event Planen
+                  </button>
+                )}
+                {canManageNews && (
+                  <button
+                    onClick={onNewsCreate}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 text-black text-xs font-bold uppercase tracking-widest transition-all hover:bg-amber-500"
+                  >
+                    <Newspaper className="w-4 h-4" />
+                    News erstellen
+                  </button>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Personal Driver Stats Grid */}
+            {personalDriver && (
+              <motion.div variants={staggerChild} className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                  <h3 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Deine persönlichen Fahrdaten</h3>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <KpiCard icon={Route} label="Deine Kilometer" value={`${Math.round(personalDriver.total_driven_distance_km || 0).toLocaleString("de-DE")} KM`} />
+                  <KpiCard icon={Truck} label="Deine Fahrten" value={`${(personalDriver.total_jobs || 0).toLocaleString("de-DE")} Jobs`} />
+                  <KpiCard icon={Coins} label="Dein Umsatz" value={`${Math.round(personalDriver.total_revenue || 0).toLocaleString("de-DE")} $`} />
+                  <KpiCard icon={Award} label="Dein Rang & Level" value={`Lv. ${personalDriver.level || 1}`} />
+                </div>
+              </motion.div>
+            )}
+
 
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: Events & News */}
-              <div className="space-y-6">
-                {/* Upcoming Events */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.05 }}
-                  className="glass-card hover-glow"
-                >
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Nächste Termine</h2>
-                    <motion.button
-                      onClick={() => onNavigate('events')}
-                      whileHover={{ x: 3 }}
-                      className="text-[10px] text-[#22D1EE] font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
-                    >
-                      Alle <ArrowRight className="w-3 h-3" />
-                    </motion.button>
-                  </div>
-                  {events.length === 0 ? (
-                    <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/5 rounded-2xl text-slate-600 text-xs font-bold">Keine Termine</div>
-                  ) : (
-                    <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" animate="show">
-                      {events.map(e => (
-                        <motion.div
-                          key={e.id}
-                          variants={staggerChild}
-                          onClick={() => onNavigate('events')}
-                          whileHover={{ y: -3, scale: 1.015, borderColor: "rgba(43, 161, 185, 0.25)" }}
-                          whileTap={{ scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                          className="flex items-center gap-4 p-4 rounded-2xl bg-black border border-white/[0.08] transition-colors group cursor-pointer"
-                        >
-                          <motion.div
-                            className="p-3 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors"
-                            whileHover={{ rotate: 8, scale: 1.1 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 12 }}
-                          >
-                            <Calendar className="w-5 h-5 text-amber-400" />
-                          </motion.div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white font-bold truncate mb-1">
-                              {typeof e.title === 'object' ? e.title.name : e.title}
-                            </p>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {new Date(e.start_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} Uhr
-                            </p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  )}
-                </motion.div>
-
-                {/* Latest News */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.07 }}
-                  className="glass-card hover-glow"
-                >
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Neueste News</h2>
-                    <motion.button
-                      onClick={() => onNavigate('news')}
-                      whileHover={{ x: 3 }}
-                      className="text-[10px] text-[#22D1EE] font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
-                    >
-                      Alle <ArrowRight className="w-3 h-3" />
-                    </motion.button>
-                  </div>
-                  {news.length === 0 ? (
-                    <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/5 rounded-2xl text-slate-600 text-xs font-bold">Keine News</div>
-                  ) : (
-                    <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" animate="show">
-                      {news.map(n => (
-                        <motion.div
-                          key={n.id}
-                          variants={staggerChild}
-                          onClick={() => onNavigate('news')}
-                          whileHover={{ y: -3, scale: 1.015, borderColor: "rgba(43, 161, 185, 0.25)" }}
-                          whileTap={{ scale: 0.99 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                          className="flex items-center gap-4 p-4 rounded-2xl bg-black border border-white/[0.08] transition-colors group cursor-pointer"
-                        >
-                          <motion.div
-                            className="p-3 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors"
-                            whileHover={{ rotate: 8, scale: 1.1 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 12 }}
-                          >
-                            <Truck className="w-5 h-5 text-emerald-400" />
-                          </motion.div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white font-bold truncate mb-1">
-                              {n.title}
-                            </p>
-                            <p className="text-[11px] text-slate-500 font-medium">
-                              {new Date(n.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })} • {n.author || "Team"}
-                            </p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  )}
-                </motion.div>
-              </div>
-
-              {/* Right Column: Top Drivers */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.09 }}
-                className="glass-card hover-glow"
-              >
+              {/* Upcoming Events */}
+              <div className="lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Top Fahrer</h2>
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                    <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Nächste Termine</h2>
+                  </div>
                   <motion.button
-                    onClick={() => onNavigate('statistiken')}
+                    onClick={() => onNavigate('events')}
                     whileHover={{ x: 3 }}
-                    className="text-[10px] text-[#22D1EE] font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
+                    className="text-xs text-amber-400 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
                   >
-                    Stats <ArrowRight className="w-3 h-3" />
+                    Alle <ArrowRight className="w-3 h-3" />
                   </motion.button>
                 </div>
-                <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" animate="show">
-                  {(dashboard?.top_drivers || [1, 2, 3]).map((d: any, i: number) => (
-                    <motion.div
-                      key={d.id || i}
-                      variants={staggerChild}
-                      onClick={() => d.id && onViewProfile(d.id)}
-                      whileHover={{ y: -3, scale: 1.015, borderColor: "rgba(43, 161, 185, 0.25)" }}
-                      whileTap={{ scale: 0.99 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-black border border-white/[0.08] transition-colors group cursor-pointer"
-                    >
-                      <motion.span
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black text-white ${i === 0 ? "bg-amber-500" : i === 1 ? "bg-slate-400" : "bg-amber-700"}`}
-                        whileHover={{ scale: 1.15, rotate: -8 }}
-                        transition={{ type: "spring", stiffness: 350, damping: 12 }}
+                {events.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/10 rounded-xl text-slate-500 text-xs font-bold">Keine Termine</div>
+                ) : (
+                  <motion.div 
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+                    variants={staggerContainer}
+                    initial="hidden"
+                    animate="show"
+                  >
+                    {events.map(e => (
+                      <motion.div
+                        key={e.id}
+                        variants={staggerChild}
+                        onClick={() => window.open(`https://www.openpipeclub.com/events/${e.slug || (typeof e.title === 'object' ? e.title.name : e.title).toLowerCase().replace(/\s+/g, '-')}`, '_blank')}
+                        className="frosted-card p-5 rounded-2xl border border-white/5 hover:border-amber-400/40 transition-all group cursor-pointer flex flex-col"
                       >
-                        {d.rank || i + 1}
-                      </motion.span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white font-bold truncate mb-1">{d.name || "Lädt..."}</p>
-                        <p className="text-[11px] text-slate-500 font-medium">{d.role || "Fahrer"}</p>
-                      </div>
-                      <span className="text-sm font-black text-emerald-400 tracking-tighter italic">
-                        {d.total_revenue ? `${(d.total_revenue / 1000).toFixed(0)}k $` : "--"}
-                      </span>
-                    </motion.div>
-                  ))}
-                </motion.div>
+                        <div className="flex-grow space-y-4">
+                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Veranstaltet von Open Pipe Club</p>
+                          <h3 className="text-white font-bold text-lg uppercase">{typeof e.title === 'object' ? e.title.name : e.title}</h3>
+                          
+                          <div className="space-y-3 text-xs">
+                            <div className="flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-slate-500 mr-3"></div>
+                              <div>
+                                <p className="text-slate-500 uppercase font-semibold text-[10px]">Abfahrt</p>
+                                <p className="text-white font-bold">{e.start_location || 'TBA'}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-amber-400 mr-3"></div>
+                              <div>
+                                <p className="text-slate-500 uppercase font-semibold text-[10px]">Ziel</p>
+                                <p className="text-white font-bold">{e.end_location || 'TBA'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-white/10 mt-4 pt-4 text-xs space-y-2">
+                          <div className="flex justify-between">
+                            <p className="text-slate-500 uppercase font-semibold text-[10px]">Zeitplan</p>
+                            <p className="text-white font-medium">{new Date(e.start_date).toLocaleDateString("de-DE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} Uhr</p>
+                          </div>
+                          <div className="flex justify-between">
+                            <p className="text-slate-500 uppercase font-semibold text-[10px]">Kategorie</p>
+                            <p className="text-white font-bold uppercase">{e.category || 'Convoy'}</p>
+                          </div>
+                        </div>
+                        
+                        <button 
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            window.open(`https://www.openpipeclub.com/events/${e.slug || (typeof e.title === 'object' ? e.title.name : e.title).toLowerCase().replace(/\s+/g, '-')}`, '_blank');
+                          }}
+                          className="w-full mt-4 bg-amber-400 text-black text-xs font-bold uppercase py-3 rounded-lg hover:bg-amber-500 transition-colors flex items-center justify-center gap-2"
+                        >
+                          More Details <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Latest News */}
+              <motion.div
+                initial={{ opacity: 1, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.07 }}
+                className="lg:col-span-2"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                    <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Neueste News</h2>
+                  </div>
+                  <motion.button
+                    onClick={() => onNavigate('news')}
+                    whileHover={{ x: 3 }}
+                    className="text-xs text-amber-400 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
+                  >
+                    Alle <ArrowRight className="w-3 h-3" />
+                  </motion.button>
+                </div>
+                {news.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center border-2 border-dashed border-white/10 rounded-xl text-slate-500 text-xs font-bold">Keine News</div>
+                ) : (
+                  <motion.div className="space-y-3" variants={staggerContainer} initial="hidden" animate="show">
+                    {news.map(n => (
+                      <motion.div
+                        key={n.id}
+                        variants={staggerChild}
+                        onClick={() => onNavigate('news')}
+                        whileHover={{ y: -3, scale: 1.015 }}
+                        whileTap={{ scale: 0.99 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                        className="frosted-card flex items-center gap-4 p-4 rounded-2xl border border-white/5 hover:border-amber-400/40 hover:shadow-[0_0_20px_rgba(245,158,11,0.06)] transition-all group cursor-pointer"
+                      >
+                        <motion.div
+                          className="p-3 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors"
+                          whileHover={{ rotate: 8, scale: 1.1 }}
+                          transition={{ type: "spring", stiffness: 300, damping: 12 }}
+                        >
+                          <Package className="w-5 h-5 text-emerald-400" />
+                        </motion.div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-bold truncate mb-1">
+                            {n.title}
+                          </p>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            {new Date(n.created_at).toLocaleDateString("de-DE", { day: "2-digit", month: "short" })} • {n.author || "Team"}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
               </motion.div>
             </div>
-
-            {/* Map Banner */}
-            <motion.div
-              onClick={() => onNavigate('map')}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.1 }}
-              whileHover={{ y: -3, scale: 1.008 }}
-              whileTap={{ scale: 0.995 }}
-              className="glass-card hover-glow flex items-center justify-between !py-4 group cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <motion.div whileHover={{ scale: 1.15, rotate: 12 }} transition={{ type: "spring", stiffness: 300, damping: 12 }}>
-                  <MapPin className="w-5 h-5 text-primary" />
-                </motion.div>
-                <div>
-                  <h2 className="font-unbounded text-xs font-bold text-white group-hover:text-primary transition-colors uppercase tracking-wider">Live Karte</h2>
-                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">Fahrer in Echtzeit auf der Route verfolgen</p>
-                </div>
-              </div>
-              <motion.div
-                initial={{ x: 0 }}
-                whileHover={{ x: 4 }}
-                transition={{ type: "spring", stiffness: 300, damping: 15 }}
-              >
-                <ArrowRight className="w-4 h-4 text-primary" />
-              </motion.div>
-            </motion.div>
-
-            {/* Overlay Banner */}
-            <motion.div
-              onClick={() => onNavigate('overlay-settings')}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.12 }}
-              whileHover={{ y: -3, scale: 1.008 }}
-              whileTap={{ scale: 0.995 }}
-              className="glass-card hover-glow flex items-center justify-between !py-4 group cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <motion.div whileHover={{ scale: 1.15, rotate: 12 }} transition={{ type: "spring", stiffness: 300, damping: 12 }}>
-                  <Monitor className="w-5 h-5 text-primary" />
-                </motion.div>
-                <div>
-                  <h2 className="font-unbounded text-xs font-bold text-white group-hover:text-primary transition-colors uppercase tracking-wider">ETS2 In-Game Overlay</h2>
-                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">Transparentes, modulares Telemetrie-Overlay direkt im Spiel anzeigen und anpassen</p>
-                </div>
-              </div>
-              <motion.div
-                initial={{ x: 0 }}
-                whileHover={{ x: 4 }}
-                transition={{ type: "spring", stiffness: 300, damping: 15 }}
-              >
-                <ArrowRight className="w-4 h-4 text-primary" />
-              </motion.div>
-            </motion.div>
-
-            {/* Recent Jobs */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.14 }}
-              className="glass-card hover-glow group transition-colors"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Letzte Jobs</h2>
-                <Truck className="w-4 h-4 text-slate-600" />
-              </div>
-              <motion.div
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                variants={staggerContainer}
-                initial="hidden"
-                animate="show"
-              >
-                {recentJobs.slice(0, 6).map((job, i) => (
-                  <motion.div
-                    key={i}
-                    variants={staggerChild}
-                    onClick={() => job.driver_id && onViewProfile(job.driver_id)}
-                    whileHover={{ y: -3, scale: 1.015, borderColor: "rgba(43, 161, 185, 0.25)" }}
-                    whileTap={{ scale: 0.99 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                    className="flex items-start gap-4 p-4 rounded-2xl bg-black border border-white/[0.08] transition-colors cursor-pointer"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-black border border-white/5 flex items-center justify-center shrink-0 overflow-hidden">
-                      {getAvatarUrl(job.driver_avatar) ? <img src={getAvatarUrl(job.driver_avatar)!} className="w-full h-full object-cover" /> : <Truck className="w-5 h-5 text-slate-600" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate mb-1">{job.driver_name}</p>
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium truncate mb-2">
-                        <MapPin className="w-2.5 h-2.5" />
-                        {job.source_city_name} → {job.destination_city_name}
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-tighter italic">
-                        <span className="text-emerald-400">{Math.round(job.revenue || 0).toLocaleString()} $</span>
-                        <span className="text-slate-400">{Math.round(job.driven_distance_km || 0)} KM</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 };
-
 
 export default Dashboard;

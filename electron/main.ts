@@ -7,6 +7,32 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import https from 'node:https'
+import os from 'node:os'
+
+// --- Sicherer Primitiv-Logger ---
+const LOG_FILE = path.join(os.homedir(), 'Documents', 'openpipeclub_debug.log');
+const writeToLog = (message: string) => {
+  try {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`);
+  } catch (e) { /* Wenn das Loggen fehlschlägt, ist alles verloren */ }
+};
+// Log-Datei bei jedem Start leeren
+try { fs.writeFileSync(LOG_FILE, '--- Open Pipe Club App Log ---\n'); } catch (e) { }
+writeToLog('Logger initialisiert.');
+// --- Ende Logger ---
+
+// --- Globale Failsafes ---
+process.on('uncaughtException', (error, origin) => {
+  writeToLog(`FATAL: Uncaught Exception at: ${origin}\nERROR: ${error.message}\nSTACK: ${error.stack}`);
+  app.quit();
+});
+process.on('unhandledRejection', (reason, promise) => {
+  writeToLog(`FATAL: Unhandled Rejection. Reason: ${reason}`);
+});
+writeToLog('Globale Failsafes (uncaughtException, unhandledRejection) sind aktiv.');
+// --- Ende Failsafes ---
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -48,8 +74,8 @@ function safeSend(winInstance: BrowserWindow | null, channel: string, ...args: a
   if (winInstance && !winInstance.isDestroyed() && winInstance.webContents && !winInstance.webContents.isDestroyed()) {
     try {
       winInstance.webContents.send(channel, ...args);
-    } catch (e) {
-      console.error(`Failed to send to window:`, e);
+    } catch (e: any) {
+      writeToLog(`Failed to send to window: ${e.message}`);
     }
   }
 }
@@ -107,8 +133,10 @@ let lastSeenNotifId: string | null = null;
 let jobStartFuel = 0;
 let jobTotalSpeed = 0;
 let jobSpeedTicks = 0;
+let jobMaxSpeed = 0;
 
 async function loadSettings() {
+  writeToLog('Attempting to load settings...');
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
       const data = fs.readFileSync(SETTINGS_PATH, 'utf8');
@@ -154,14 +182,17 @@ async function loadSettings() {
           ...saved.overlaySettings
         };
       }
-      console.log('📦 Settings: Einstellungen geladen');
+      writeToLog('📦 Settings: Einstellungen geladen');
+    } else {
+      writeToLog('Settings file does not exist, using defaults.');
     }
-  } catch (e) {
-    console.error('❌ Settings: Fehler beim Laden der Einstellungen', e);
+  } catch (e: any) {
+    writeToLog(`❌ Settings: Fehler beim Laden der Einstellungen: ${e.message}\nStack: ${e.stack}`);
   }
 }
 
 function saveSettings() {
+  writeToLog('Attempting to save settings...');
   try {
     const data = {
       isRpcActive,
@@ -192,8 +223,9 @@ function saveSettings() {
       overlaySettings
     };
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.error('❌ Settings: Fehler beim Speichern der Einstellungen', e);
+    writeToLog('📦 Settings: Einstellungen erfolgreich gespeichert');
+  } catch (e: any) {
+    writeToLog(`❌ Settings: Fehler beim Speichern der Einstellungen: ${e.message}\nStack: ${e.stack}`);
   }
 }
 
@@ -202,6 +234,7 @@ loadSettings();
 
 
 function createSplashScreen() {
+  writeToLog('Creating splash screen...');
   splashWin = new BrowserWindow({
     width: 480,
     height: 380,
@@ -223,8 +256,8 @@ function createSplashScreen() {
     if (fs.existsSync(logoPath)) {
       logoBase64 = fs.readFileSync(logoPath).toString('base64');
     }
-  } catch (err) {
-    console.error('Failed to read logo.png for splash screen:', err);
+  } catch (err: any) {
+    writeToLog(`Failed to read logo.png for splash screen: ${err.message}`);
   }
 
   const splashHTML = `
@@ -251,10 +284,10 @@ function createSplashScreen() {
     .card {
       width: 360px;
       height: 260px;
-      background: #000000;
-      border: 1px solid rgba(43, 161, 185, 0.45);
-      box-shadow: 0 0 4px rgba(43, 161, 185, 0.9),
-                  0 0 12px rgba(43, 161, 185, 0.6);
+      background: rgba(0, 0, 0, 0.76);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      box-shadow: 0 0 4px rgba(245, 158, 11, 0.9),
+                  0 0 12px rgba(245, 158, 11, 0.6);
       border-radius: 24px;
       display: flex;
       flex-direction: column;
@@ -276,7 +309,7 @@ function createSplashScreen() {
       position: absolute;
       width: 70px;
       height: 70px;
-      background: #2ba1b9;
+      background: #f59e0b;
       border-radius: 50%;
       filter: blur(25px);
       opacity: 0.55;
@@ -287,7 +320,7 @@ function createSplashScreen() {
       width: 76px;
       height: 76px;
       object-fit: contain;
-      filter: drop-shadow(0 0 10px rgba(43,161,185,0.4));
+      filter: drop-shadow(0 0 10px rgba(245, 158, 11,0.4));
     }
     .title {
       font-family: 'Unbounded', sans-serif;
@@ -302,7 +335,7 @@ function createSplashScreen() {
     .subtitle {
       font-size: 11px;
       font-weight: 600;
-      color: #2ba1b9;
+      color: #f59e0b;
       letter-spacing: 3px;
       text-transform: uppercase;
       margin-top: 4px;
@@ -322,16 +355,16 @@ function createSplashScreen() {
       left: 0;
       right: 0;
       height: 2px;
-      background: rgba(43, 161, 185, 0.08);
+      background: rgba(245, 158, 11, 0.08);
       overflow: hidden;
     }
     .progress-bar {
       position: absolute;
       height: 100%;
       width: 40%;
-      background: linear-gradient(90deg, transparent, #2ba1b9, transparent);
+      background: linear-gradient(90deg, transparent, #f59e0b, transparent);
       animation: loading-slide 1.5s infinite linear;
-      box-shadow: 0 0 10px rgba(43, 161, 185, 0.5), 0 0 4px rgba(43, 161, 185, 0.2);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.5), 0 0 4px rgba(245, 158, 11, 0.2);
     }
     @keyframes pulse {
       0%, 100% { opacity: 0.4; transform: scale(0.96); }
@@ -353,7 +386,7 @@ function createSplashScreen() {
       <div class="logo-glow"></div>
       ${logoBase64 ? `<img class="logo" src="data:image/png;base64,${logoBase64}" />` : `<div style="font-size: 40px;">🚚</div>`}
     </div>
-    <div class="title">FJOSTE</div>
+    <div class="title">Open Pipe Club</div>
     <div class="subtitle">Tracker</div>
     <div class="status">Wird gestartet...</div>
     <div class="progress-track">
@@ -364,12 +397,12 @@ function createSplashScreen() {
 </html>
   `;
 
-  const tempSplashPath = path.join(app.getPath('temp'), 'fjoste_splash.html');
+  const tempSplashPath = path.join(app.getPath('temp'), 'openpipeclub_splash.html');
   try {
     fs.writeFileSync(tempSplashPath, splashHTML, 'utf8');
     splashWin.loadFile(tempSplashPath);
-  } catch (err) {
-    console.error('Failed to write/load splash.html:', err);
+  } catch (err: any) {
+    writeToLog(`Failed to write/load splash.html: ${err.message}`);
     // Fallback in case of disk write failures
     splashWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(splashHTML));
   }
@@ -384,11 +417,12 @@ let isMainReady = false;
 function showMainWindow() {
   if (isMainReady) return;
   isMainReady = true;
+  writeToLog('Showing main window.');
   if (splashWin && !splashWin.isDestroyed()) {
     try {
       splashWin.close();
-    } catch (e) {
-      console.error('Failed to close splashWin:', e);
+    } catch (e: any) {
+      writeToLog(`Failed to close splashWin: ${e.message}`);
     }
   }
   if (win && !win.isDestroyed()) {
@@ -398,15 +432,17 @@ function showMainWindow() {
 }
 
 ipcMain.on('app-ready', () => {
+  writeToLog('IPC event "app-ready" received from renderer.');
   showMainWindow();
 });
 
 function createWindow() {
-  app.name = 'FJOSTE App';
+  writeToLog('Creating main window...');
+  app.name = 'Open Pipe Club App';
   win = new BrowserWindow({
     width: 1280,
     height: 800,
-    title: 'FJOSTE App',
+    title: 'Open Pipe Club App',
     icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
     webPreferences: {
       nodeIntegration: true,
@@ -426,7 +462,7 @@ function createWindow() {
     const isExternal = !url.startsWith('file://') && !url.startsWith(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
     if (isExternal) {
       event.preventDefault();
-      shell.openExternal(url).catch(() => {});
+      shell.openExternal(url).catch(() => { });
     }
   });
 
@@ -434,7 +470,7 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     const isExternal = !url.startsWith('file://') && !url.startsWith(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
     if (isExternal && (url.startsWith('http:') || url.startsWith('https:'))) {
-      shell.openExternal(url).catch(() => {});
+      shell.openExternal(url).catch(() => { });
     }
     return { action: 'deny' };
   });
@@ -446,9 +482,11 @@ function createWindow() {
   }
 
   win.webContents.on('did-finish-load', () => {
+    writeToLog('Main window finished loading content.');
     // Set a fallback timer of 4 seconds in case React app fails to signal 'app-ready'
     setTimeout(showMainWindow, 4000);
-    
+
+    writeToLog('Scheduling RPC login in 3 seconds.');
     setTimeout(loginRpc, 3000);
     // Clear HTTP cache every 30 minutes to prevent unbounded growth
     setInterval(() => {
@@ -464,7 +502,7 @@ function createWindow() {
 
 ipcMain.on('window-close', (event) => {
   const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
-  console.log(`[IPC] window-close received. Target window exists: ${!!targetWin}`);
+  writeToLog(`[IPC] window-close received. Target window exists: ${!!targetWin}`);
   if (targetWin) {
     targetWin.close();
   } else {
@@ -473,14 +511,14 @@ ipcMain.on('window-close', (event) => {
 })
 ipcMain.on('window-minimize', (event) => {
   const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
-  console.log(`[IPC] window-minimize received. Target window exists: ${!!targetWin}`);
+  writeToLog(`[IPC] window-minimize received. Target window exists: ${!!targetWin}`);
   if (targetWin) {
     targetWin.minimize();
   }
 })
 ipcMain.on('window-maximize', (event) => {
   const targetWin = BrowserWindow.fromWebContents(event.sender) || win;
-  console.log(`[IPC] window-maximize received. Target window exists: ${!!targetWin}`);
+  writeToLog(`[IPC] window-maximize received. Target window exists: ${!!targetWin}`);
   if (targetWin) {
     if (targetWin.isMaximized()) {
       targetWin.unmaximize();
@@ -499,7 +537,7 @@ ipcMain.on('job-notification', (_, data) => {
 
 
 // Discord RPC
-const clientId = '1447245757232058510';
+const clientId = '1449830003020922994';
 let rpc: any = null;
 let isRpcConnected = false;
 let telemetryData: any = null;
@@ -511,17 +549,17 @@ let currentAppPage = 'Dashboard';
 function updateRpc() {
   if (!rpc || !isRpcActive || !isRpcConnected) return;
 
-  let details = 'FJOSTE App';
+  let details = 'Open Pipe Club App';
   let state = 'Bereit für die Fahrt';
   let activity: any = {
     details: details,
     state: state,
-    largeImageKey: 'fjoste',
-    largeImageText: 'FJOSTE Tracker',
+    largeImageKey: 'openpipeclub',
+    largeImageText: 'Open Pipe Club Tracker',
     instance: false,
     buttons: [
-      { label: "FJOSTE Website", url: "https://www.fjostegroup.de" },
-      ...(currentUsername ? [{ label: "Fahrer Profil", url: `https://www.fjostegroup.de/driver/${currentUsername}` }] : [])
+      { label: "Open Pipe Club Website", url: "https://openpipeclub.com" },
+      ...(currentUsername ? [{ label: "Fahrer Profil", url: `https://openpipeclub.com/driver/${currentUsername}` }] : [])
     ]
   };
 
@@ -531,24 +569,16 @@ function updateRpc() {
     const speed = Math.round(telemetryData.speed || 0);
     const pauseText = telemetryData.paused ? '⏸️ PAUSIERT | ' : '';
 
-    let serverName = "Singleplayer";
-    const isMultiplayer = telemetryData.multiplayerTimeOffset && telemetryData.multiplayerTimeOffset !== 0;
-    if (isMultiplayer) {
-      const title = (telemetryData.activeTitle || "").toLowerCase();
-      const isTruckersMP = title.includes('truckersmp') ||
-        title.includes('euro truck simulator 2 multiplayer') ||
-        title.includes('ets2mp') ||
-        title.includes('atsmp');
-      if (isTruckersMP) {
-        const parsedServer = getTruckersMPActiveServer(telemetryData.gameType === 2 ? "ATS" : "ETS2");
-        serverName = parsedServer || "TruckersMP";
-      } else {
-        serverName = "Multiplayer";
-      }
-    }
+    const serverName = resolveServerName(telemetryData);
 
     if (!rpcStartTime) rpcStartTime = new Date();
     activity.startTimestamp = rpcStartTime;
+
+    // Game Specific Assets
+    activity.largeImageKey = telemetryData.gameType === 2 ? 'ats' : 'ets2';
+    activity.largeImageText = telemetryData.gameType === 2 ? 'American Truck Simulator' : 'Euro Truck Simulator 2';
+    activity.smallImageKey = 'openpipeclub';
+    activity.smallImageText = 'Open Pipe Club';
 
     if (telemetryData.cargo && telemetryData.source && telemetryData.dest) {
       activity.details = `${pauseText}🚚 ${truck} | [${serverName}]`;
@@ -559,11 +589,29 @@ function updateRpc() {
     }
   } else {
     rpcStartTime = null;
+    const pageNames: { [key: string]: string } = {
+      'dashboard': 'Im Dashboard 📊',
+      'events': 'Plant ein Event 📅',
+      'news': 'Liest die News 📰',
+      'chat': 'Im Firmen-Chat 💬',
+      'map': 'Auf der Live-Karte 🗺️',
+      'gallery': 'In der Galerie 🖼️',
+      'statistiken': 'Prüft Statistiken 📈',
+      'team': 'Sichtet das Team 👥',
+      'afkbot': 'Anti-AFK Bot aktiv 🤖',
+      'overlay-settings': 'Konfiguriert das Overlay ⚙️',
+      'admin': 'Im Admin-Bereich 🛡️',
+      'profile': 'Betrachtet Profil 👤',
+      'applications': 'Sichtet Bewerbungen 📝',
+      'reports': 'Liest Schadensberichte 📑',
+      'database': 'Verwaltet die Datenbank 🗄️'
+    };
+    const cleanPage = (currentAppPage || "").toLowerCase().trim();
     activity.details = 'Im Drivers Hub';
-    activity.state = currentAppPage;
+    activity.state = pageNames[cleanPage] || currentAppPage || 'Bereit für die Fahrt';
   }
 
-  rpc.setActivity(activity).catch((err: any) => console.error('🎮 RPC: Fehler beim Setzen der Activity:', err));
+  rpc.setActivity(activity).catch((err: any) => writeToLog(`🎮 RPC: Fehler beim Setzen der Activity: ${err.message}`));
 }
 
 function checkDiscordPermissionError(): Promise<boolean> {
@@ -591,52 +639,69 @@ function checkDiscordPermissionError(): Promise<boolean> {
 let rpcTimeout: NodeJS.Timeout | null = null;
 
 async function loginRpc() {
-  if (!isRpcActive) return;
+  if (!isRpcActive) {
+    writeToLog('🎮 RPC: Login übersprungen, da RPC deaktiviert ist.');
+    return;
+  }
   if (rpc && isRpcConnected) {
+    writeToLog('🎮 RPC: Bereits verbunden, nur Update wird ausgeführt.');
     updateRpc();
     return;
   }
   if (rpcTimeout) clearTimeout(rpcTimeout);
 
   if (rpc) {
-    try { await rpc.destroy(); } catch (e) { }
+    try {
+      writeToLog('🎮 RPC: Bestehende RPC-Instanz wird zerstört.');
+      await rpc.destroy();
+    } catch (e: any) {
+      writeToLog(`🎮 RPC: Fehler beim Zerstören der alten Instanz: ${e.message}`);
+    }
     rpc = null;
   }
 
-  console.log('🎮 RPC: Verbindungsversuch...');
+  writeToLog('🎮 RPC: Neuer Verbindungsversuch...');
 
   try {
     rpc = new DiscordRPC.Client({ transport: 'ipc' });
+
     rpc.on('ready', () => {
-      console.log('🎮 RPC: Bereit!');
+      writeToLog('🎮 RPC: Bereit! Verbindung erfolgreich hergestellt.');
       isRpcConnected = true;
       updateRpc();
-      win?.webContents.send('rpc-status-changed', true);
+      safeSend(win, 'rpc-status-changed', true);
     });
+
     rpc.on('error', (err: any) => {
       if (err.message === 'Could not connect') {
-        console.log('🎮 RPC: Verbindung zu Discord fehlgeschlagen (Discord läuft wahrscheinlich nicht).');
+        writeToLog('🎮 RPC: Verbindung zu Discord fehlgeschlagen (Discord läuft wahrscheinlich nicht).');
       } else {
-        console.error('🎮 RPC: Fehler:', err);
+        writeToLog(`🎮 RPC: Unerwarteter Fehler: ${err.message}\nStack: ${err.stack}`);
       }
       isRpcConnected = false;
-      win?.webContents.send('rpc-status-changed', false);
+      safeSend(win, 'rpc-status-changed', false);
     });
+
     await rpc.login({ clientId });
+    writeToLog('🎮 RPC: Login-Befehl abgesetzt. Warte auf "ready"-Event.');
+
   } catch (err: any) {
-    if (err.message !== 'Could not connect') {
-      console.error('🎮 RPC: Login-Fehler:', err);
-    } else {
+    writeToLog(`🎮 RPC: Kritischer Fehler im Login-Prozess: ${err.message}\nStack: ${err.stack}`);
+
+    if (err.message === 'Could not connect') {
       checkDiscordPermissionError().then((isEperm) => {
         if (isEperm) {
-          console.error('🎮 RPC: Verbindungsfehler EPERM. Discord läuft vermutlich als Administrator, während dieser Tracker als normaler Benutzer läuft.');
-          win?.webContents.send('rpc-error', 'eperm');
+          writeToLog('🎮 RPC: Verbindungsfehler EPERM. Discord läuft vermutlich als Administrator.');
+          safeSend(win, 'rpc-error', 'eperm');
         }
       });
     }
+
     isRpcConnected = false;
-    win?.webContents.send('rpc-status-changed', false);
+    safeSend(win, 'rpc-status-changed', false);
+
     if (isRpcActive) {
+      writeToLog('🎮 RPC: Nächster Verbindungsversuch in 30 Sekunden geplant.');
       rpcTimeout = setTimeout(loginRpc, 30000);
     }
   }
@@ -886,7 +951,7 @@ while($true) {
 }
 `;
 
-const telemetryTempPath = path.join(app.getPath('temp'), 'fjoste_telemetry_v6.ps1');
+const telemetryTempPath = path.join(app.getPath('temp'), 'openpipeclub_telemetry_v6.ps1');
 let telemetryProcess: any = null;
 
 function startTelemetryBridge() {
@@ -958,6 +1023,29 @@ function startTelemetryBridge() {
   });
 }
 
+// TruckersMP Session Cache for API-based server detection
+let truckersmpSession: { server_name?: string; online?: boolean } | null = null;
+let lastTruckersmpPoll = 0;
+const TRUCKERSMP_POLL_INTERVAL = 60000; // 60 seconds
+
+async function pollTruckersMPSession() {
+  if (!userToken) return;
+  const now = Date.now();
+  if (now - lastTruckersmpPoll < TRUCKERSMP_POLL_INTERVAL) return;
+  lastTruckersmpPoll = now;
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/truckersmp/my-session`, {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+    if (res.ok) {
+      truckersmpSession = await res.json();
+    }
+  } catch (e) {
+    // silent
+  }
+}
+
 function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
   try {
     const docsPath = app.getPath('documents');
@@ -999,12 +1087,42 @@ function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
   return null;
 }
 
-const BACKEND_URL = 'https://api.fjostegroup.de/api';
+// Stable server-name resolution.
+// The raw detection (activeTitle / API / logs) is not available on every tick,
+// which made the display flicker between the real server name, "TruckersMP" and
+// "Multiplayer". We cache the last concrete server name while a multiplayer
+// session is active so only the server is shown, consistently.
+let lastResolvedServerName: string | null = null;
+
+function resolveServerName(data: any): string {
+  const isMultiplayer = data && data.multiplayerTimeOffset && data.multiplayerTimeOffset !== 0;
+  if (!isMultiplayer) {
+    lastResolvedServerName = null;
+    return "Singleplayer";
+  }
+
+  const apiServerName = truckersmpSession?.server_name;
+  const parsedServer = apiServerName || getTruckersMPActiveServer(data.gameType === 2 ? "ATS" : "ETS2");
+
+  if (parsedServer) {
+    lastResolvedServerName = parsedServer;
+    return parsedServer;
+  }
+
+  // No concrete server name available this tick: keep the last known one to
+  // avoid flickering between generic fallbacks.
+  return lastResolvedServerName || "TruckersMP";
+}
+
+const BACKEND_URL = 'https://api.openpipeclub.com/api';
 
 async function handleTrackingLogic(current: any, prev: any) {
   if (!userToken) return;
 
   if (!current.connected) return;
+
+  // Periodically poll TruckersMP session for Discord RPC
+  pollTruckersMPSession();
 
   const cargo = (current.cargo || "").trim();
   const source = (current.source || "").trim();
@@ -1021,6 +1139,7 @@ async function handleTrackingLogic(current: any, prev: any) {
   if (isJobActive) {
     jobTotalSpeed += (current.speed || 0);
     jobSpeedTicks++;
+    jobMaxSpeed = Math.max(jobMaxSpeed, current.speed || 0);
   }
 
   // 1. Position Update (every 5 seconds)
@@ -1028,21 +1147,7 @@ async function handleTrackingLogic(current: any, prev: any) {
     lastPositionSent = now;
     console.log(`📍 Tracking: Sende Position (${current.source || 'Fahrt'})`);
 
-    let serverName = "Singleplayer";
-    const isMultiplayer = current.multiplayerTimeOffset && current.multiplayerTimeOffset !== 0;
-    if (isMultiplayer) {
-      const title = (current.activeTitle || "").toLowerCase();
-      const isTruckersMP = title.includes('truckersmp') ||
-        title.includes('euro truck simulator 2 multiplayer') ||
-        title.includes('ets2mp') ||
-        title.includes('atsmp');
-      if (isTruckersMP) {
-        const parsedServer = getTruckersMPActiveServer(current.gameType === 2 ? "ATS" : "ETS2");
-        serverName = parsedServer || "TruckersMP";
-      } else {
-        serverName = "Multiplayer";
-      }
-    }
+    const serverName = resolveServerName(current);
 
     const gameStr = current.gameType === 2 ? "ATS" : "ETS2";
     const steamIdVal = current.steamId || null;
@@ -1085,6 +1190,7 @@ async function handleTrackingLogic(current: any, prev: any) {
     jobStartFuel = current.fuel || 0;
     jobTotalSpeed = 0;
     jobSpeedTicks = 0;
+    jobMaxSpeed = 0;
 
     saveSettings(); // Persist new job state
 
@@ -1156,6 +1262,7 @@ async function handleTrackingLogic(current: any, prev: any) {
           event: event,
           job_id: currentJobId,
           average_speed_kmh: avgSpeed,
+          max_speed_kmh: jobMaxSpeed,
           fuel_used_l: parseFloat(fuelUsed.toFixed(2)),
           ended_at: new Date().toISOString()
         })
@@ -1170,6 +1277,7 @@ async function handleTrackingLogic(current: any, prev: any) {
     jobStartFuel = 0;
     jobTotalSpeed = 0;
     jobSpeedTicks = 0;
+    jobMaxSpeed = 0;
 
     win?.webContents.send('job-update', jobData);
   }
@@ -1259,7 +1367,7 @@ function createSingleOverlayWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       backgroundThrottling: false, // Ensure page doesn't lag when game is in focus
       webSecurity: false,
     },
@@ -1391,6 +1499,28 @@ ipcMain.on('overlay-resize', (_, type, w, h) => {
     else if (type === 'event') { eventW = w; eventH = h; }
     saveSettings();
   }
+});
+
+// The overlay renderer registers its IPC listeners only after React has mounted,
+// while the initial state was previously pushed during `did-finish-load`
+// (which fires before the listeners exist). On a cold start (uncached bundle)
+// that push is missed, so the overlay started unconfigured until a restart.
+// Letting the renderer explicitly request the current state on mount closes
+// that race regardless of load/cache timing.
+ipcMain.handle('overlay-get-state', () => {
+  const currentPositions = {
+    logo: { x: logoX ?? 40, y: logoY ?? 40 },
+    mainHud: { x: overlayX ?? 40, y: overlayY ?? 130 },
+    event: { x: eventX ?? 40, y: eventY ?? 310 },
+    drivers: { x: driversX ?? 40, y: driversY ?? 440 },
+    spotify: { x: spotifyX ?? 40, y: spotifyY ?? 580 }
+  };
+  return {
+    lock: isOverlayLocked,
+    settings: overlaySettings,
+    positions: currentPositions,
+    telemetry: telemetryData
+  };
 });
 
 
@@ -1560,7 +1690,7 @@ while ($true) {
 }
 `;
 
-const smtcTempPath = path.join(app.getPath('temp'), 'fjoste_smtc_v2.ps1');
+const smtcTempPath = path.join(app.getPath('temp'), 'openpipeclub_smtc_v2.ps1');
 let smtcProcess: any = null;
 let lastSmtcData: any = null;
 
@@ -1879,11 +2009,11 @@ ipcMain.on('install-plugin', async (event, gameId) => {
 ipcMain.handle('check-app-update', async () => {
   return new Promise((resolve) => {
     const currentVersion = app.getVersion();
-    const repo = 'Niconoop/FJOSTE-App';
+    const repo = 'Niconoop/Open-Pipe-Club';
     const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
     const options = {
       headers: {
-        'User-Agent': 'FJOSTE-App'
+        'User-Agent': 'Open-Pipe-Club-App'
       }
     };
 
@@ -1933,7 +2063,7 @@ ipcMain.handle('check-app-update', async () => {
 });
 
 function downloadAndApplyUpdate(url: string, event: any) {
-  const tempUpdatePath = path.join(app.getPath('temp'), 'FJOSTE-Tracker-Update.exe');
+  const tempUpdatePath = path.join(app.getPath('temp'), 'Open Pipe Club-Tracker-Update.exe');
 
   if (fs.existsSync(tempUpdatePath)) {
     try {
@@ -1948,7 +2078,7 @@ function downloadAndApplyUpdate(url: string, event: any) {
     url: url,
   });
 
-  request.setHeader('User-Agent', 'FJOSTE-App');
+  request.setHeader('User-Agent', 'Open-Pipe-Club-App');
   request.setHeader('Accept', 'application/octet-stream');
 
   request.on('response', (response) => {
@@ -2009,7 +2139,7 @@ function downloadAndApplyUpdate(url: string, event: any) {
     try {
       const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
       const exeName = path.basename(targetExe);
-      const updateBatPath = path.join(app.getPath('temp'), 'fjoste_update.bat');
+      const updateBatPath = path.join(app.getPath('temp'), 'openpipeclub_update.bat');
 
       const batContent = `@echo off\r\n` +
         `timeout /t 2 /nobreak > NUL\r\n` +
@@ -2047,11 +2177,11 @@ function downloadAndApplyUpdate(url: string, event: any) {
 }
 
 ipcMain.on('install-app-update', async (event) => {
-  const repo = 'Niconoop/FJOSTE-App';
+  const repo = 'Niconoop/Open-Pipe-Club-App';
   const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
   const options = {
     headers: {
-      'User-Agent': 'FJOSTE-App'
+      'User-Agent': 'Open-Pipe-Club-App'
     }
   };
 

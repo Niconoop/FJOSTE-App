@@ -1,66 +1,50 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export const AnimatedBackground: React.FC = () => {
+import homeImage from '../assets/backgrounds/home.webp?inline';
+import newsImage from '../assets/backgrounds/news.webp?inline';
+import eventsImage from '../assets/backgrounds/events.webp?inline';
+import teamImage from '../assets/backgrounds/team.webp?inline';
+import galleryImage from '../assets/backgrounds/gallery.webp?inline';
+import applyImage from '../assets/backgrounds/apply.webp?inline';
+
+interface AnimatedBackgroundProps {
+  activePage?: string;
+}
+
+const imageMap: Record<string, string> = {
+  dashboard: homeImage,
+  news: newsImage,
+  events: eventsImage,
+  team: teamImage,
+  gallery: galleryImage,
+  applications: applyImage,
+  apply: applyImage,
+  profile: applyImage,
+};
+
+const layers = [homeImage, newsImage, eventsImage, teamImage, galleryImage, applyImage];
+
+export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({ activePage }) => {
+  const isHidden = activePage === 'map' || activePage === 'profile';
+  const activeImage = isHidden ? null : (imageMap[activePage as string] ?? homeImage);
+
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 bg-background">
-      {/* Blob 1: Cyber Teal */}
-      <motion.div
-        className="bg-blob-1 absolute rounded-full"
-        style={{
-          width: "650px",
-          height: "650px",
-          top: "-15%",
-          left: "-10%",
-          willChange: "transform",
-        }}
-        animate={{ 
-          x: [0, 40, -30, 0], 
-          y: [0, -60, 30, 0], 
-          scale: [1, 1.15, 0.9, 1]
-        }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Blob 2: Purple Neon */}
-      <motion.div
-        className="bg-blob-2 absolute rounded-full"
-        style={{
-          width: "800px",
-          height: "800px",
-          top: "30%",
-          right: "-15%",
-          willChange: "transform",
-        }}
-        animate={{ 
-          x: [0, -50, 40, 0], 
-          y: [0, 40, -50, 0], 
-          scale: [1, 1.2, 0.85, 1]
-        }}
-        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Blob 3: Royal Blue */}
-      <motion.div
-        className="bg-blob-3 absolute rounded-full"
-        style={{
-          width: "550px",
-          height: "550px",
-          bottom: "-10%",
-          left: "25%",
-          willChange: "transform",
-        }}
-        animate={{ 
-          x: [0, 60, -40, 0], 
-          y: [0, 30, -45, 0], 
-          scale: [1.05, 0.9, 1.15, 1.05]
-        }}
-        transition={{ duration: 28, repeat: Infinity, ease: "linear" }}
-      />
-
-      {/* Dark overlay to balance contrast and readability */}
-      <div className="absolute inset-0 bg-transparent dark:bg-black/20" />
+    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+      {/* Stacked blurred background layers that crossfade on page change */}
+      {layers.map((src, i) => (
+        <motion.div
+          key={i}
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), url('${src}')`,
+            filter: 'brightness(0.5) blur(12px) scale(1.05)',
+            backgroundColor: '#000',
+          }}
+          animate={{ opacity: !isHidden && src === activeImage ? 1 : 0 }}
+          transition={{ opacity: { duration: 1.2, ease: [0.16, 1, 0.3, 1] } }}
+        />
+      ))}
     </div>
   );
 };
-

@@ -187,7 +187,7 @@ const rgbToHex = (r: number, g: number, b: number): string => {
 };
 
 const COLOR_PRESETS = [
-  { name: 'FJOSTE Cyan', hex: '#22d1ee', desc: 'Standard FJOSTE Cyan' },
+  { name: 'Open Pipe Club Gold', hex: '#f59e0b', desc: 'Standard Open Pipe Club Gold' },
   { name: 'Electric Blue', hex: '#3b82f6', desc: 'Kräftiges Blau' },
   { name: 'Deep Purple', hex: '#8b5cf6', desc: 'Edles Violett' },
   { name: 'Neon Pink', hex: '#ec4899', desc: 'Leuchtendes Pink' },
@@ -220,12 +220,12 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   showIncome: true,
   widgetSizes: { ...DEFAULT_WIDGET_SIZES },
   singleRowHud: false,
-  customAccentColor: '#22d1ee',
+  customAccentColor: '#f59e0b',
   blockCollisions: true
 };
 
-const getPosKey = (isSingle: boolean) => isSingle ? 'fjoste_overlay_positions_single' : 'fjoste_overlay_positions';
-const getSizeKey = (isSingle: boolean) => isSingle ? 'fjoste_overlay_widget_sizes_single' : 'fjoste_overlay_widget_sizes';
+const getPosKey = (isSingle: boolean) => isSingle ? 'openpipeclub_overlay_positions_single' : 'openpipeclub_overlay_positions';
+const getSizeKey = (isSingle: boolean) => isSingle ? 'openpipeclub_overlay_widget_sizes_single' : 'openpipeclub_overlay_widget_sizes';
 
 const OverlaySettings = () => {
   const [showColorModal, setShowColorModal] = useState(false);
@@ -237,9 +237,9 @@ const OverlaySettings = () => {
   const [rInput, setRInput] = useState('34');
   const [gInput, setGInput] = useState('209');
   const [bInput, setBInput] = useState('238');
-  const [hexInput, setHexInput] = useState('#22d1ee');
+  const [hexInput, setHexInput] = useState('#f59e0b');
   const [settings, setSettings] = useState<OverlaySettingsType>(() => {
-    const saved = localStorage.getItem('fjoste_overlay_settings');
+    const saved = localStorage.getItem('openpipeclub_overlay_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -256,7 +256,7 @@ const OverlaySettings = () => {
   });
 
   const [positions, setPositions] = useState<Positions>(() => {
-    const savedSettings = localStorage.getItem('fjoste_overlay_settings');
+    const savedSettings = localStorage.getItem('openpipeclub_overlay_settings');
     let isSingle = false;
     if (savedSettings) {
       try {
@@ -284,7 +284,7 @@ const OverlaySettings = () => {
   });
 
   const [widgetSizes, setWidgetSizes] = useState<Record<string, WidgetSize>>(() => {
-    const savedSettings = localStorage.getItem('fjoste_overlay_settings');
+    const savedSettings = localStorage.getItem('openpipeclub_overlay_settings');
     let isSingle = false;
     if (savedSettings) {
       try {
@@ -450,7 +450,7 @@ const OverlaySettings = () => {
   // Update and persist settings, widget sizes, and notify overlay
   useEffect(() => {
     const updatedSettings = { ...settings, widgetSizes };
-    localStorage.setItem('fjoste_overlay_settings', JSON.stringify(updatedSettings));
+    localStorage.setItem('openpipeclub_overlay_settings', JSON.stringify(updatedSettings));
     localStorage.setItem(getSizeKey(settings.singleRowHud), JSON.stringify(widgetSizes));
     try {
       const { ipcRenderer } = window.require('electron');
@@ -473,7 +473,7 @@ const OverlaySettings = () => {
 
   // Sync text inputs and HSV coordinates when customAccentColor changes (e.g. preset clicked or typed)
   useEffect(() => {
-    const color = settings.customAccentColor || '#22d1ee';
+    const color = settings.customAccentColor || '#f59e0b';
     setHexInput(color.toUpperCase());
     const { r, g, b } = hexToRgb(color);
     setRInput(String(r));
@@ -1064,24 +1064,28 @@ const OverlaySettings = () => {
   }, [settings.zoom, settings.singleRowHud, widgetSizes]);
 
   return (
-    <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-4 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-unbounded text-2xl font-bold text-foreground tracking-tight">Overlay-Setup</h1>
-          <p className="text-slate-500 text-xs mt-1">Passe dein In-Game Overlay und die Discord RPC an</p>
-        </div>
+      <div className="text-center mb-6">
+        <span className="overline text-amber-400 mb-2 inline-block">Anpassung</span>
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tighter text-white mt-2">
+          Overlay-Einstellungen
+        </h1>
+        <p className="text-zinc-400 text-sm mt-3">Passe dein In-Game Overlay und die Discord RPC an</p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
         {/* Left Column: Settings and Controls */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-4">
           {/* System Services Toggles */}
-          <div className="glass-card hover-glow">
-            <h2 className="font-unbounded text-[10px] font-bold text-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Monitor size={14} className="text-primary" /> System-Dienste
-            </h2>
-            <div className="space-y-4">
+          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-1 h-4 bg-amber-400 rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                System-Dienste
+              </h2>
+            </div>
+            <div className="space-y-3">
               {/* Overlay Toggle Switch */}
               <label className="flex items-center justify-between py-1 cursor-pointer group">
                 <div>
@@ -1119,17 +1123,20 @@ const OverlaySettings = () => {
           </div>
 
           {/* Style Presets */}
-          <div className="glass-card hover-glow">
-            <h2 className="font-unbounded text-[10px] font-bold text-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-              <LayoutTemplate size={14} className="text-primary" /> Design-Stil
-            </h2>
-            <div className="grid grid-cols-1 gap-3">
+          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-1 h-4 bg-amber-400 rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                Design-Stil
+              </h2>
+            </div>
+              <div className="grid grid-cols-1 gap-2.5">
               {[
                 {
                   id: 'neon',
                   title: 'Cyberpunk Neon',
                   desc: 'Leuchtendes Cyan/Magenta, weiche Glow-Effekte und dynamische abgerundete Balken.',
-                  color: 'text-[#22D1EE]'
+                  color: 'text-[#f59e0b]'
                 },
                 {
                   id: 'carbon',
@@ -1148,20 +1155,20 @@ const OverlaySettings = () => {
                   title: 'Benutzerdefiniert (Custom)',
                   desc: 'Wähle deine eigene Akzentfarbe. Passe die Leuchteffekte und Anzeigen nach Belieben an.',
                   color: 'text-[var(--custom-accent-btn)]',
-                  style: { '--custom-accent-btn': settings.customAccentColor || '#22d1ee' } as React.CSSProperties
+                  style: { '--custom-accent-btn': settings.customAccentColor || '#f59e0b' } as React.CSSProperties
                 }
               ].map(preset => {
                 const isSelected = settings.style === preset.id;
                 const borderClass = isSelected
-                  ? preset.id === 'neon' ? 'border-[#22D1EE] bg-[#22D1EE]/5'
+                  ? preset.id === 'neon' ? 'border-[#f59e0b] bg-[#f59e0b]/5'
                     : preset.id === 'carbon' ? 'border-amber-500 bg-amber-500/5'
                       : preset.id === 'custom' ? 'border-[var(--custom-accent-btn)] bg-[var(--custom-accent-btn-bg)]'
                         : 'border-white bg-white/5'
                   : 'border-white/5 bg-black/30 hover:border-white/10';
 
                 const buttonStyle = preset.id === 'custom' ? {
-                  '--custom-accent-btn': settings.customAccentColor || '#22d1ee',
-                  '--custom-accent-btn-bg': `${settings.customAccentColor || '#22d1ee'}1a`
+                  '--custom-accent-btn': settings.customAccentColor || '#f59e0b',
+                  '--custom-accent-btn-bg': `${settings.customAccentColor || '#f59e0b'}1a`
                 } as React.CSSProperties : (preset as any).style || {};
 
                 return (
@@ -1212,8 +1219,8 @@ const OverlaySettings = () => {
                           transition={{ duration: 0.2 }}
                           className="pointer-events-auto w-[280px] bg-[#0c0c0e]/95 border-2 border-[var(--custom-accent)]/30 backdrop-blur-md rounded-3xl p-4 shadow-2xl overflow-hidden flex flex-col gap-4"
                           style={{
-                            '--custom-accent': settings.customAccentColor || '#22d1ee',
-                            '--custom-border': `${settings.customAccentColor || '#22d1ee'}33`
+                            '--custom-accent': settings.customAccentColor || '#f59e0b',
+                            '--custom-border': `${settings.customAccentColor || '#f59e0b'}33`
                           } as React.CSSProperties}
                         >
                           {/* Acrylic Noise */}
@@ -1399,12 +1406,15 @@ const OverlaySettings = () => {
           </div>
 
           {/* Visibility and Zoom */}
-          <div className="glass-card hover-glow">
-            <h2 className="font-unbounded text-[10px] font-bold text-foreground uppercase tracking-widest mb-6 flex items-center gap-2">
-              <Sliders size={14} className="text-primary" /> Skalierung & Widgets
-            </h2>
+          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-1 h-4 bg-amber-400 rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                Skalierung & Widgets
+              </h2>
+            </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Zoom */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -1417,7 +1427,7 @@ const OverlaySettings = () => {
                   max="150"
                   value={settings.zoom}
                   onChange={e => updateSetting('zoom', Number(e.target.value))}
-                  className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-primary"
+                  className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-amber-400"
                 />
                 <div className="flex justify-between text-[9px] text-slate-500 font-bold">
                   <span>50%</span>
@@ -1427,7 +1437,7 @@ const OverlaySettings = () => {
               </div>
 
               {/* Background Opacity */}
-              <div className="space-y-2 pt-4 border-t border-white/5">
+              <div className="space-y-2 pt-3 border-t border-white/5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400 font-medium">Hintergrund-Deckkraft</span>
                   <span className="font-bold text-white tabular-nums">{settings.bgOpacity}%</span>
@@ -1439,7 +1449,7 @@ const OverlaySettings = () => {
                   step="5"
                   value={settings.bgOpacity}
                   onChange={e => updateSetting('bgOpacity', Number(e.target.value))}
-                  className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-primary"
+                  className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-amber-400"
                 />
                 <div className="flex justify-between text-[9px] text-slate-500 font-bold">
                   <span>10% (Transparent)</span>
@@ -1450,7 +1460,7 @@ const OverlaySettings = () => {
 
 
               {/* Single-Row HUD Toggle */}
-              <div className="space-y-2 pt-4 border-t border-white/5">
+              <div className="space-y-2 pt-3 border-t border-white/5">
                 <label className="flex items-center justify-between py-1 cursor-pointer group">
                   <div>
                     <span className="text-xs text-slate-300 font-medium block">Einzelzeilen HUD</span>
@@ -1471,10 +1481,10 @@ const OverlaySettings = () => {
 
 
               {/* Widgets Visibility Toggles */}
-              <div className="space-y-3 pt-4 border-t border-white/5">
+              <div className="space-y-3 pt-3 border-t border-white/5">
                 <h3 className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Widgets einblenden</h3>
                 {[
-                  { key: 'showLogo', label: 'FJOSTE Firmenlogo' },
+                  { key: 'showLogo', label: 'Firmenlogo' },
                   { key: 'showMainHud', label: 'Haupt-HUD (Telemetriedaten)' },
                   { key: 'showEvent', label: 'Nächstes Event-Widget' },
                   { key: 'showSpotify', label: 'Spotify Widget' },
@@ -1504,55 +1514,18 @@ const OverlaySettings = () => {
             </div>
           </div>
 
-          {/* HUD Details */}
-          <div className="glass-card hover-glow">
-            <h2 className="font-unbounded text-[10px] font-bold text-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-              <SlidersHorizontal size={14} className="text-primary" /> HUD Details
-            </h2>
-            <p className="text-[10px] text-slate-500 mb-4 uppercase tracking-wider leading-relaxed">
-              Wähle die Werte für das Haupt-Widget:
-            </p>
-
-            <div className="space-y-3">
-              {[
-                { key: 'showSpeed', label: 'Geschwindigkeit (KM/H)' },
-                { key: 'showGear', label: 'Gang-Anzeige' },
-                { key: 'showFuel', label: 'Tank & Reichweite' },
-                { key: 'showRemainingDistance', label: 'Rest-Kilometer (Navi)' },
-                { key: 'showETA', label: 'Ankunftszeit (ETA)' },
-                { key: 'showCargo', label: 'Fracht & Gewicht' },
-                { key: 'showIncome', label: 'Einnahmen' }
-              ].map(item => {
-                const active = settings[item.key as keyof OverlaySettingsType] as boolean;
-                return (
-                  <label
-                    key={item.key}
-                    className="flex items-center justify-between cursor-pointer group py-0.5"
-                  >
-                    <span className="text-xs text-slate-300 group-hover:text-white transition-colors">{item.label}</span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={active}
-                        onChange={() => updateSetting(item.key as any, !active)}
-                        className="sr-only peer"
-                      />
-                      <div className="switch-toggle" />
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         {/* Right Column: Status & Interactive Simulator */}
-        <div className="xl:col-span-3 space-y-6">
+        <div className="xl:col-span-3 space-y-4">
           {/* Status and Action Buttons */}
-          <div className="glass-card hover-glow">
-            <h2 className="font-unbounded text-[10px] font-bold text-foreground uppercase tracking-widest mb-4">
-              Status & Preview-Modus
-            </h2>
+          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-1 h-4 bg-amber-400 rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                Status & Preview-Modus
+              </h2>
+            </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -1595,14 +1568,61 @@ const OverlaySettings = () => {
                 💡 <strong>Desktop Vorschau:</strong> Aktiviere den Vorschau-Modus, um das transparente Overlay auf deinem Desktop sichtbar zu machen. Du kannst die Widgets dann im Simulator unten verschieben und siehst das Ergebnis sofort live an der echten Position.
               </p>
             </div>
-          </div>
+            </div>
 
-          {/* Interactive Screen Simulator */}
-          <div className="glass-card hover-glow flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-unbounded text-xs font-bold text-foreground uppercase tracking-widest">
-                Bildschirm-Simulator (Layout-Editor)
+            {/* HUD Details */}
+            <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-1 h-4 bg-amber-400 rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                HUD Details
               </h2>
+            </div>
+              <p className="text-[10px] text-slate-500 mb-4 uppercase tracking-wider leading-relaxed">
+                Wähle die Werte für das Haupt-Widget:
+              </p>
+
+              <div className="space-y-3">
+                {[
+                  { key: 'showSpeed', label: 'Geschwindigkeit (KM/H)' },
+                  { key: 'showGear', label: 'Gang-Anzeige' },
+                  { key: 'showFuel', label: 'Tank & Reichweite' },
+                  { key: 'showRemainingDistance', label: 'Rest-Kilometer (Navi)' },
+                  { key: 'showETA', label: 'Ankunftszeit (ETA)' },
+                  { key: 'showCargo', label: 'Fracht & Gewicht' },
+                  { key: 'showIncome', label: 'Einnahmen' }
+                ].map(item => {
+                  const active = settings[item.key as keyof OverlaySettingsType] as boolean;
+                  return (
+                    <label
+                      key={item.key}
+                      className="flex items-center justify-between cursor-pointer group py-0.5"
+                    >
+                      <span className="text-xs text-slate-300 group-hover:text-white transition-colors">{item.label}</span>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          onChange={() => updateSetting(item.key as any, !active)}
+                          className="sr-only peer"
+                        />
+                        <div className="switch-toggle" />
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Interactive Screen Simulator */}
+          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                  Bildschirm-Simulator
+                </h2>
+              </div>
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-black px-2.5 py-1 rounded-lg border border-white/5 tabular-nums">
                 Auflösung: {SW} x {SH} px
               </span>
@@ -1613,12 +1633,12 @@ const OverlaySettings = () => {
               ref={previewRef}
               className="relative w-full aspect-video bg-black/90 rounded-2xl border-2 border-white/5 overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.9)]"
               style={{
-                backgroundImage: 'radial-gradient(rgba(43, 161, 185, 0.08) 1px, transparent 1px)',
+                backgroundImage: 'radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px)',
                 backgroundSize: '20px 20px'
               }}
             >
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
-                <span className="font-unbounded text-3xl font-black uppercase tracking-widest italic select-none">FJOSTE SCREEN</span>
+                <span className="font-unbounded text-3xl font-black uppercase tracking-widest italic select-none">OPEN PIPE CLUB SCREEN</span>
               </div>
 
               {/* Visual Guidelines for Snap Targets (only visible when dragging) */}
@@ -1642,7 +1662,7 @@ const OverlaySettings = () => {
                   className="absolute inset-y-0 border-l border-dashed pointer-events-none z-30"
                   style={{
                     left: `${(activeGuides.x / SW) * 100}%`,
-                    borderColor: '#22D1EE',
+                    borderColor: '#f59e0b',
                     opacity: 0.8
                   }}
                 />
@@ -1652,7 +1672,7 @@ const OverlaySettings = () => {
                   className="absolute inset-x-0 border-t border-dashed pointer-events-none z-30"
                   style={{
                     top: `${(activeGuides.y / SH) * 100}%`,
-                    borderColor: '#22D1EE',
+                    borderColor: '#f59e0b',
                     opacity: 0.8
                   }}
                 />
@@ -1679,9 +1699,9 @@ const OverlaySettings = () => {
 
                 const themeStyles = {
                   neon: {
-                    border: 'border-[#22D1EE]/40 shadow-[0_0_10px_rgba(34,209,238,0.1)]',
-                    text: 'text-[#22D1EE]',
-                    badge: 'bg-[#22D1EE]/10 text-[#22D1EE]',
+                    border: 'border-[#f59e0b]/40 shadow-[0_0_10px_rgba(245, 158, 11,0.1)]',
+                    text: 'text-[#f59e0b]',
+                    badge: 'bg-[#f59e0b]/10 text-[#f59e0b]',
                     style: {}
                   },
                   carbon: {
@@ -1701,8 +1721,8 @@ const OverlaySettings = () => {
                     text: 'text-[var(--preview-accent)]',
                     badge: 'bg-[var(--preview-accent-bg)] text-[var(--preview-accent)]',
                     style: {
-                      '--preview-accent': settings.customAccentColor || '#22d1ee',
-                      '--preview-accent-glow': `${settings.customAccentColor || '#22d1ee'}33`
+                      '--preview-accent': settings.customAccentColor || '#f59e0b',
+                      '--preview-accent-glow': `${settings.customAccentColor || '#f59e0b'}33`
                     } as React.CSSProperties
                   }
                 }[settings.style];
@@ -1790,4 +1810,5 @@ const OverlaySettings = () => {
 };
 
 export default OverlaySettings;
+
 

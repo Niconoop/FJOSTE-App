@@ -9,13 +9,13 @@ write-host ""
 
 # 1. Load version from package.json
 if (-not (Test-Path "package.json")) {
-    write-error "package.json nicht gefunden! Bitte stelle sicher, dass du das Skript aus dem fjoste-app Ordner aufrufst."
+    write-error "package.json nicht gefunden! Bitte stelle sicher, dass du das Skript aus dem openpipeclub-app Ordner aufrufst."
     exit 1
 }
 
 $packageJson = Get-Content -Raw -Path "package.json" | ConvertFrom-Json
 $version = $packageJson.version
-$repo = "Niconoop/FJOSTE-App"
+$repo = "Niconoop/Open-Pipe-Club-App"
 $tokenFile = "../.github_token"
 
 write-host "Erkannte App-Version: v$version"
@@ -115,7 +115,7 @@ if (Test-Path $changelogPath) {
 }
 
 if (-not $releaseBody) {
-    $releaseBody = "Release fuer Version v$version. Automatisch hochgeladen durch das FJOSTE Upload Tool."
+    $releaseBody = "Release fuer Version v$version. Automatisch hochgeladen durch das Open Pipe Club Upload Tool."
 }
 
 # 5. Create Release on GitHub
@@ -154,8 +154,8 @@ write-host ""
 write-host "[3/3] Lade Setup- und Portable-Dateien hoch..."
 
 $files = @(
-    "dist-app/FJOSTE App Setup.exe",
-    "dist-app/FJOSTE App.exe"
+    "dist-app/Open Pipe Club App Setup.exe",
+    "dist-app/Open Pipe Club App.exe"
 )
 
 foreach ($file in $files) {

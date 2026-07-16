@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Monitor, Download, CheckCircle, AlertTriangle, Sun, Moon } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Download, CheckCircle, AlertTriangle, ChevronRight, Monitor } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -19,6 +20,7 @@ const News = lazy(() => import('./pages/News'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AfkBot = lazy(() => import('./pages/AfkBot'));
 const OverlaySettings = lazy(() => import('./pages/OverlaySettings'));
+const Applications = lazy(() => import('./pages/Applications'));
 const Database = lazy(() => import('./pages/Database').then(m => ({ default: m.DatabasePage })));
 
 import { useAuth } from './context/AuthContext';
@@ -32,33 +34,26 @@ const PAGE_ORDER = [
   'events',
   'news',
   'chat',
-  'map',
   'gallery',
   'statistiken',
   'team',
   'afkbot',
-  'overlay-settings',
   'profile',
   'reports',
   'admin',
+  'applications',
   'database'
 ];
 
 const slideVariants = {
   enter: (direction: number) => ({
-    opacity: 0,
-    x: direction > 0 ? 80 : -80,
-    scale: 0.99
+    x: direction > 0 ? '100%' : '-100%'
   }),
   center: {
-    opacity: 1,
-    x: 0,
-    scale: 1
+    x: 0
   },
   exit: (direction: number) => ({
-    opacity: 0,
-    x: direction > 0 ? -80 : 80,
-    scale: 0.99
+    x: direction < 0 ? '100%' : '-100%'
   })
 };
 
@@ -78,16 +73,30 @@ function App() {
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | number | 'me'>('me');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifPos, setNotifPos] = useState<{ top: number; right: number } | null>(null);
   const [serverOnline, setServerOnline] = useState(true);
   const [rpcActive, setRpcActive] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => {
-    const isOverlay = window.location.hash.includes('overlay');
-    if (isOverlay) return 'dark';
-    const saved = localStorage.getItem('theme');
-    return (saved as 'dark' | 'light' | 'system') || 'dark';
-  });
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
+  const [navbarMode, setNavbarMode] = useState<'text' | 'icon' | 'hamburger'>('text');
+  const [pendingNewsCreate, setPendingNewsCreate] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const w = window.innerWidth;
+      if (w < 1250) {
+        setNavbarMode('hamburger');
+      } else if (w < 1600) {
+        setNavbarMode('icon');
+      } else {
+        setNavbarMode('text');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [isOverlayRoute, setIsOverlayRoute] = useState(() => window.location.hash.startsWith('#overlay'));
 
@@ -104,50 +113,13 @@ function App() {
   useEffect(() => {
     if (isOverlayRoute) {
       document.documentElement.classList.add('is-overlay');
-      document.documentElement.classList.remove('light');
       document.body?.classList.add('is-overlay-body');
       return;
     }
-
     document.body?.classList.remove('is-overlay-body');
-
-    const applyTheme = (currentTheme: 'dark' | 'light' | 'system') => {
-      if (currentTheme === 'system') {
-        const isSystemLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-        if (isSystemLight) {
-          document.documentElement.classList.add('light');
-        } else {
-          document.documentElement.classList.remove('light');
-        }
-      } else if (currentTheme === 'light') {
-        document.documentElement.classList.add('light');
-      } else {
-        document.documentElement.classList.remove('light');
-      }
-    };
-
-    applyTheme(theme);
-    localStorage.setItem('theme', theme);
-
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
-      const handleChange = () => applyTheme('system');
-
-      if (mediaQuery.addEventListener) {
-        mediaQuery.addEventListener('change', handleChange);
-      } else {
-        mediaQuery.addListener(handleChange);
-      }
-
-      return () => {
-        if (mediaQuery.removeEventListener) {
-          mediaQuery.removeEventListener('change', handleChange);
-        } else {
-          mediaQuery.removeListener(handleChange);
-        }
-      };
-    }
-  }, [theme, isOverlayRoute]);
+    // Immer dunkler Modus aktiv
+    document.documentElement.classList.remove('light');
+  }, [isOverlayRoute]);
 
   useEffect(() => {
     if (!loading) {
@@ -266,26 +238,26 @@ function App() {
             toast(event.title || 'System-Meldung', {
               description: event.content || '',
               duration: 5000,
-              className: 'custom-toast toast-resumed glass-card',
+              className: 'custom-toast toast-resumed frosted-card',
             });
           } else if (event.type === 'start' || event.type === 'delivered') {
             const toastClass = event.type === 'start' ? 'toast-start' : 'toast-resumed';
             toast.success(title, {
               description: content,
               duration: 5000,
-              className: `custom-toast ${toastClass} glass-card`,
+              className: `custom-toast ${toastClass} frosted-card`,
             });
           } else if (event.type === 'cancelled') {
             toast.error(title, {
               description: content,
               duration: 5000,
-              className: 'custom-toast toast-cancelled glass-card',
+              className: 'custom-toast toast-cancelled frosted-card',
             });
           } else if (event.type === 'resumed') {
             toast.info(title, {
               description: content,
               duration: 5000,
-              className: 'custom-toast glass-card',
+              className: 'custom-toast frosted-card',
             });
           }
 
@@ -480,6 +452,14 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNotifications]);
 
+  useEffect(() => {
+    if (showNotifications) {
+      const bell = document.getElementById('notif-bell');
+      const r = bell?.getBoundingClientRect();
+      if (r) setNotifPos({ top: r.bottom + 16, right: 24 });
+    }
+  }, [showNotifications]);
+
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
     try {
@@ -581,7 +561,7 @@ function App() {
         setCurrentPage('events');
         break;
       case 'application':
-        setCurrentPage('admin');
+        setCurrentPage('applications');
         break;
     }
   };
@@ -607,7 +587,7 @@ function App() {
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center">
       <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6" />
-      <h2 className="text-white font-unbounded text-lg font-bold animate-pulse italic tracking-tighter">FJOSTE HUB</h2>
+      <h2 className="text-white font-unbounded text-lg font-bold animate-pulse italic tracking-tighter">OPEN PIPE CLUB HUB</h2>
     </div>
   );
 
@@ -638,194 +618,116 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-slate-200 font-sans selection:bg-primary/30 selection:text-white">
-      <AnimatedBackground />
+    <div className="h-screen overflow-hidden bg-background text-slate-200 font-outfit selection:bg-primary/30 selection:text-white">
+      <AnimatedBackground activePage={currentPage} />
 
-      {/* Top Navbar */}
-      <nav className="fixed top-0 left-0 right-0 h-16 bg-black border-b-2 border-[#2ba1b9]/20 z-50">
-        <div className="absolute inset-0 -z-10" style={{ WebkitAppRegion: 'drag' }} />
-        <div className="max-w-[1800px] mx-auto h-full px-6 flex items-center justify-between gap-4">
+      {/* Top Window Control Bar / Drag bar */}
+      <nav className="fixed top-0 left-0 right-0 h-20 z-40 flex items-center justify-between px-6 transition-all duration-300 ease-in-out">
+        {/* Internal ambient backdrop + glass layer. Both live INSIDE the nav's
+            own layer (not a separate fixed layer) so the glass can blur them the
+            same way the in-content frosted-cards blur their siblings. A plain
+            fixed navbar cannot reliably sample the page behind it in the
+            packaged build, so we blur an internal colourful sibling instead. */}
+        <div className="absolute inset-0 -z-10 overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
+          <div className="bg-blob-1 absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full" />
+          <div className="bg-blob-2 absolute -top-28 right-0 w-[24rem] h-[24rem] rounded-full" />
+          <div className="bg-blob-3 absolute -top-24 left-1/3 w-[22rem] h-[22rem] rounded-full" />
+        </div>
+        <div className="glass-nav absolute inset-0 -z-10" />
+
+        {/* Left side: hamburger menu for mobile, and Logo / Navigation for desktop */}
+        <div className="flex items-center gap-6 min-w-0" style={{ WebkitAppRegion: 'no-drag' }}>
           <div className="flex items-center gap-3 shrink-0">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="xl:hidden p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#2ba1b9]/20 hover:border-primary transition-all"
+              className={`${navbarMode === 'hamburger' ? 'block' : 'hidden'} p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#f59e0b]/20 hover:border-amber-400 transition-all`}
               onClick={() => setMenuOpen(!menuOpen)}
               data-testid="hamburger-btn"
             >
               <Menu size={20} />
             </motion.button>
-            <motion.img
-              src="logo.png"
-              alt="FJOSTE Logo"
-              className="w-8 h-8 object-contain cursor-pointer"
-              whileHover={{ rotate: 360, scale: 1.15 }}
-              transition={{ type: "spring", stiffness: 180, damping: 12 }}
-            />
-            <span className="font-unbounded font-bold text-xs tracking-tight hidden xl:block uppercase">Drivers Hub</span>
+
+            {/* Logo and Brand */}
+            <div className="flex items-center gap-3">
+              <img src="logo.png" alt="Open Pipe Club Logo" className="h-10 w-10 rounded-lg object-contain shrink-0" />
+              <span className="font-['Unbounded'] font-bold text-lg tracking-tight text-white hidden sm:block">Open Pipe Club</span>
+            </div>
           </div>
 
-          <div className="hidden xl:flex items-center flex-1 min-w-0">
-            <motion.div
-              onWheel={(e) => {
-                const container = e.currentTarget;
-                container.scrollLeft += e.deltaY;
-              }}
-              onMouseLeave={() => setHoveredTab(null)}
-              variants={{
-                hidden: {},
-                show: {
-                  transition: {
-                    staggerChildren: 0.035
-                  }
-                }
-              }}
-              initial="hidden"
-              animate="show"
-              className="mx-auto flex items-center gap-1 min-[1400px]:gap-1.5 overflow-x-auto no-scrollbar max-w-full py-3 px-4"
-            >
-              {navItems.map((item) => {
-                const isActive = currentPage === item.id;
-                const isExpanded = isActive || hoveredTab === item.id;
-                return (
-                  <motion.button
-                    key={item.id}
-                    onClick={() => setCurrentPage(item.id)}
-                    onMouseEnter={() => setHoveredTab(item.id)}
-                    variants={{
-                      hidden: { opacity: 0, y: 8, scale: 0.95 },
-                      show: { opacity: 1, y: 0, scale: 1 }
-                    }}
-                    transition={{ type: "spring", stiffness: 350, damping: 20 }}
-                    whileHover={{ y: -2, scale: 1.05 }}
-                    whileTap={{ scale: 0.97 }}
-                    className={`group relative whitespace-nowrap text-[10px] px-2 min-[1400px]:px-3 py-1.5 flex items-center rounded-xl shrink-0 transition-colors duration-300 font-medium select-none ${isActive
-                        ? 'text-white font-semibold nav-item-active'
-                        : 'text-slate-400 hover:text-white'
-                      }`}
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="activeNavPill"
-                        className="absolute inset-0 bg-gradient-to-r from-primary/20 via-[#2ba1b9]/30 to-primary/10 border border-primary/45 rounded-xl -z-10 shadow-[0_0_20px_rgba(43,161,185,0.3),inset_0_1px_1px_rgba(255,255,255,0.1)]"
-                        transition={{ type: "spring", stiffness: 380, damping: 25 }}
-                      />
-                    )}
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeNavLine"
-                        className="absolute bottom-0.5 left-[15%] right-[15%] h-[2.5px] bg-gradient-to-r from-primary via-[#38bdf8] to-primary rounded-full shadow-[0_0_12px_rgba(43,161,185,0.9)]"
-                        transition={{ type: "spring", stiffness: 300, damping: 18, mass: 0.8 }}
-                      />
-                    )}
-                    {hoveredTab === item.id && !isActive && (
-                      <motion.span
-                        layoutId="hoverNavPill"
-                        className="absolute inset-0 nav-hover-pill rounded-xl -z-10"
-                        transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                      />
-                    )}
-                    <motion.div
-                      className="flex items-center justify-center"
-                      animate={{
-                        scale: isActive ? 1.15 : 1,
-                        rotate: isActive ? 0 : 0
-                      }}
-                      whileHover={{ scale: 1.25, rotate: -10 }}
-                      transition={{ type: "spring", stiffness: 400, damping: 15 }}
-                    >
-                      <item.icon size={13} className={`nav-icon ${isActive ? 'text-primary' : 'text-slate-400'}`} />
-                    </motion.div>
-                    <motion.span
-                      animate={{
-                        width: isExpanded ? "auto" : 0,
-                        opacity: isExpanded ? 1 : 0,
-                        marginLeft: isExpanded ? 6 : 0
-                      }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 300,
-                        damping: 24,
-                        opacity: { duration: 0.15 }
-                      }}
-                      className="nav-text-container"
-                    >
-                      {item.name}
-                    </motion.span>
-                  </motion.button>
-                );
-              })}
-            </motion.div>
+          {/* Desktop Navigation Links */}
+          <div className={`${navbarMode === 'hamburger' ? 'hidden' : 'flex'} items-center gap-0.5 border-l border-white/10 pl-4 min-w-0 overflow-x-auto no-scrollbar`}>
+            {navItems.map((item) => {
+              const isActive = currentPage === item.id;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentPage(item.id)}
+                  title={item.name}
+                  className={`transition-all duration-300 whitespace-nowrap flex items-center justify-center ${navbarMode === 'icon'
+                    ? `p-2 rounded-xl ${isActive ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`
+                    : `px-2.5 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-amber-400 bg-white/5' : 'text-slate-300 hover:text-white hover:bg-white/10'}`
+                    }`}
+                >
+                  {navbarMode === 'icon' ? <Icon size={16} className="shrink-0" /> : item.name}
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 shrink-0 relative">
-
-
-            {/* Combined Status Pill Vertical */}
-            <div className="hidden xl:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 gap-3 mr-2 items-center shadow-md">
-              <div className="flex flex-col gap-1 border-r border-white/10 pr-3">
-                <div className="flex items-center gap-2" title={serverOnline ? "Server Online" : "Server Offline"}>
-                  <div className="relative flex h-1.5 w-1.5">
-                    {serverOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${serverOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
-                  </div>
-                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">API</span>
-                </div>
-                <div className="flex items-center gap-2" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
-                  <div className="relative flex h-1.5 w-1.5">
-                    {rpcActive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                    <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
-                  </div>
-                  <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">RPC</span>
-                </div>
+        {/* Right side: telemetry status, notifications, controls */}
+        <div className="flex items-center gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
+          {/* Combined Status Pill */}
+          <div className="hidden sm:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
+            <div className="flex flex-row gap-2 border-r border-white/10 pr-3">
+              <div className="flex items-center gap-1.5" title={serverOnline ? "Server Online" : "Server Offline"}>
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${serverOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
+                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">API</span>
               </div>
-              <div className="flex items-center gap-2" title={telemetry?.gameVersion > 0 ? "SDK Verbunden" : "SDK Nicht Verbunden"}>
-                <div className="relative flex h-1.5 w-1.5">
-                  {telemetry?.gameVersion > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-                  <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${telemetry?.gameVersion > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-red-500'}`}></span>
-                </div>
-                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">SDK</span>
+              <div className="flex items-center gap-1.5" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
+                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">RPC</span>
               </div>
             </div>
+            <div className="flex items-center gap-1.5" title={telemetry?.gameVersion > 0 ? "SDK Verbunden" : "SDK Nicht Verbunden"}>
+              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${telemetry?.gameVersion > 0 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
+              <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">SDK</span>
+            </div>
+          </div>
 
-            <motion.button
-              id="notif-bell"
-              onClick={() => {
-                if (showNotifications) {
-                  handleMarkAllRead();
-                }
-                setShowNotifications(!showNotifications);
-              }}
-              whileHover={{
-                scale: 1.1,
-                rotate: [0, -15, 12, -10, 8, -4, 0]
-              }}
-              whileTap={{ scale: 0.9 }}
-              transition={{
-                rotate: { type: "keyframes", ease: "easeInOut", duration: 0.5 },
-                scale: { type: "spring", stiffness: 350, damping: 15 },
-                default: { type: "spring", stiffness: 350, damping: 15 }
-              }}
-              className={`p-2 rounded-xl transition-all relative ${showNotifications ? 'bg-primary/20 text-primary' : 'text-slate-400 hover:text-white hover:bg-primary/10'}`}
-            >
-              <Bell size={18} />
-              {notifications.some(n => !n.read) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-background animate-pulse" />
-              )}
-            </motion.button>
+          {/* Bell */}
+          <motion.button
+            id="notif-bell"
+            onClick={() => {
+              if (showNotifications) handleMarkAllRead();
+              setShowNotifications(!showNotifications);
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className={`p-2 rounded-xl transition-all relative ${showNotifications ? 'bg-primary/20 text-primary' : 'text-slate-400 hover:text-white hover:bg-primary/10'}`}
+          >
+            <Bell size={18} />
+            {notifications.some(n => !n.read) && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-background animate-pulse" />
+            )}
+          </motion.button>
 
-            {/* Notification Dropdown */}
+          {/* Notification Dropdown */}
+          {createPortal(
             <AnimatePresence>
-              {showNotifications && (
+              {showNotifications && notifPos && (
                 <motion.div
                   ref={notifRef}
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                  className="absolute top-full right-0 mt-4 w-80 bg-black backdrop-blur-[60px] saturate-[200%] border-2 border-[#2ba1b9]/20 rounded-2xl shadow-[0_40px_100px_rgba(0,0,0,0.9)] z-[100] overflow-hidden"
+                  className="fixed w-80 frosted-card !rounded-2xl !p-0 shadow-[0_40px_100px_rgba(0,0,0,0.9)] z-[100] overflow-hidden"
+                  style={{ top: notifPos.top, right: notifPos.right, border: "2px solid rgba(245,158,11,0.2) !important" }}
                 >
-                  <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black">
+                  <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                     <div className="flex items-center gap-2">
                       <h3 className="font-unbounded text-[9px] font-black text-white uppercase tracking-widest italic">Info-Zentrale</h3>
                       <button onClick={fetchNotifications} className="p-1 hover:text-primary transition-colors">
@@ -837,91 +739,78 @@ function App() {
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center">
                         <Bell size={24} className="mx-auto mb-3 text-slate-700 opacity-20" />
-                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest italic opacity-50">Keine neuen Meldungen</p>
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic opacity-50">Keine neuen Meldungen</p>
                       </div>
                     ) : (
                       notifications.map(n => (
                         <div
                           key={n.id}
                           onClick={() => handleNotificationClick(n)}
-                          className={`p-4 transition-all hover:bg-white/[0.04] cursor-pointer group/notif ${!n.read ? 'bg-primary/[0.03]' : 'opacity-40 grayscale-[0.5]'}`}
+                          className={`p-4 transition-all hover:bg-white/[0.04] cursor-pointer group/notif ${!n.read ? 'bg-primary/[0.03]' : 'opacity-60'}`}
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <p className={`text-[11px] font-black uppercase tracking-tight group-hover/notif:text-primary transition-colors ${!n.read ? 'text-primary' : 'text-slate-500'}`}>{n.title}</p>
-                            <span className="text-[9px] font-bold text-slate-600">{n.time}</span>
+                            <p className={`text-[11px] font-black uppercase tracking-tight group-hover/notif:text-primary transition-colors ${!n.read ? 'text-primary' : 'text-slate-300'}`}>{n.title}</p>
+                            <span className="text-[9px] font-bold text-slate-400">{n.time}</span>
                           </div>
-                          <p className={`text-[11px] font-medium leading-relaxed ${!n.read ? 'text-slate-400' : 'text-slate-600'}`}>{n.content}</p>
+                          <p className={`text-[11px] font-medium leading-relaxed ${!n.read ? 'text-slate-300' : 'text-slate-400'}`}>{n.content}</p>
                         </div>
                       ))
                     )}
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
+            </AnimatePresence>,
+            document.body
+          )}
 
-            <motion.div
+          {/* User Profile */}
+          {user && (
+            <button
               onClick={() => { setCurrentPage('profile'); setSelectedMemberId('me'); }}
-              whileHover={{ scale: 1.02, y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="flex items-center gap-3 bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 hover:border-primary/50 transition-all cursor-pointer group"
+              className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-white/5 transition-all group shrink-0"
+              title={user.username}
             >
-              <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-110">
-                {getAvatarUrlLocal(user?.avatar_url) ? <img src={getAvatarUrlLocal(user.avatar_url)!} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-primary/20" />}
+              <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border border-white/10 shrink-0">
+                {getAvatarUrlLocal(user.avatar_url) ? (
+                  <img src={getAvatarUrlLocal(user.avatar_url)!} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-primary/20 flex items-center justify-center text-[10px] text-primary font-black italic">
+                    {user.username?.charAt(0)}
+                  </div>
+                )}
               </div>
-              <div className="hidden sm:block text-left">
-                <p className="text-xs font-bold text-white group-hover:text-primary transition-colors leading-none">{user?.username}</p>
-                {isAdmin && <p className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mt-1">Administrator</p>}
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); logout(); }}
-                className="p-1.5 text-slate-500 hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all ml-1 shrink-0"
-                title="Abmelden"
-              >
-                <LogOut size={14} />
-              </button>
-            </motion.div>
-            <button
-              onClick={() => setTheme(prev => {
-                if (prev === 'dark') return 'light';
-                if (prev === 'light') return 'system';
-                return 'dark';
-              })}
-              className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-1 shrink-0"
-              title={
-                theme === 'dark'
-                  ? 'Design: Dunkel (klicken für Helles Design)'
-                  : theme === 'light'
-                    ? 'Design: Hell (klicken für System-Einstellung)'
-                    : 'Design: System (klicken für Dunkles Design)'
-              }
-            >
-              {theme === 'dark' ? (
-                <Moon size={18} />
-              ) : theme === 'light' ? (
-                <Sun size={18} />
-              ) : (
-                <Monitor size={18} />
-              )}
+              <span className="hidden sm:inline text-xs font-bold text-slate-350 group-hover:text-white transition-colors max-w-[100px] truncate">{user.username}</span>
             </button>
+          )}
+
+          {/* Logout */}
+          <button
+            onClick={logout}
+            className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+            title="Abmelden"
+          >
+            <LogOut size={18} />
+          </button>
+
+
+
+          {/* Window controls */}
+          <div className="flex items-center ml-2 border-l border-white/10 pl-2">
             <button
-              onClick={() => { console.log('App.tsx: Minimieren geklickt'); try { (window as any).electronAPI.minimizeWindow() } catch (e) { console.error(e) } }}
-              className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all ml-2"
-              title="Minimieren"
+              onClick={() => { try { (window as any).electronAPI.minimizeWindow() } catch (e) { } }}
+              className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
             >
               <Minus size={18} />
             </button>
             <button
-              onClick={() => { console.log('App.tsx: Maximieren geklickt'); try { (window as any).electronAPI.maximizeWindow() } catch (e) { console.error(e) } }}
+              onClick={() => { try { (window as any).electronAPI.maximizeWindow() } catch (e) { } }}
               className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-              title="Vollbild"
             >
               <Square size={16} />
             </button>
             <button
-              onClick={() => { console.log('App.tsx: Schließen geklickt'); try { (window as any).electronAPI.closeWindow() } catch (e) { console.error(e) } }}
+              onClick={() => { try { (window as any).electronAPI.closeWindow() } catch (e) { } }}
               className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-              title="Schließen"
             >
               <X size={18} />
             </button>
@@ -929,11 +818,10 @@ function App() {
         </div>
       </nav>
 
-
-
       {/* Main Content */}
-      <main className="relative z-10 pt-28 px-6 max-w-[1600px] mx-auto pb-10">
-        <AnimatePresence mode="wait" custom={direction}>
+      <main className="relative z-10 h-screen w-full overflow-hidden transition-all duration-300 ease-in-out">
+        <div className="w-full h-full">
+          <AnimatePresence initial={false} mode="wait" custom={direction}>
           <motion.div
             key={currentPage}
             custom={direction}
@@ -942,26 +830,33 @@ function App() {
             animate="center"
             exit="exit"
             transition={{
-              x: { type: "tween", duration: 0.25, ease: [0.25, 0.1, 0.25, 1] },
-              scale: { type: "tween", duration: 0.2, ease: "easeOut" },
-              opacity: { duration: 0.2, ease: "easeOut" }
+              x: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
+              exit: { x: { duration: 0.1, ease: [0.16, 1, 0.3, 1] } }
             }}
-            style={{ willChange: 'transform, opacity' }}
-            className="w-full min-h-[calc(100vh-7.5rem)]"
+              className={
+                currentPage === 'map'
+                  ? "absolute inset-0 w-full h-full overflow-hidden"
+                  : currentPage === 'chat'
+                    ? "absolute inset-0 w-full h-full pt-20 overflow-hidden"
+                    : currentPage === 'profile'
+                      ? "absolute inset-0 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar"
+                      : "absolute inset-0 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar px-6 max-w-[1600px] mx-auto pt-28 pb-10"
+              }
           >
             <Suspense fallback={
               <div className="flex items-center justify-center h-[60vh]">
                 <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             }>
-              {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} telemetry={telemetry} />}
+              {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} onNewsCreate={() => { setPendingNewsCreate(true); setCurrentPage('news'); }} telemetry={telemetry} />}
               {currentPage === 'team' && <Team onViewProfile={viewProfile} />}
               {currentPage === 'statistiken' && <Stats />}
               {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} onNavigate={setCurrentPage} />}
+              {currentPage === 'applications' && hasRole(['admin', 'management']) && <Suspense fallback={<div>Lädt...</div>}><Applications /></Suspense>}
               {currentPage === 'database' && isAdmin && <Database onBack={() => setCurrentPage('admin')} />}
               {currentPage === 'events' && <Events selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
               {currentPage === 'map' && <Map onViewProfile={viewProfile} initialSelectedId={targetMapId} onClearInitialId={() => setTargetMapId(null)} theme={theme} />}
-              {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
+              {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} openCreate={pendingNewsCreate} onConsumeCreate={() => setPendingNewsCreate(false)} />}
               {currentPage === 'gallery' && <Gallery />}
               {currentPage === 'chat' && <Chat selectedChannelId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
               {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => setCurrentPage('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
@@ -970,7 +865,8 @@ function App() {
               {currentPage === 'overlay-settings' && <OverlaySettings />}
             </Suspense>
           </motion.div>
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>
       </main>
 
       {/* Mobile Menu Sidebar - Moved to bottom for absolute top-layer priority */}
@@ -982,18 +878,25 @@ function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMenuOpen(false)}
-              className="absolute inset-0 bg-black/95 backdrop-blur-md"
+              className="absolute inset-0 bg-black/30"
             />
             <motion.div
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: "spring", stiffness: 300, damping: 28 }}
-              className="absolute top-0 left-0 bottom-0 w-[300px] bg-black border-r-2 border-[#2ba1b9]/20 p-6 pt-6 shadow-[50px_0_100px_rgba(0,0,0,0.9)] flex flex-col gap-3 no-drag pointer-events-auto"
+              className="absolute top-0 left-0 bottom-0 w-[300px] bg-zinc-950 border-r border-white/5 p-6 pt-6 shadow-2xl flex flex-col gap-3 no-drag pointer-events-auto overflow-hidden"
             >
+              {/* Internal ambient + glass layer (same-layer blur, like the cards,
+                  because a fixed overlay can't reliably sample the page behind it) */}
+              <div className="absolute inset-0 -z-10 overflow-hidden">
+                <div className="bg-blob-1 absolute -top-20 -left-10 w-64 h-64 rounded-full" />
+                <div className="bg-blob-2 absolute -bottom-10 right-0 w-64 h-64 rounded-full" />
+              </div>
+              <div className="absolute inset-0 -z-10 bg-zinc-950/70 backdrop-blur-xl" />
               <div className="flex items-center justify-between mb-8 no-drag">
                 <div className="flex items-center gap-3">
-                  <img src="logo.png" alt="FJOSTE Logo" className="w-8 h-8 object-contain" />
+                  <img src="logo.png" alt="Open Pipe Club Logo" className="w-8 h-8 object-contain" />
                   <span className="font-unbounded font-bold text-xs tracking-tight uppercase text-white">Drivers Hub</span>
                 </div>
                 <button
@@ -1016,13 +919,13 @@ function App() {
                       setCurrentPage(item.id);
                       setMenuOpen(false);
                     }}
-                    className={`w-full text-left px-4 py-4 rounded-xl flex items-center gap-4 transition-all duration-300 hover-glow no-drag pointer-events-auto ${currentPage === item.id
-                      ? 'bg-primary/20 text-primary font-bold border border-primary/20 shadow-[0_0_15px_rgba(43,161,185,0.1)]'
-                      : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                    className={`w-full text-left px-4 py-4 rounded-xl flex items-center gap-4 transition-all duration-300 no-drag pointer-events-auto ${currentPage === item.id
+                      ? 'bg-amber-400/10 text-amber-400 font-bold'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
                       }`}
                   >
                     <item.icon size={20} />
-                    <span className="text-[12px] font-black uppercase tracking-widest italic">{item.name}</span>
+                    <span className="text-sm font-semibold">{item.name}</span>
                   </button>
                 ))}
               </div>
@@ -1074,7 +977,7 @@ function App() {
                         {!installingPlugin && (
                           <button
                             onClick={() => installPlugin(game.gameId)}
-                            className="px-5 py-2.5 bg-primary text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(43,161,185,0.2)]"
+                            className="px-5 py-2.5 bg-primary text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(245, 158, 11,0.2)]"
                           >
                             Installieren
                           </button>
@@ -1092,7 +995,7 @@ function App() {
                               initial={{ width: 0 }}
                               animate={{ width: `${installProgress}%` }}
                               transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]"
+                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(245, 158, 11,0.5)]"
                             />
                           </div>
                         </div>
@@ -1149,7 +1052,7 @@ function App() {
 
                 <h2 className="text-xl font-unbounded font-bold text-white text-center mb-2 uppercase tracking-tight">App Update</h2>
                 <p className="text-slate-400 text-center text-sm mb-4 leading-relaxed">
-                  Eine neue Version ({updateVersion}) des FJOSTE Trackers ist verfügbar.
+                  Eine neue Version ({updateVersion}) des Open Pipe Club Trackers ist verfügbar.
                 </p>
 
                 {updateNotes && (
@@ -1170,7 +1073,7 @@ function App() {
                       </button>
                       <button
                         onClick={installAppUpdate}
-                        className="flex-1 py-3 bg-primary text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(43,161,185,0.2)]"
+                        className="flex-1 py-3 bg-primary text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(245, 158, 11,0.2)]"
                       >
                         Jetzt Updaten
                       </button>
@@ -1187,7 +1090,7 @@ function App() {
                             initial={{ width: 0 }}
                             animate={{ width: `${updateProgress}%` }}
                             transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                            className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(43,161,185,0.5)]"
+                            className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(245, 158, 11,0.5)]"
                           />
                         </div>
                       </div>
