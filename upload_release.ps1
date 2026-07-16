@@ -15,7 +15,7 @@ if (-not (Test-Path "package.json")) {
 
 $packageJson = Get-Content -Raw -Path "package.json" | ConvertFrom-Json
 $version = $packageJson.version
-$repo = "Niconoop/Open-Pipe-Club-App"
+$repo = "Niconoop/Open-Pipe-Club"
 $tokenFile = "../.github_token"
 
 write-host "Erkannte App-Version: v$version"
