@@ -1178,6 +1178,28 @@ async function handleTrackingLogic(current: any, prev: any) {
         if (!res.ok) console.error(`❌ Tracking Fehler: ${res.status} ${res.statusText}`);
       }).catch(err => console.error("❌ Tracking Netzwerkfehler:", err.message));
     } catch (e) { }
+
+    // 1b. Route-Punkt mitschneiden (falls ein Job läuft)
+    if (currentJobId && current.connected && (now - lastPositionSent > 5000)) {
+      try {
+        fetch(`${BACKEND_URL}/desktop/job-position`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userToken}`
+          },
+          body: JSON.stringify({
+            job_id: currentJobId,
+            game_x: current.posX,
+            game_y: current.posZ,
+            heading: current.heading,
+            speed: current.speed,
+            game: gameStr,
+            ts: new Date().toISOString()
+          })
+        }).catch(() => { });
+      } catch (e) { }
+    }
   }
 
   // 2. Job Events
