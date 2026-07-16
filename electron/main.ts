@@ -2177,7 +2177,7 @@ function downloadAndApplyUpdate(url: string, event: any) {
 }
 
 ipcMain.on('install-app-update', async (event) => {
-  const repo = 'Niconoop/Open-Pipe-Club-App';
+  const repo = 'Niconoop/Open-Pipe-Club';
   const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
   const options = {
     headers: {
