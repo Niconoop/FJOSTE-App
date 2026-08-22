@@ -603,9 +603,18 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
     )
   );
 
+  const isOnlyOwnerSettingActive = Boolean(
+    activeChannel && (
+      activeChannel.only_owner_can_add === 1 ||
+      activeChannel.only_owner_can_add === "1" ||
+      activeChannel.only_owner_can_add === true ||
+      activeChannel.only_owner_can_add === "true"
+    )
+  );
+
   const canAddMembers = Boolean(
     isCustomGroupChannel(activeChannel) && (
-      !activeChannel?.only_owner_can_add || isCreatorOrAdmin
+      !isOnlyOwnerSettingActive || isCreatorOrAdmin
     )
   );
 
@@ -819,16 +828,18 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
             {/* Custom Group Chats: Add Members & Leave Group buttons */}
             {isCustomGroupChannel(activeChannel) && (
               <>
-                <button
-                  onClick={() => {
-                    setSelectedMemberIds([]);
-                    setShowAddMembers(true);
-                  }}
-                  className="p-2 text-slate-500 hover:text-primary transition-all"
-                  title="Mitglieder hinzufügen"
-                >
-                  <UserPlus size={18} />
-                </button>
+                {canAddMembers && (
+                  <button
+                    onClick={() => {
+                      setSelectedMemberIds([]);
+                      setShowAddMembers(true);
+                    }}
+                    className="p-2 text-slate-500 hover:text-amber-400 transition-all"
+                    title="Mitglieder hinzufügen"
+                  >
+                    <UserPlus size={18} />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowLeaveConfirm(true)}
                   className="p-2 text-slate-500 hover:text-red-500 transition-all"
