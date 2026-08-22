@@ -207,8 +207,41 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
     try {
       const r = await axios.post(`${API_URL}/chat/channels`, { peer_user_id: peerId });
       const ch = r.data;
-      setChannels(prev => prev.find(c => c.id === ch.id) ? prev : [...prev, ch]);
-      setActiveChannel(ch);
+
+      // Re-fetch all channels so the channels state has full peer_name and members_info
+      let fullChannels: any[] = [];
+      try {
+        const cRes = await axios.get(`${API_URL}/chat/channels`);
+        fullChannels = cRes.data || [];
+        if (Array.isArray(fullChannels) && fullChannels.length > 0) {
+          setChannels(fullChannels);
+        }
+      } catch (e) { }
+
+      let activeCh = fullChannels.find((c: any) => String(c.id) === String(ch.id)) || ch;
+
+      // If activeCh is missing driver name/avatar, construct from users list
+      const targetUser = users.find(u => String(u.id) === String(peerId) || String(u.user_id) === String(peerId));
+      if (targetUser) {
+        const peerName = targetUser.username || targetUser.name || "Fahrer";
+        activeCh = {
+          ...activeCh,
+          name: peerName,
+          peer_name: peerName,
+          peer_user_id: targetUser.id || targetUser.user_id,
+          peer_avatar: targetUser.custom_avatar_url || targetUser.avatar_url,
+          members_info: activeCh.members_info || [
+            { id: user?.user_id || user?.id, username: user?.username },
+            { id: targetUser.id || targetUser.user_id, username: peerName, avatar_url: targetUser.custom_avatar_url || targetUser.avatar_url }
+          ]
+        };
+      }
+
+      setChannels(prev => {
+        const exists = prev.some(c => String(c.id) === String(activeCh.id));
+        return exists ? prev.map(c => String(c.id) === String(activeCh.id) ? activeCh : c) : [...prev, activeCh];
+      });
+      setActiveChannel(activeCh);
       setDrawerOpen(false);
     } catch { toast.error("Chat konnte nicht gestartet werden"); }
   };

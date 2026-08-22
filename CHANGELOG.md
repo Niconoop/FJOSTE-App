@@ -21,6 +21,8 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
     - `401 Unauthorized Interceptor`: In `services/api.ts` wurde ein Axios-Interceptor integriert, der abgelaufene JWT-Tokens bei HTTP 401 automatisch entfernt und erneute Fehlermeldungen verhindert.
   - **🌐 Eigene Domain-Download-URLs**:
     - App-Downloads sind jetzt direkt über `https://openpipeclub.com/download/setup.exe` und `https://openpipeclub.com/download/portable.exe` erreichbar.
+  - **💬 Sofortige Namensanzeige bei neuen Chats**:
+    - `Chat.tsx` löst beim Starten eines Direktchats den Fahrernamen und das Profilbild sofort lokal und im Backend auf, sodass nicht mehr "Fahrer" angezeigt wird und die Chat-Seite nicht mehr neu geladen werden muss.
 
 ## [1.5.1] - 2026-08-21
 
