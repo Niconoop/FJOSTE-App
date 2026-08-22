@@ -15,6 +15,21 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        console.warn('Session abgelaufen (401 Unauthorized) - melde Benutzer ab');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const apiService = {
   // Stats & Dashboard
   getStats: () => api.get('/stats/global'),
