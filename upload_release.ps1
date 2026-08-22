@@ -18,57 +18,47 @@ $version = $packageJson.version
 
 write-host "Erkannte App-Version: v$version"
 
-# 2. Verify version is the top entry in CHANGELOG.md
+# 2. Extract changelog for version v$version from CHANGELOG.md (if available)
 $changelogPath = "../CHANGELOG.md"
 if (-not (Test-Path $changelogPath)) {
     $changelogPath = "CHANGELOG.md"
 }
 
+$releaseBody = ""
+
 if (Test-Path $changelogPath) {
     $lines = Get-Content -Encoding UTF8 $changelogPath
-    $topVersion = ""
+    $matchingVersionFound = $false
+    $changelogLines = @()
+
     foreach ($line in $lines) {
         if ($line -match "^##\s*\[?v?([0-9]+\.[0-9]+\.[0-9]+)\]?") {
-            $topVersion = $Matches[1]
-            break
-        }
-    }
-
-    if ($topVersion -and ($topVersion -ne $version)) {
-        write-error "Die Version v$version aus package.json stimmt nicht mit der neuesten Version v$topVersion im CHANGELOG.md ueberein! Bitte pflege die Version v$version zuerst als obersten Eintrag im CHANGELOG.md ein."
-        exit 1
-    }
-    write-host "Version v$version erfolgreich im CHANGELOG.md validiert."
-} else {
-    write-warning "Kein CHANGELOG.md gefunden. Ueberspringe Version-Validierung."
-}
-
-# 3. Extract the latest changelog entry from CHANGELOG.md
-$releaseBody = ""
-if (Test-Path $changelogPath) {
-    $lines = Get-Content -Encoding UTF8 $changelogPath
-    $started = $false
-    $changelogLines = @()
-    foreach ($line in $lines) {
-        if ($line -match "^##\s") {
-            if (-not $started) {
-                $started = $true
+            $parsedVersion = $Matches[1]
+            if ($parsedVersion -eq $version) {
+                $matchingVersionFound = $true
                 continue
-            } else {
+            } elseif ($matchingVersionFound) {
+                # Reached the next version section header
                 break
             }
         }
-        if ($started) {
+        if ($matchingVersionFound) {
             $changelogLines += $line
         }
     }
-    if ($changelogLines.Count -gt 0) {
+
+    if ($matchingVersionFound -and $changelogLines.Count -gt 0) {
         $releaseBody = ($changelogLines -join "`n").Trim()
+        write-host "Changelog fuer Version v$version erfolgreich aus CHANGELOG.md geladen."
+    } else {
+        write-warning "Kein passender Eintrag fuer Version v$version im CHANGELOG.md gefunden. Verwende Standard-Changelog ('Bugfixes und Performance-Optimierungen')."
     }
+} else {
+    write-warning "Kein CHANGELOG.md gefunden. Verwende Standard-Changelog ('Bugfixes und Performance-Optimierungen')."
 }
 
 if (-not $releaseBody) {
-    $releaseBody = "Release fuer Version v$version. Automatisch hochgeladen durch das Cloudflare R2 Upload Tool."
+    $releaseBody = "Bugfixes und Performance-Optimierungen."
 }
 
 # 4. Generate Manifest (latest.json)

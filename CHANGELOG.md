@@ -24,6 +24,8 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
   - **💬 Sofortige Namensanzeige bei neuen Chats & Behebung der Gruppen-Einstellungen**:
     - `Chat.tsx` löst beim Starten eines Direktchats den Fahrernamen und das Profilbild sofort lokal und im Backend auf, sodass nicht mehr "Fahrer" angezeigt wird und die Chat-Seite nicht mehr neu geladen werden muss.
     - `Gruppen-Einstellungen & Button-Sichtbarkeit`: Der Pfad zum Speichern der Option ("nur Ersteller kann Mitglieder hinzufügen") wurde korrigiert und der "Mitglieder hinzufügen"-Button in `Chat.tsx` mit der `canAddMembers`-Bedingung verknüpft, sodass er für normale Mitglieder ausgeblendet wird, wenn die Option aktiv ist.
+  - **🛠️ Fehlertoleranter Uploader**:
+    - `upload_release.ps1` bricht bei fehlendem oder nicht übereinstimmendem Changelog-Eintrag nicht mehr ab, sondern gibt eine Warnung aus und nutzt automatisch den Standard-Changelog `"Bugfixes und Performance-Optimierungen."`.
 
 ## [1.5.1] - 2026-08-21
 
