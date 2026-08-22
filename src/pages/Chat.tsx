@@ -361,8 +361,9 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
     if (!activeChannel) return;
     try {
       const val = onlyOwnerCanAdd ? 1 : 0;
-      await axios.post(`${API_URL}/api/chat/channels/${activeChannel.id}/settings`, { only_owner_can_add: val }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('opc_token')}` }
+      const token = localStorage.getItem('token') || localStorage.getItem('opc_token');
+      await axios.post(`${API_URL}/chat/channels/${activeChannel.id}/settings`, { only_owner_can_add: val }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       toast.success(onlyOwnerCanAdd ? "Nur Ersteller kann neue Mitglieder hinzufügen" : "Jedes Mitglied kann neue Mitglieder hinzufügen");
       const newActive = { ...activeChannel, only_owner_can_add: val };
