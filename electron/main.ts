@@ -2692,7 +2692,7 @@ ipcMain.handle('check-app-update', async () => {
     if (r2Res && (r2Res.latestVersion || r2Res.version)) {
       const latestVersion = (r2Res.latestVersion || r2Res.version || '').replace(/^v/, '');
       const releaseNotes = r2Res.releaseNotes || '';
-      const downloadUrl = r2Res.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
+      const downloadUrl = r2Res.downloadUrl || 'https://openpipeclub.com/download/setup.exe';
 
       if (latestVersion && compareVersions(currentVersion, latestVersion) < 0) {
         return {

@@ -18,6 +18,8 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
   - **🔧 Behebung der R2-Update-Erkennung**:
     - `UTF-8 BOM Behebung`: Der Cloudflare Worker decodiert `latest.json` jetzt mit `utf-8-sig`, um den UTF-8-BOM-Header von PowerShell zu verarbeiten. `upload_release.ps1` schreibt `latest.json` nun ohne BOM.
     - `Cache-Busting`: In `electron/main.ts` und dem Worker wurden Cache-Busting-Zeitstempel (`?t=...`) und `no-cache`-Header hinzugefügt, damit neu hochgeladene R2-Releases sofort und ohne CDN-Verzögerung von allen App-Clients erkannt werden.
+  - **🌐 Eigene Domain-Download-URLs**:
+    - App-Downloads sind jetzt direkt über `https://openpipeclub.com/download/setup.exe` und `https://openpipeclub.com/download/portable.exe` erreichbar.
 
 ## [1.5.1] - 2026-08-21
 
