@@ -85,7 +85,8 @@ $latestManifest = @{
     portableUrl = "https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/portable.exe"
 } | ConvertTo-Json -Depth 5
 
-Set-Content -Path "dist-app/latest.json" -Value $latestManifest -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) "dist-app/latest.json"), $latestManifest, $utf8NoBom)
 
 # 5. Upload Manifest & Assets to Cloudflare R2
 write-host ""

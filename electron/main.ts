@@ -2670,7 +2670,14 @@ ipcMain.handle('check-app-update', async () => {
   // Check Cloudflare R2 Update Endpoint (No GitHub fallback)
   try {
     const r2Res = await new Promise<any>((resolve) => {
-      const req = https.get('https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/latest', { headers: { 'User-Agent': 'Open-Pipe-Club-App' } }, (res) => {
+      const updateUrl = `https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/latest?t=${Date.now()}`;
+      const req = https.get(updateUrl, {
+        headers: {
+          'User-Agent': 'Open-Pipe-Club-App',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      }, (res) => {
         let body = '';
         if (res.statusCode !== 200) return resolve(null);
         res.on('data', chunk => body += chunk);

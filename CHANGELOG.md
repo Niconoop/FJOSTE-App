@@ -15,6 +15,9 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
     - Der redundant doppelte 627 MB große Ordner `public/maps-data/` wurde aus der App entfernt (die Kartendaten werden zur Laufzeit aus dem lokalen Dokumente-Ordner oder per Backend-Proxy geladen).
     - `vite build` wurde von ca. 45 Sekunden auf **3,26 Sekunden** beschleunigt.
     - Die Dateigröße der `Setup.exe` wurde von **244 MB auf 114 MB um mehr als 53% reduziert**.
+  - **🔧 Behebung der R2-Update-Erkennung**:
+    - `UTF-8 BOM Behebung`: Der Cloudflare Worker decodiert `latest.json` jetzt mit `utf-8-sig`, um den UTF-8-BOM-Header von PowerShell zu verarbeiten. `upload_release.ps1` schreibt `latest.json` nun ohne BOM.
+    - `Cache-Busting`: In `electron/main.ts` und dem Worker wurden Cache-Busting-Zeitstempel (`?t=...`) und `no-cache`-Header hinzugefügt, damit neu hochgeladene R2-Releases sofort und ohne CDN-Verzögerung von allen App-Clients erkannt werden.
 
 ## [1.5.1] - 2026-08-21
 
