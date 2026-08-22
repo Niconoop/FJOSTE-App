@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Monitor, Lock, Unlock, Sliders, SlidersHorizontal, RefreshCw, Check, Eye, EyeOff, LayoutTemplate, Palette, X, Pipette, ArrowUpDown } from 'lucide-react';
+import { Monitor, Lock, Unlock, Sliders, SlidersHorizontal, RefreshCw, Check, Eye, EyeOff, LayoutTemplate, Palette, X, Pipette, ArrowUpDown, Keyboard, LayoutGrid } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
+import apiService from '../services/api';
 
 interface Position {
   x: number;
@@ -40,6 +42,28 @@ interface OverlaySettingsType {
   singleRowHud: boolean;
   customAccentColor: string;
   blockCollisions?: boolean;
+  cityEntryNotify?: boolean;
+  trafficJamNotify?: boolean;
+  trafficServer?: string;
+  showCarPlay: boolean;
+  carPlayTheme: 'dark' | 'light' | 'auto';
+  carPlayTextScale: 'small' | 'medium' | 'large';
+  carPlayHotkeys: {
+    toggle: string;
+    next: string;
+    prev: string;
+    home: string;
+    playPause: string;
+  };
+  carPlayNotifySpeed?: boolean;
+  carPlayNotifyFuel?: boolean;
+  carPlayNotifyRest?: boolean;
+  carPlayNotifyDamage?: boolean;
+  carPlayNotifyCargo?: boolean;
+  carPlayNotifyMusic?: boolean;
+  carPlayNotifyChat?: boolean;
+  carPlayNotifyNews?: boolean;
+  carPlayNotifyEvent?: boolean;
 }
 
 const DEFAULT_WIDGET_SIZES: Record<string, WidgetSize> = {
@@ -221,11 +245,88 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   widgetSizes: { ...DEFAULT_WIDGET_SIZES },
   singleRowHud: false,
   customAccentColor: '#f59e0b',
-  blockCollisions: true
+  blockCollisions: true,
+  cityEntryNotify: true,
+  trafficJamNotify: true,
+  trafficServer: 'sim1',
+  showCarPlay: false,
+  carPlayTheme: 'dark',
+  carPlayTextScale: 'medium',
+  carPlayHotkeys: {
+    toggle: 'F9',
+    next: 'Ctrl+Alt+Right',
+    prev: 'Ctrl+Alt+Left',
+    home: 'Ctrl+Alt+H',
+    playPause: 'Ctrl+Alt+Space'
+  }
 };
 
 const getPosKey = (isSingle: boolean) => isSingle ? 'openpipeclub_overlay_positions_single' : 'openpipeclub_overlay_positions';
 const getSizeKey = (isSingle: boolean) => isSingle ? 'openpipeclub_overlay_widget_sizes_single' : 'openpipeclub_overlay_widget_sizes';
+
+const HotkeyRecorder = ({ value, onChange }: { value: string; onChange: (val: string) => void }) => {
+  const [recording, setRecording] = useState(false);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+
+      const parts: string[] = [];
+      if (e.ctrlKey) parts.push('Ctrl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+
+      let key = e.key;
+      if (key === ' ') {
+        key = 'Space';
+      } else if (key.startsWith('Arrow')) {
+        key = key.replace('Arrow', '');
+      } else if (key.length === 1) {
+        key = key.toUpperCase();
+      }
+
+      parts.push(key);
+      const accelerator = parts.join('+');
+
+      onChange(accelerator);
+      setRecording(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [recording]);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setRecording(prev => !prev)}
+        className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-tight transition-all text-center min-w-[140px] cursor-pointer ${
+          recording
+            ? 'bg-rose-500/20 border-rose-500/50 text-rose-400 animate-pulse'
+            : 'bg-[#18181b] border-white/10 text-white hover:border-amber-500/40'
+        }`}
+      >
+        {recording ? 'Drücke Taste...' : value || 'Keine Taste'}
+      </button>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="text-[10px] font-bold text-slate-500 hover:text-red-400 px-1 py-0.5"
+          title="Löschen"
+        >
+          Löschen
+        </button>
+      )}
+    </div>
+  );
+};
 
 const OverlaySettings = () => {
   const [showColorModal, setShowColorModal] = useState(false);
@@ -247,7 +348,11 @@ const OverlaySettings = () => {
           const missing = DEFAULT_SETTINGS.widgetOrder.filter(w => !parsed.widgetOrder.includes(w));
           parsed.widgetOrder = [...parsed.widgetOrder, ...missing];
         }
-        return { ...DEFAULT_SETTINGS, ...parsed, blockCollisions: true };
+        const resolved = { ...DEFAULT_SETTINGS, ...parsed, blockCollisions: true };
+        if (parsed.showTacho !== undefined && parsed.showCarPlay === undefined) {
+          resolved.showCarPlay = parsed.showTacho;
+        }
+        return resolved;
       } catch (e) {
         return { ...DEFAULT_SETTINGS, blockCollisions: true };
       }
@@ -321,6 +426,8 @@ const OverlaySettings = () => {
   const dragStartPos = useRef({ x: 0, y: 0 });
   const widgetStartPos = useRef({ x: 0, y: 0 });
 
+  const [activeTab, setActiveTab] = useState<'overlay' | 'carplay'>('overlay');
+
   // Resize mouse events
   const onResizeStart = (e: React.MouseEvent, widgetKey: string) => {
     e.stopPropagation();
@@ -377,8 +484,33 @@ const OverlaySettings = () => {
       const maxH = resizingWidget === 'mainHud' && settings.singleRowHud ? defaultSize.h : Infinity;
 
       // Enforce screen boundaries during resize: pos.x + newW * zoomFactor <= SW
-      const limitMaxW = Math.min(maxW, Math.max(minW, (SW - pos.x) / zoomFactor));
-      const limitMaxH = Math.min(maxH, Math.max(minH, (SH - pos.y) / zoomFactor));
+      let limitMaxW = Math.min(maxW, Math.max(minW, (SW - pos.x) / zoomFactor));
+      let limitMaxH = Math.min(maxH, Math.max(minH, (SH - pos.y) / zoomFactor));
+
+      // Constrain by other active widgets to prevent overlapping during resize
+      Object.keys(widgetSizes).forEach(other => {
+        if (other === resizingWidget) return;
+        if (!isWidgetEnabled(other)) return;
+
+        const otherPos = positions[other] || { x: 40, y: 40 };
+        const otherW = widgetSizes[other]?.w || 80;
+        const otherH = widgetSizes[other]?.h || (other === 'drivers' ? 120 : getWidgetDefaultSize(other, settings.singleRowHud).h || 80);
+
+        // Check vertical overlap for width constraint
+        const verticalOverlap = Math.max(pos.y, otherPos.y) < Math.min(pos.y + resizeStartSize.current.h, otherPos.y + otherH);
+        if (verticalOverlap && otherPos.x >= pos.x) {
+          limitMaxW = Math.min(limitMaxW, otherPos.x - pos.x);
+        }
+
+        // Check horizontal overlap for height constraint
+        const horizontalOverlap = Math.max(pos.x, otherPos.x) < Math.min(pos.x + resizeStartSize.current.w, otherPos.x + otherW);
+        if (horizontalOverlap && otherPos.y >= pos.y) {
+          limitMaxH = Math.min(limitMaxH, otherPos.y - pos.y);
+        }
+      });
+
+      limitMaxW = Math.max(minW, limitMaxW);
+      limitMaxH = Math.max(minH, limitMaxH);
 
       const newW = Math.min(limitMaxW, Math.max(minW, resizeStartSize.current.w + dxUnscaled));
       const newH = Math.min(limitMaxH, Math.max(minH, resizeStartSize.current.h + dyUnscaled));
@@ -467,6 +599,20 @@ const OverlaySettings = () => {
       ipcRenderer.on('rpc-active-changed', rpcListener);
       return () => {
         ipcRenderer.removeListener('rpc-active-changed', rpcListener);
+      };
+    } catch (e) { }
+  }, []);
+
+  // Sync CarPlay status
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      const listener = (_: any, active: boolean) => {
+        setSettings(prev => ({ ...prev, showCarPlay: active }));
+      };
+      ipcRenderer.on('carplay-status-changed', listener);
+      return () => {
+        ipcRenderer.removeListener('carplay-status-changed', listener);
       };
     } catch (e) { }
   }, []);
@@ -646,6 +792,7 @@ const OverlaySettings = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+
   const toggleOverlay = () => {
     setIsOverlayOpen(prev => !prev);
     try {
@@ -677,6 +824,11 @@ const OverlaySettings = () => {
   };
 
   const resetPositions = () => {
+    if (activeTab === 'carplay') {
+      toast.success('CarPlay-Layout hat ein festes Raster.');
+      return;
+    }
+
     const defaultPositions = {
       logo: { x: 40, y: 40 },
       mainHud: { x: 40, y: 130 },
@@ -711,6 +863,35 @@ const OverlaySettings = () => {
     }));
   };
 
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const detectTrafficServer = async () => {
+      try {
+        const res = await apiService.getMyTruckersMPSession();
+        if (cancelled) return;
+        const serverName = (res.data as any)?.server_name;
+        if (!serverName) return;
+        const lower = String(serverName).toLowerCase();
+        let mapped = 'sim1';
+        if (lower.includes('simulation 2') || lower.includes('sim 2')) mapped = 'sim2';
+        else if (lower.includes('us') || lower.includes('arc2') || lower.includes('arcade')) mapped = 'arc2';
+        else if (lower.includes('simulation 1') || lower.includes('sim 1')) mapped = 'sim1';
+        if ((settings.trafficServer || '') !== mapped) {
+          updateSetting('trafficServer', mapped);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    detectTrafficServer();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   const SW = window.screen.width || 1920;
   const SH = window.screen.height || 1080;
 
@@ -722,6 +903,8 @@ const OverlaySettings = () => {
     spotify: 'Spotify Widget',
     gameMap: 'Spielkarte'
   };
+
+
 
   // Custom Drag Event Handlers
   const handleMouseDown = (widget: string, e: React.MouseEvent) => {
@@ -993,6 +1176,9 @@ const OverlaySettings = () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [draggingWidget, positions, settings, widgetSizes]);
+
+  // Dragging mouse events for CarPlay
+
 
   // Overlap Resolution logic for scaling changes
   const resolveOverlaps = (
@@ -1614,197 +1800,518 @@ const OverlaySettings = () => {
               </div>
             </div>
 
-            {/* Interactive Screen Simulator */}
-          <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
+            {/* Overlay Notifications & Traffic Settings */}
+            <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+              <div className="flex items-center gap-3 mb-3">
                 <div className="w-1 h-4 bg-amber-400 rounded-full" />
                 <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
-                  Bildschirm-Simulator
+                  Benachrichtigungen & Stau-Warnungen
                 </h2>
               </div>
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-black px-2.5 py-1 rounded-lg border border-white/5 tabular-nums">
-                Auflösung: {SW} x {SH} px
-              </span>
+              <p className="text-[10px] text-slate-500 mb-4 uppercase tracking-wider leading-relaxed">
+                Stelle ein, worüber du im Overlay benachrichtigt werden möchtest:
+              </p>
+
+              <div className="space-y-3">
+                <label className="flex items-center justify-between cursor-pointer group py-0.5">
+                  <div>
+                    <span className="text-xs text-slate-300 group-hover:text-white transition-colors block">Stadt-Betreten Benachrichtigung</span>
+                    <span className="text-[9px] text-slate-500 block">Zeigt Spieleranzahl beim Einfahren in eine Stadt oben an</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={settings.cityEntryNotify !== false}
+                      onChange={() => updateSetting('cityEntryNotify', settings.cityEntryNotify === false)}
+                      className="sr-only peer"
+                    />
+                    <div className="switch-toggle" />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer group py-0.5">
+                  <div>
+                    <span className="text-xs text-slate-300 group-hover:text-white transition-colors block">Stau-Warnung (TruckersMP)</span>
+                    <span className="text-[9px] text-slate-500 block">Warnt im Overlay bei Annäherung an einen Stau</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={settings.trafficJamNotify !== false}
+                      onChange={() => updateSetting('trafficJamNotify', settings.trafficJamNotify === false)}
+                      className="sr-only peer"
+                    />
+                    <div className="switch-toggle" />
+                  </div>
+                </label>
+
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-xs text-slate-300">TruckersMP Server</span>
+                  <select
+                    value={settings.trafficServer || 'sim1'}
+                    onChange={(e) => updateSetting('trafficServer', e.target.value)}
+                    className="bg-zinc-900 border border-white/10 rounded-lg text-xs font-bold text-white px-2.5 py-1 outline-none cursor-pointer hover:border-amber-500/40 transition-all"
+                  >
+                    <option value="sim1">EU Simulation 1</option>
+                    <option value="sim2">EU Simulation 2</option>
+                    <option value="arc2">US Simulation</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            {/* Simulated Desktop Box */}
-            <div
-              ref={previewRef}
-              className="relative w-full aspect-video bg-black/90 rounded-2xl border-2 border-white/5 overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.9)]"
-              style={{
-                backgroundImage: 'radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px)',
-                backgroundSize: '20px 20px'
-              }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
-                <span className="font-unbounded text-3xl font-black uppercase tracking-widest italic select-none">OPEN PIPE CLUB SCREEN</span>
+            {/* CarPlay Settings */}
+            <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                  <LayoutGrid size={16} /> CarPlay-Einstellungen
+                </h2>
+              </div>
+              <p className="text-[10px] text-slate-500 mb-4 uppercase tracking-wider leading-relaxed">
+                Konfiguriere das CarPlay / Android Auto LKW-Zusatzdisplay:
+              </p>
+
+              <div className="space-y-4">
+                {/* CarPlay Window Activation Toggle */}
+                <label className="flex items-center justify-between cursor-pointer group py-0.5">
+                  <div>
+                    <span className="text-xs text-slate-300 group-hover:text-white transition-colors block">CarPlay-Fenster aktivieren</span>
+                    <span className="text-[9px] text-slate-500 block">Öffnet ein separates Apple CarPlay / Android Auto Zusatzfenster</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={settings.showCarPlay}
+                      onChange={() => updateSetting('showCarPlay', !settings.showCarPlay)}
+                      className="sr-only peer"
+                    />
+                    <div className="switch-toggle" />
+                  </div>
+                </label>
+
+                {settings.showCarPlay && (
+                  <div className="space-y-4 pt-3 border-t border-white/5 animate-in fade-in duration-200">
+                    {/* Theme selector */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-slate-400 font-medium block">CarPlay Design-Theme</span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'dark', label: 'Dunkel (Dark)' },
+                          { id: 'light', label: 'Hell (Light)' },
+                          { id: 'auto', label: 'Automatisch' }
+                        ].map(theme => (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            onClick={() => updateSetting('carPlayTheme', theme.id as any)}
+                            className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all text-center cursor-pointer ${
+                              settings.carPlayTheme === theme.id
+                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                : 'bg-[#18181b] border-white/10 text-slate-400 hover:bg-[#27272a] hover:text-white'
+                            }`}
+                          >
+                            {theme.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Text scale selector */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-slate-400 font-medium block">CarPlay Text-Skalierung</span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'small', label: 'Klein (80%)' },
+                          { id: 'medium', label: 'Mittel (100%)' },
+                          { id: 'large', label: 'Groß (150%)' }
+                        ].map(scale => (
+                          <button
+                            key={scale.id}
+                            type="button"
+                            onClick={() => updateSetting('carPlayTextScale', scale.id as any)}
+                            className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all text-center cursor-pointer ${
+                              (settings.carPlayTextScale || 'medium') === scale.id
+                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                : 'bg-[#18181b] border-white/10 text-slate-400 hover:bg-[#27272a] hover:text-white'
+                            }`}
+                          >
+                            {scale.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* CarPlay Notifications settings */}
+                    <div className="space-y-2.5 pt-3 border-t border-white/5">
+                      <span className="text-xs text-slate-400 font-medium block">
+                        CarPlay Benachrichtigungen (Cockpit-Alerts)
+                      </span>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                        {[
+                          { key: 'carPlayNotifySpeed', label: 'Geschwindigkeitswarnung', desc: 'Alert bei Überschreitung des Limits' },
+                          { key: 'carPlayNotifyFuel', label: 'Treibstoffwarnung', desc: 'Alert bei Reserve-Füllstand' },
+                          { key: 'carPlayNotifyRest', label: 'Müdigkeitswarnung', desc: 'Alert bei Lenkzeit-Pause < 30m' },
+                          { key: 'carPlayNotifyDamage', label: 'Schadenswarnung', desc: 'Alert bei Erhöhung des LKW-Schadens' },
+                          { key: 'carPlayNotifyCargo', label: 'Auftragswarnung', desc: 'Alert bei Annahme eines Auftrags' },
+                          { key: 'carPlayNotifyMusic', label: 'Songwechsel', desc: 'Alert bei neuem Musiktitel' },
+                          { key: 'carPlayNotifyChat', label: 'Chatnachrichten', desc: 'Alert bei privaten & Gruppen-DMs' },
+                          { key: 'carPlayNotifyNews', label: 'Firmen-News', desc: 'Alert bei neuen Speditions-News' },
+                          { key: 'carPlayNotifyEvent', label: 'Speditionsevents', desc: 'Alert bei neuen convoys & Events' }
+                        ].map(item => (
+                          <label key={item.key} className="flex items-center justify-between cursor-pointer group py-0.5">
+                            <div className="min-w-0 pr-2">
+                              <span className="text-xs text-slate-350 group-hover:text-white transition-colors block truncate">{item.label}</span>
+                              <span className="text-[8px] text-slate-500 group-hover:text-slate-400 transition-colors block truncate">{item.desc}</span>
+                            </div>
+                            <div className="relative shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={settings[item.key as keyof OverlaySettingsType] !== false}
+                                onChange={() => updateSetting(item.key, settings[item.key as keyof OverlaySettingsType] === false)}
+                                className="sr-only peer"
+                              />
+                              <div className="switch-toggle" />
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Hotkeys settings */}
+                    <div className="space-y-2.5 pt-3 border-t border-white/5">
+                      <span className="text-xs text-slate-400 font-medium block flex items-center gap-1.5">
+                        <Keyboard size={14} className="text-amber-400" /> CarPlay Tastatur-Steuerung (Hotkeys)
+                      </span>
+                      <p className="text-[9px] text-slate-500 leading-tight">
+                        Klicke auf das Feld und drücke die gewünschte Tastenkombination (z.B. Strg+Alt+Taste), um sie aufzuzeichnen.
+                      </p>
+
+                      <div className="space-y-2 mt-2">
+                        {[
+                          { key: 'toggle', label: 'CarPlay Ein/Ausblenden' },
+                          { key: 'home', label: 'Home-Bildschirm' },
+                          { key: 'playPause', label: 'Medien Play/Pause' },
+                          { key: 'navUp', label: 'Navigation Hoch' },
+                          { key: 'navDown', label: 'Navigation Runter' },
+                          { key: 'navLeft', label: 'Navigation Links' },
+                          { key: 'navRight', label: 'Navigation Rechts' },
+                          { key: 'navEnter', label: 'Navigation Auswählen (Enter)' },
+                          { key: 'navBack', label: 'Navigation Zurück' }
+                        ].map(item => (
+                          <div key={item.key} className="flex items-center justify-between py-1 border-b border-white/[0.02]">
+                            <span className="text-xs text-slate-300 font-medium">{item.label}</span>
+                            <HotkeyRecorder
+                              value={settings.carPlayHotkeys?.[item.key as keyof typeof settings.carPlayHotkeys] || ''}
+                              onChange={(val) => {
+                                const currentHotkeys = settings.carPlayHotkeys || {
+                                  toggle: 'F9',
+                                  next: 'Ctrl+Alt+Right',
+                                  prev: 'Ctrl+Alt+Left',
+                                  home: 'Ctrl+Alt+H',
+                                  playPause: 'Ctrl+Alt+Space',
+                                  navUp: 'Ctrl+Alt+Up',
+                                  navDown: 'Ctrl+Alt+Down',
+                                  navLeft: 'Ctrl+Alt+Left',
+                                  navRight: 'Ctrl+Alt+Right',
+                                  navEnter: 'Ctrl+Alt+Enter',
+                                  navBack: 'Ctrl+Alt+Backspace'
+                                };
+                                updateSetting('carPlayHotkeys', { ...currentHotkeys, [item.key]: val });
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Interactive Screen Simulator */}
+            <div className="frosted-card bg-[#000000] border-2 border-[#f59e0b]/20 shadow-xl !p-4 flex flex-col">
+              <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                  <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                    Bildschirm-Simulator
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('overlay')}
+                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      activeTab === 'overlay'
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        : 'text-slate-400 hover:text-white border border-transparent'
+                    }`}
+                  >
+                    Overlay-Layout
+                  </button>
+                  {settings.showCarPlay && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('carplay')}
+                      className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                        activeTab === 'carplay'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'text-slate-400 hover:text-white border border-transparent'
+                      }`}
+                    >
+                      CarPlay-Layout
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Visual Guidelines for Snap Targets (only visible when dragging) */}
-              {draggingWidget && (
+              {activeTab === 'carplay' && settings.showCarPlay ? (
                 <>
-                  {/* Center lines */}
-                  <div className="absolute inset-y-0 left-1/2 border-l border-primary/20 border-dashed pointer-events-none" />
-                  <div className="absolute inset-x-0 top-1/2 border-t border-primary/20 border-dashed pointer-events-none" />
-
-                  {/* Margins */}
-                  <div className="absolute inset-y-0 border-l border-white/[0.04] border-dashed pointer-events-none" style={{ left: `${(40 / SW) * 100}%` }} />
-                  <div className="absolute inset-y-0 border-r border-white/[0.04] border-dashed pointer-events-none" style={{ right: `${(40 / SW) * 100}%` }} />
-                  <div className="absolute inset-x-0 border-t border-white/[0.04] border-dashed pointer-events-none" style={{ top: `${(40 / SH) * 100}%` }} />
-                  <div className="absolute inset-x-0 border-b border-white/[0.04] border-dashed pointer-events-none" style={{ bottom: `${(40 / SH) * 100}%` }} />
-                </>
-              )}
-
-              {/* Active Snap Guide Lines */}
-              {draggingWidget && activeGuides.x !== null && (
-                <div
-                  className="absolute inset-y-0 border-l border-dashed pointer-events-none z-30"
-                  style={{
-                    left: `${(activeGuides.x / SW) * 100}%`,
-                    borderColor: '#f59e0b',
-                    opacity: 0.8
-                  }}
-                />
-              )}
-              {draggingWidget && activeGuides.y !== null && (
-                <div
-                  className="absolute inset-x-0 border-t border-dashed pointer-events-none z-30"
-                  style={{
-                    top: `${(activeGuides.y / SH) * 100}%`,
-                    borderColor: '#f59e0b',
-                    opacity: 0.8
-                  }}
-                />
-              )}
-
-              {/* Render simulated widgets */}
-              {Object.keys(widgetSizes).map((widget) => {
-                const defaultSize = getWidgetDefaultSize(widget, settings.singleRowHud);
-                const size = widgetSizes[widget] ?? defaultSize;
-                const pos = positions[widget] || { x: 40, y: 40 };
-
-                const isEnabled = isWidgetEnabled(widget);
-
-                const scaleX = previewDims.w / SW;
-                const scaleY = previewDims.h / SH;
-                const zoomFactor = settings.zoom / 100;
-
-                const wPreview = size.w * scaleX * zoomFactor;
-                const displayH = size.h || (widget === 'drivers' ? 120 : defaultSize.h || 80);
-                const hPreview = displayH * scaleY * zoomFactor;
-
-                const xPreview = pos.x * scaleX;
-                const yPreview = pos.y * scaleY;
-
-                const themeStyles = {
-                  neon: {
-                    border: 'border-[#f59e0b]/40 shadow-[0_0_10px_rgba(245, 158, 11,0.1)]',
-                    text: 'text-[#f59e0b]',
-                    badge: 'bg-[#f59e0b]/10 text-[#f59e0b]',
-                    style: {}
-                  },
-                  carbon: {
-                    border: 'border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.1)]',
-                    text: 'text-amber-400',
-                    badge: 'bg-amber-500/10 text-amber-400',
-                    style: {}
-                  },
-                  minimal: {
-                    border: 'border-white/30 shadow-[0_0_10px_rgba(255,255,255,0.03)]',
-                    text: 'text-white',
-                    badge: 'bg-white/10 text-white',
-                    style: {}
-                  },
-                  custom: {
-                    border: 'border-[var(--preview-accent)] shadow-[0_0_10px_var(--preview-accent-glow)]',
-                    text: 'text-[var(--preview-accent)]',
-                    badge: 'bg-[var(--preview-accent-bg)] text-[var(--preview-accent)]',
-                    style: {
-                      '--preview-accent': settings.customAccentColor || '#f59e0b',
-                      '--preview-accent-glow': `${settings.customAccentColor || '#f59e0b'}33`
-                    } as React.CSSProperties
-                  }
-                }[settings.style];
-
-                return (
+                  {/* Simulated CarPlay Splitscreen Box */}
                   <div
-                    key={widget}
-                    onMouseDown={(e) => isEnabled && handleMouseDown(widget, e)}
-                    className={`absolute rounded-xl border flex flex-col items-center justify-center p-2 select-none group overflow-hidden ${isEnabled
-                      ? `${themeStyles.border} cursor-grab active:cursor-grabbing hover:border-primary/80`
-                      : 'border-dashed border-white/5 bg-white/[0.01] opacity-20 cursor-not-allowed'
-                      }`}
+                    className="relative w-full aspect-[1024/380] rounded-2xl border-2 border-white/5 overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.9)] flex"
                     style={{
-                      left: 0,
-                      top: 0,
-                      transform: `translate3d(${xPreview}px, ${yPreview}px, 0)`,
-                      width: wPreview,
-                      height: hPreview,
-                      backgroundColor: isEnabled
-                        ? `rgba(0, 0, 0, ${settings.bgOpacity / 100})`
+                      background: settings.carPlayTheme === 'titan'
+                        ? 'linear-gradient(135deg, #1f232d 0%, #111317 100%)'
                         : undefined,
-                      ...(isEnabled ? themeStyles.style : {})
+                      backgroundImage: settings.carPlayTheme !== 'titan'
+                        ? 'radial-gradient(rgba(245, 158, 11, 0.05) 1px, transparent 1px)'
+                        : undefined,
+                      backgroundSize: '15px 15px',
+                      backgroundColor: settings.carPlayTheme === 'light'
+                        ? 'rgba(255, 255, 255, 0.5)'
+                        : settings.carPlayTheme === 'dark'
+                          ? '#000000'
+                          : '#090b11',
+                      color: settings.carPlayTheme === 'light' ? '#1e293b' : '#eceff1',
                     }}
                   >
-                    {/* Acrylic Noise Overlay */}
-                    {isEnabled && <div className="acrylic-noise" />}
-                    {/* Carbon Fiber Pattern Overlay */}
-                    {isEnabled && settings.style === 'carbon' && <div className="carbon-pattern" />}
+                    {/* Left Sidebar Mock */}
+                    <div className="w-12 h-full flex flex-col justify-between py-2 items-center bg-black/40 border-r border-white/5 shrink-0 text-[8px] font-black">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="text-white bg-black/60 px-1 py-0.5 rounded scale-75">12:00</span>
+                        <div className="w-5 h-5 rounded-full border border-red-500 bg-white flex items-center justify-center text-[7px] text-black">80</div>
+                      </div>
+                      
+                      <div className="flex flex-col gap-1.5 scale-75">
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">🏠</div>
+                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">🎵</div>
+                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">💼</div>
+                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">🚚</div>
+                      </div>
 
-                    <span className={`relative z-10 text-[8px] font-black uppercase tracking-wider text-center ${isEnabled ? themeStyles.text : 'text-slate-500'}`}>
-                      {widgetLabels[widget]}
-                    </span>
-                    {isEnabled && (
-                      <>
-                        <span className="relative z-10 text-[6.5px] font-bold text-slate-400 mt-1 tabular-nums bg-black/40 px-1 rounded">
-                          x:{Math.round(pos.x)} y:{Math.round(pos.y)}
-                        </span>
-                        <div
-                          className="absolute z-20 -right-1.5 -bottom-1.5 w-4 h-4 bg-primary cursor-se-resize rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => onResizeStart(e, widget)}
-                        />
-                      </>
-                    )}
+                      <div className="text-emerald-400 scale-75">📶</div>
+                    </div>
+
+                    {/* Main Preview layout */}
+                    <div className="flex-1 p-3 flex flex-col justify-between overflow-hidden">
+                      <div className="flex-1 grid grid-cols-12 gap-3.5">
+                        {/* Left: GPS Map Widget preview */}
+                        <div className="col-span-7 border border-white/10 rounded-xl bg-black/35 flex flex-col items-center justify-center text-center p-4">
+                          <span className="text-[14px] text-amber-400 animate-pulse">🗺️</span>
+                          <span className="text-[9px] font-black tracking-wider uppercase text-slate-300 mt-1">Live Map Widget</span>
+                          <span className="text-[7.5px] text-slate-550 mt-0.5">Automatisches GPS Tracking</span>
+                        </div>
+
+                        {/* Right side widgets */}
+                        <div className="col-span-5 flex flex-col gap-2.5 justify-between">
+                          {/* Media Widget preview */}
+                          <div className="flex-1 border border-white/10 rounded-xl bg-black/35 p-2 flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-xs">🎵</div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[8px] font-black truncate text-white leading-none">Mock-Song</p>
+                              <p className="text-[7px] font-bold text-slate-400 truncate mt-0.5">Künstler</p>
+                              <div className="h-0.5 w-full bg-white/10 rounded-full mt-1.5 overflow-hidden">
+                                <div className="h-full w-2/3 bg-amber-400" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Telemetry Widget preview */}
+                          <div className="flex-1 border border-white/10 rounded-xl bg-black/35 p-2 flex items-center justify-between">
+                            <div>
+                              <span className="text-[7px] text-slate-400 block leading-none">TEMPO</span>
+                              <span className="text-sm font-black text-white leading-none tracking-tight">84 KM/H</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[7px] text-slate-400 block leading-none">GANG</span>
+                              <span className="text-[8.5px] font-black text-amber-400 uppercase">D12</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-1 flex items-center justify-between text-[7px] text-slate-550 font-bold border-t border-white/5 pt-1">
+                        <span>MOCK PREVIEW (1024x380)</span>
+                        <span className="text-slate-400 font-black">Live-Dashboard</span>
+                      </div>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
 
-            <div className="mt-4 text-[10px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span>Bewege die Widgets im virtuellen Bildschirm per Drag-and-drop.</span>
-              <span className="font-bold text-slate-400 bg-primary/5 px-2 py-0.5 rounded border border-primary/10">
-                Live-Sync aktiv
-              </span>
-            </div>
+                  <div className="mt-4 text-[10px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span>Vorschau des CarPlay / Android Auto Splitscreens im virtuellen Modus.</span>
+                    <span className="font-bold text-slate-400 bg-primary/5 px-2 py-0.5 rounded border border-primary/10">
+                      AutoDash aktiv
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                {/* Simulated Desktop Box */}
+                <div
+                  ref={previewRef}
+                  className="relative w-full aspect-video bg-black/90 rounded-2xl border-2 border-white/5 overflow-hidden shadow-[inset_0_4px_30px_rgba(0,0,0,0.9)]"
+                  style={{
+                    backgroundImage: 'radial-gradient(rgba(245, 158, 11, 0.08) 1px, transparent 1px)',
+                    backgroundSize: '20px 20px'
+                  }}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03]">
+                    <span className="font-unbounded text-3xl font-black uppercase tracking-widest italic select-none">OPEN PIPE CLUB SCREEN</span>
+                  </div>
+
+                  {/* Visual Guidelines for Snap Targets (only visible when dragging) */}
+                  {draggingWidget && (
+                    <>
+                      {/* Center lines */}
+                      <div className="absolute inset-y-0 left-1/2 border-l border-primary/20 border-dashed pointer-events-none" />
+                      <div className="absolute inset-x-0 top-1/2 border-t border-primary/20 border-dashed pointer-events-none" />
+
+                      {/* Margins */}
+                      <div className="absolute inset-y-0 border-l border-white/[0.04] border-dashed pointer-events-none" style={{ left: `${(40 / SW) * 100}%` }} />
+                      <div className="absolute inset-y-0 border-r border-white/[0.04] border-dashed pointer-events-none" style={{ right: `${(40 / SW) * 100}%` }} />
+                      <div className="absolute inset-x-0 border-t border-white/[0.04] border-dashed pointer-events-none" style={{ top: `${(40 / SH) * 100}%` }} />
+                      <div className="absolute inset-x-0 border-b border-white/[0.04] border-dashed pointer-events-none" style={{ bottom: `${(40 / SH) * 100}%` }} />
+                    </>
+                  )}
+
+                  {/* Active Snap Guide Lines */}
+                  {draggingWidget && activeGuides.x !== null && (
+                    <div
+                      className="absolute inset-y-0 border-l border-dashed pointer-events-none z-30"
+                      style={{
+                        left: `${(activeGuides.x / SW) * 100}%`,
+                        borderColor: '#f59e0b',
+                        opacity: 0.8
+                      }}
+                    />
+                  )}
+                  {draggingWidget && activeGuides.y !== null && (
+                    <div
+                      className="absolute inset-x-0 border-t border-dashed pointer-events-none z-30"
+                      style={{
+                        top: `${(activeGuides.y / SH) * 100}%`,
+                        borderColor: '#f59e0b',
+                        opacity: 0.8
+                      }}
+                    />
+                  )}
+
+                  {/* Render simulated widgets */}
+                  {Object.keys(widgetSizes).map((widget) => {
+                    const defaultSize = getWidgetDefaultSize(widget, settings.singleRowHud);
+                    const size = widgetSizes[widget] ?? defaultSize;
+                    const pos = positions[widget] || { x: 40, y: 40 };
+
+                    const isEnabled = isWidgetEnabled(widget);
+
+                    const scaleX = previewDims.w / SW;
+                    const scaleY = previewDims.h / SH;
+                    const zoomFactor = settings.zoom / 100;
+
+                    const wPreview = size.w * scaleX * zoomFactor;
+                    const displayH = size.h || (widget === 'drivers' ? 120 : defaultSize.h || 80);
+                    const hPreview = displayH * scaleY * zoomFactor;
+
+                    const xPreview = pos.x * scaleX;
+                    const yPreview = pos.y * scaleY;
+
+                    const themeStyles = {
+                      neon: {
+                        border: 'border-[#f59e0b]/40 shadow-[0_0_10px_rgba(245, 158, 11,0.1)]',
+                        text: 'text-[#f59e0b]',
+                        badge: 'bg-[#f59e0b]/10 text-[#f59e0b]',
+                        style: {}
+                      },
+                      carbon: {
+                        border: 'border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.1)]',
+                        text: 'text-amber-400',
+                        badge: 'bg-amber-500/10 text-amber-400',
+                        style: {}
+                      },
+                      minimal: {
+                        border: 'border-white/30 shadow-[0_0_10px_rgba(255,255,255,0.03)]',
+                        text: 'text-white',
+                        badge: 'bg-white/10 text-white',
+                        style: {}
+                      },
+                      custom: {
+                        border: 'border-[var(--preview-accent)] shadow-[0_0_10px_var(--preview-accent-glow)]',
+                        text: 'text-[var(--preview-accent)]',
+                        badge: 'bg-[var(--preview-accent-bg)] text-[var(--preview-accent)]',
+                        style: {
+                          '--preview-accent': settings.customAccentColor || '#f59e0b',
+                          '--preview-accent-glow': `${settings.customAccentColor || '#f59e0b'}33`
+                        } as React.CSSProperties
+                      }
+                    }[settings.style];
+
+                    return (
+                      <div
+                        key={widget}
+                        onMouseDown={(e) => isEnabled && handleMouseDown(widget, e)}
+                        className={`absolute rounded-xl border flex flex-col items-center justify-center p-2 select-none group overflow-hidden ${isEnabled
+                          ? `${themeStyles.border} cursor-grab active:cursor-grabbing hover:border-primary/80`
+                          : 'border-dashed border-white/5 bg-white/[0.01] opacity-20 cursor-not-allowed'
+                          }`}
+                        style={{
+                          left: 0,
+                          top: 0,
+                          transform: `translate3d(${xPreview}px, ${yPreview}px, 0)`,
+                          width: wPreview,
+                          height: hPreview,
+                          backgroundColor: isEnabled
+                            ? `rgba(0, 0, 0, ${settings.bgOpacity / 100})`
+                            : undefined,
+                          ...(isEnabled ? themeStyles.style : {})
+                        }}
+                      >
+                        {/* Acrylic Noise Overlay */}
+                        {isEnabled && <div className="acrylic-noise" />}
+                        {/* Carbon Fiber Pattern Overlay */}
+                        {isEnabled && settings.style === 'carbon' && <div className="carbon-pattern" />}
+
+                        <span className={`relative z-10 text-[8px] font-black uppercase tracking-wider text-center ${isEnabled ? themeStyles.text : 'text-slate-500'}`}>
+                          {widgetLabels[widget]}
+                        </span>
+                        {isEnabled && (
+                          <>
+                            <span className="relative z-10 text-[6.5px] font-bold text-slate-400 mt-1 tabular-nums bg-black/40 px-1 rounded">
+                              x:{Math.round(pos.x)} y:{Math.round(pos.y)}
+                            </span>
+                            <div
+                              className="absolute z-20 -right-1.5 -bottom-1.5 w-4 h-4 bg-primary cursor-se-resize rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onMouseDown={(e) => onResizeStart(e, widget)}
+                            />
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 text-[10px] text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span>Bewege die Widgets im virtuellen Bildschirm per Drag-and-drop.</span>
+                  <span className="font-bold text-slate-400 bg-primary/5 px-2 py-0.5 rounded border border-primary/10">
+                    Live-Sync aktiv
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
-
-      <style jsx global>{`
-        .acrylic-noise {
-          position: absolute;
-          inset: 0;
-          z-index: 1;
-          opacity: 0.022;
-          pointer-events: none;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 250 250' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-        .carbon-pattern {
-          position: absolute;
-          inset: 0;
-          z-index: 2;
-          opacity: 0.55;
-          pointer-events: none;
-          background-color: rgba(18, 18, 18, 0.4);
-          background-image: 
-            linear-gradient(45deg, #090909 25%, transparent 25%, transparent 75%, #090909 75%, #090909),
-            linear-gradient(45deg, #090909 25%, transparent 25%, transparent 75%, #090909 75%, #090909),
-            linear-gradient(to right, #2a2a2a, #161616, #2a2a2a);
-          background-size: 6px 6px, 6px 6px, 6px 6px;
-          background-position: 0px 0px, 3px 3px, 0px 0px;
-        }
-      `}</style>
     </div>
   );
 };

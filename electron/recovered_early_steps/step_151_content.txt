@@ -1,0 +1,7 @@
+Created At: 2026-07-30T15:09:39Z
+Completed At: 2026-07-30T15:09:39Z
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":331,"LineContent":"export function getRouteServiceStatus(mapDataDir: string | null): { available: boolean; error?: string } {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":344,"LineContent":"export function getRoute("}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\preload.ts","LineNumber":28,"LineContent":"  getRoute: (sourceX: number, sourceZ: number, destX: number, destZ: number) =\u003e"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":12,"LineContent":"import { getRoute } from './route-service';"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":2208,"LineContent":"  const result = getRoute(sourceX, sourceZ, destX, destZ, mapDataDir);"}

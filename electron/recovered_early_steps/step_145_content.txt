@@ -1,0 +1,5 @@
+Created At: 2026-07-30T15:09:23Z
+Completed At: 2026-07-30T15:09:26Z
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\preload.ts","LineNumber":29,"LineContent":"    ipcRenderer.invoke('get-route', sourceX, sourceZ, destX, destZ),"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\src\\components\\GameMapWidget.tsx","LineNumber":556,"LineContent":"        const result = await electronAPI.invoke('get-route', gameX, gameY, destCity.x, destCity.z);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":2204,"LineContent":"ipcMain.handle('get-route', async (_, sourceX: number, sourceZ: number, destX: number, destZ: number) =\u003e {"}

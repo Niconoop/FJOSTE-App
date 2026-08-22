@@ -1,0 +1,53 @@
+import json
+import os
+
+log_path = r"C:\Users\Ally\.gemini\antigravity-ide\brain\6b56896c-06a5-4e21-8aa5-e57a9968eaba\.system_generated\logs\transcript_full.jsonl"
+out_path = r"C:\Users\Ally\Documents\Open Pipe Club\opc-app\electron\recovered_main.ts"
+
+print("Searching transcript for CarPlay window code in steps < 170...")
+
+found_contents = []
+
+with open(log_path, "r", encoding="utf-8") as f:
+    for line in f:
+        try:
+            data = json.loads(line)
+            step_idx = data.get("step_index", 999)
+            if step_idx >= 170:
+                continue
+                
+            # Look in planner response tool calls
+            if "tool_calls" in data:
+                for tc in data["tool_calls"]:
+                    name = tc.get("name")
+                    args = tc.get("args", {})
+                    
+                    target = args.get("TargetFile", "") or args.get("AbsolutePath", "")
+                    if "main.ts" in target:
+                        content = args.get("CodeContent", "") or args.get("ReplacementContent", "")
+                        if "createCarPlayWindow" in content:
+                            print(f"Found match in step {step_idx} (tool: {name}, target: {target})")
+                            found_contents.append((step_idx, name, content))
+                            
+            # Also check content
+            content_text = data.get("content", "")
+            if "createCarPlayWindow" in content_text:
+                 # Check if this content contains the code
+                 if "function createCarPlayWindow" in content_text or "createCarPlayWindow = () =>" in content_text or "createCarPlayWindow(" in content_text:
+                     print(f"Found match in text content of step {step_idx}")
+                     found_contents.append((step_idx, "text", content_text))
+        except Exception as e:
+            pass
+
+if found_contents:
+    # Sort by step_index descending to get the latest version
+    found_contents.sort(key=lambda x: x[0], reverse=True)
+    latest_step, latest_type, latest_code = found_contents[0]
+    print(f"Latest match found in step {latest_step} (type: {latest_type})")
+    
+    # Save it to recovered_main.ts
+    with open(out_path, "w", encoding="utf-8") as out_f:
+        out_f.write(latest_code)
+    print(f"Successfully recovered code to {out_path}!")
+else:
+    print("No matching code found in transcript.")

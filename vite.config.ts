@@ -44,6 +44,9 @@ function electronRendererPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  server: {
+    maxHttpHeaderSize: 65536,
+  },
   plugins: [
     react(),
     tailwindcss(),

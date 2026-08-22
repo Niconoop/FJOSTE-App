@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback, Component } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, MapPin, Plus, Trash2, Loader2, ChevronDown, Clock, Users, UserPlus, UserMinus, List, CalendarDays, ChevronLeft, ChevronRight, Upload, X as XIcon, Image as ImageIcon, LayoutGrid, Calendar as CalendarIcon, ExternalLink } from "lucide-react";
+import { Calendar, MapPin, Plus, Trash2, Loader2, ChevronDown, Clock, Users, List, CalendarDays, ChevronLeft, ChevronRight, Upload, X as XIcon, Image as ImageIcon, LayoutGrid, Calendar as CalendarIcon, Link2, Shield, MessageCircle, Pencil, UserPlus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import { API_URL, getAvatarUrl } from "../config";
@@ -75,7 +75,7 @@ class ErrorBoundary extends Component<{ children: any }, { error: string | null 
 
 // --- NEW EVENT CARD ---
 
-const NewEventCard = ({ event }: any) => {
+const NewEventCard = ({ event, onClick, canManageEvents, onEdit, onDelete, token, user, onToggleRsvp, rsvpLoading, isJoined }: any) => {
   const [timeLeft, setTimeLeft] = useState("");
 
   useEffect(() => {
@@ -109,6 +109,26 @@ const NewEventCard = ({ event }: any) => {
           <span className="text-xl font-bold tracking-tighter leading-none">{day}</span>
           <span className="text-[9px] font-black uppercase text-amber-400 mt-0.5">{month}</span>
         </div>
+        {canManageEvents && (
+          <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {event.is_custom && (
+              <button
+                onClick={() => onToggleRsvp?.(event)}
+                disabled={rsvpLoading}
+                title={isJoined ? "Abmelden" : "Für Event anmelden"}
+                className={`p-2 bg-zinc-950/80 backdrop-blur-md rounded-xl border border-zinc-800 transition-colors ${rsvpLoading ? "text-amber-400 animate-pulse" : isJoined ? "text-emerald-400 hover:text-red-400" : "text-zinc-300 hover:text-amber-400"}`}
+              >
+                {rsvpLoading ? <Loader2 size={14} className="animate-spin" /> : isJoined ? <UserCheck size={14} /> : <UserPlus size={14} />}
+              </button>
+            )}
+            <button onClick={() => onEdit?.(event)} title="Bearbeiten" className="p-2 bg-zinc-950/80 backdrop-blur-md rounded-xl text-zinc-300 hover:text-amber-400 border border-zinc-800 transition-colors">
+              <Pencil size={14} />
+            </button>
+            <button onClick={() => onDelete?.(event)} title="Löschen" className="p-2 bg-zinc-950/80 backdrop-blur-md rounded-xl text-zinc-300 hover:text-red-400 border border-zinc-800 transition-colors">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
       <div className="p-5 flex-grow flex flex-col justify-between">
         <h3 className="text-base font-extrabold text-white group-hover:text-amber-400 transition-colors duration-200 uppercase tracking-wider mb-5 line-clamp-2">{event.title || `${event.start_city} to ${event.end_city}`}</h3>
@@ -120,65 +140,6 @@ const NewEventCard = ({ event }: any) => {
           {timeLeft && <div className="bg-amber-400/10 border border-amber-400/20 rounded-xl p-3 text-center"><p className="text-[9px] text-amber-400 uppercase tracking-widest font-black">Countdown</p><p className="text-sm font-black text-white italic mt-0.5">{timeLeft}</p></div>}
         </div>
       </div>
-    </motion.div>
-  );
-};
-
-// --- EVENT DETAIL MODAL ---
-
-const EventDetail = ({ event, participants, isJoined, canDelete, onDelete, onJoin, onLeave, onClose }: any) => {
-  if (!event) return null;
-  const coverUrl = event.cover_url?.startsWith("http") ? event.cover_url : event.cover_url ? getAvatarUrl(event.cover_url) : `https://source.unsplash.com/random/800x400?truck,${event.id}`;
-  const coordinator = event.is_custom ? "Open Pipe Club" : (event.company_name || "Externe Spedition");
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] flex items-start justify-center p-6 pt-20 bg-black/90 backdrop-blur-xl overflow-y-auto" onClick={onClose}>
-      <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} transition={{ type: "spring", stiffness: 380, damping: 28 }} className="frosted-card w-full max-w-4xl !p-0 overflow-hidden shadow-2xl border border-white/10" onClick={e => e.stopPropagation()}>
-        <div className="relative h-64 bg-zinc-900">
-          <img src={coverUrl} alt={event.title} className="w-full h-full object-cover opacity-40" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0c] via-transparent" />
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-slate-300 hover:text-white transition-colors"><XIcon size={20} /></button>
-        </div>
-        <div className="p-8 -mt-20 relative">
-          <h1 className="text-3xl font-extrabold text-white uppercase tracking-wider">{event.title || `${event.start_city} to ${event.end_city}`}</h1>
-          <div className="flex items-center gap-6 mt-3 text-sm text-zinc-400">
-            <div className="flex items-center gap-2"><Calendar size={14} className="text-amber-400" /> {formatLongDateTime(event.start_date)}</div>
-            <div className="flex items-center gap-2"><Users size={14} className="text-amber-400" /> {participants.length} Teilnehmer</div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div>
-                <p className="text-zinc-300">{event.information || "Keine weiteren Informationen verfügbar."}</p>
-              </div>
-              {event.route_url && <a href={getAvatarUrl(event.route_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-amber-400 hover:text-amber-300">Route ansehen <ExternalLink size={14} /></a>}
-            </div>
-            <div className="space-y-6">
-              <div className="bg-white/5 rounded-xl p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Details</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-zinc-500">Organisator:</span> <span className="font-bold text-white">{coordinator}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Start:</span> <span className="font-bold text-white">{event.start_city || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Ziel:</span> <span className="font-bold text-white">{event.end_city || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Server:</span> <span className="font-bold text-white">{event.server || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Spiel:</span> <span className="font-bold text-white">{event.game || 'N/A'}</span></div>
-                </div>
-              </div>
-              <div className="bg-white/5 rounded-xl p-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Teilnehmer ({participants.length})</h3>
-                <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
-                  {participants.map(p => <div key={p.id} className="flex items-center gap-2"><img src={getAvatarUrl(p.avatar_url)} className="w-6 h-6 rounded-full" /> <span className="text-sm text-zinc-300">{p.username}</span></div>)}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {isJoined ? <button onClick={() => onLeave(event.id)} className="w-full text-center px-4 py-3 bg-red-500/20 text-red-400 rounded-xl font-bold text-sm hover:bg-red-500/30 transition-all flex items-center justify-center gap-2"><UserMinus size={16} /> Abmelden</button>
-                  : <button onClick={() => onJoin(event.id)} className="w-full text-center px-4 py-3 bg-green-500/20 text-green-400 rounded-xl font-bold text-sm hover:bg-green-500/30 transition-all flex items-center justify-center gap-2"><UserPlus size={16} /> Anmelden</button>}
-                {canDelete && <button onClick={() => { onDelete(event.id); onClose(); }} className="w-full text-center px-4 py-2 bg-zinc-800 text-zinc-400 rounded-xl font-bold text-xs hover:bg-zinc-700 transition-all flex items-center justify-center gap-2"><Trash2 size={14} /> Löschen</button>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
     </motion.div>
   );
 };
@@ -268,22 +229,24 @@ const CalendarView = ({ events, month, setMonth }) => {
 // --- MAIN EVENTS COMPONENT ---
 
 export default function Events({ selectedId, onClearSelectedId }: any) {
-  const { token, user, isAdmin, hasRole } = useAuth();
+  const { token, isAdmin, hasRole } = useAuth();
   const EVENT_ROLES = ["event team", "event-team", "hr team", "hr-team", "personal team", "personal-team"];
   const canManageEvents = isAdmin || hasRole(EVENT_ROLES);
 
   const [events, setEvents] = useState<any[]>([]);
-  const [rsvps, setRsvps] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState("list");
   const [calMonth, setCalMonth] = useState(new Date());
 
   const [showForm, setShowForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [form, setForm] = useState({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "" });
+  const [form, setForm] = useState({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
   const [coverFile, setCoverFile] = useState<File | null>(null);
+
+  const [rsvpState, setRsvpState] = useState<Record<number, boolean>>({});
+  const [rsvpLoadingId, setRsvpLoadingId] = useState<number | null>(null);
   const [routeFile, setRouteFile] = useState<File | null>(null);
 
   const [showPickerModal, setShowPickerModal] = useState(false);
@@ -295,14 +258,9 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
     setError(null);
     try {
       const h = { Authorization: `Bearer ${token}` };
-      const [tr, cu, rs] = await Promise.all([
-        axios.get(`${API_URL}/trucky/events`, { headers: h }).catch(e => { console.error("Trucky Error:", e); return { data: [] }; }),
-        axios.get(`${API_URL}/events/custom`, { headers: h }).catch(e => { console.error("Custom Events Error:", e); return { data: [] }; }),
-        axios.get(`${API_URL}/events/rsvps`, { headers: h }).catch(e => { console.error("RSVP Error:", e); return { data: {} }; }),
-      ]);
-      const all = [...(Array.isArray(tr.data) ? tr.data : []), ...(Array.isArray(cu.data) ? cu.data : [])];
+      const res = await axios.get(`${API_URL}/events`, { headers: h }).catch(e => { console.error("Events Error:", e); return { data: [] }; });
+      const all = Array.isArray(res.data) ? res.data : [];
       setEvents(all.sort((a, b) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime()));
-      setRsvps(rs.data || {});
     } catch (e: any) {
       setError("Daten konnten nicht geladen werden.");
       console.error(e);
@@ -311,7 +269,42 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
     }
   }, [token]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  const loadRsvpStates = useCallback(async () => {
+    if (!token) return;
+    try {
+      const h = { Authorization: `Bearer ${token}` };
+      const { data } = await axios.get(`${API_URL}/events/rsvps`, { headers: h });
+      const list = Array.isArray(data) ? data : (data?.rsvps || []);
+      const map: Record<number, boolean> = {};
+      list.forEach((r: any) => { if (r?.event_id != null) map[r.event_id] = true; });
+      setRsvpState(map);
+    } catch (e) {
+      console.error("RSVP load error:", e);
+    }
+  }, [token]);
+
+  useEffect(() => { loadAll(); loadRsvpStates(); }, [loadAll, loadRsvpStates]);
+
+  const handleToggleRsvp = async (event: any) => {
+    if (!event?.id || !token) return;
+    const id = event.id;
+    setRsvpLoadingId(id);
+    try {
+      if (rsvpState[id]) {
+        await axios.delete(`${API_URL}/events/${id}/rsvp`, { headers: { Authorization: `Bearer ${token}` } });
+        toast.success("Du wurdest abgemeldet");
+        setRsvpState(prev => ({ ...prev, [id]: false }));
+      } else {
+        await axios.post(`${API_URL}/events/${id}/rsvp`, {}, { headers: { Authorization: `Bearer ${token}` } });
+        toast.success("Du bist jetzt angemeldet!");
+        setRsvpState(prev => ({ ...prev, [id]: true }));
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Fehler bei der Anmeldung");
+    } finally {
+      setRsvpLoadingId(null);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -340,42 +333,56 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       await axios.post(`${API_URL}/events`, fd, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
       toast.success("Event erfolgreich geplant!");
       setShowForm(false);
-      setForm({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "" });
+      setForm({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
       setCoverFile(null); setRouteFile(null);
       loadAll();
     } catch { toast.error("Fehler beim Erstellen des Events"); }
     finally { setSubmitting(false); }
   };
 
-  const handleRsvp = async (eid: string | number, action: 'join' | 'leave') => {
-    const optimisticRsvps = { ...rsvps };
-    const eventRsvps = optimisticRsvps[eid] || [];
-    if (action === 'join') {
-      optimisticRsvps[eid] = [...eventRsvps, { id: user?.user_id, username: user?.username, avatar_url: user?.avatar_url }];
-    } else {
-      optimisticRsvps[eid] = eventRsvps.filter(p => p.id !== user?.user_id);
-    }
-    setRsvps(optimisticRsvps);
-
-    try {
-      if (action === 'join') {
-        await axios.post(`${API_URL}/events/${eid}/rsvp`, {}, { headers: { Authorization: `Bearer ${token}` } });
-        toast.success("Angemeldet!");
-      } else {
-        await axios.delete(`${API_URL}/events/${eid}/rsvp`, { headers: { Authorization: `Bearer ${token}` } });
-        toast.success("Abgemeldet");
-      }
-      loadAll(); // Reload to be sure
-    } catch {
-      toast.error(`Fehler bei der ${action === 'join' ? 'An' : 'Ab'}meldung`);
-      loadAll(); // Revert optimistic update on error
-    }
+  const openEdit = (event: any) => {
+    const rawDate = event.start_date ? new Date(event.start_date) : null;
+    setForm({
+      title: event.title || "",
+      event_type: event.event_type || "Convoy",
+      start_date: rawDate ? rawDate.toISOString() : "",
+      start_city: event.start_city || "",
+      end_city: event.end_city || "",
+      server: event.server || "",
+      game: (event.game && typeof event.game === 'object' ? (event.game.code || event.game.name) : event.game) || "ETS2",
+      information: event.information || "",
+      rules: event.rules || "",
+      voice_link: event.voice_link || "",
+      external_url: event.external_url || "",
+    });
+    setEditingEvent(event);
+    setShowForm(true);
   };
 
-  const handleDelete = async (eid: string | number) => {
-    if (!window.confirm("Soll dieses Event wirklich gelöscht werden?")) return;
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvent || !form.title || !form.start_date) return toast.error("Titel und Datum sind Pflicht");
+    setSubmitting(true);
     try {
-      await axios.delete(`${API_URL}/events/${eid}`, { headers: { Authorization: `Bearer ${token}` } });
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      if (coverFile) fd.append("cover", coverFile);
+      if (routeFile) fd.append("route", routeFile);
+      await axios.put(`${API_URL}/events/${editingEvent.id}`, fd, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
+      toast.success("Event aktualisiert!");
+      setShowForm(false);
+      setEditingEvent(null);
+      setForm({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
+      setCoverFile(null); setRouteFile(null);
+      loadAll();
+    } catch { toast.error("Fehler beim Aktualisieren des Events"); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleDelete = async (event: any) => {
+    if (!window.confirm(`Soll das Event "${event.title || event.start_city}" wirklich gelöscht werden?`)) return;
+    try {
+      await axios.delete(`${API_URL}/events/${event.id}`, { headers: { Authorization: `Bearer ${token}` } });
       toast.success("Event gelöscht");
       loadAll();
     } catch { toast.error("Fehler beim Löschen"); }
@@ -395,9 +402,6 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
     setForm({ ...form, start_date: newDate.toISOString() });
     setShowPickerModal(false);
   };
-
-  const isJoined = (eid: string | number) => (rsvps[eid] || []).some((p: any) => p.id === user?.user_id);
-  const getParticipants = (eid: string | number) => rsvps[eid] || [];
 
   const upcomingEvents = useMemo(() => events.filter(e => new Date(e.start_date) >= new Date()), [events]);
   const pastEvents = useMemo(() => events.filter(e => new Date(e.start_date) < new Date()).sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()), [events]);
@@ -435,7 +439,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                     {upcomingEvents.length > 0 ? (
                       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {upcomingEvents.map(event => <NewEventCard key={event.id} event={event} />)}
+                        {upcomingEvents.map(event => <NewEventCard key={event.id} event={event} onClick={() => handleEventClick(event)} canManageEvents={canManageEvents} onEdit={openEdit} onDelete={handleDelete} token={token} onToggleRsvp={handleToggleRsvp} rsvpLoading={rsvpLoadingId === event.id} isJoined={!!rsvpState[event.id]} />)}
                       </motion.div>
                     ) : (
                       <div className="text-center py-16 frosted-card border-dashed border-zinc-800">
@@ -452,7 +456,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                     {pastEvents.length > 0 ? (
                       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {pastEvents.slice(0, 6).map(event => <NewEventCard key={event.id} event={event} />)}
+                        {pastEvents.slice(0, 6).map(event => <NewEventCard key={event.id} event={event} onClick={() => handleEventClick(event)} canManageEvents={canManageEvents} onEdit={openEdit} onDelete={handleDelete} token={token} onToggleRsvp={handleToggleRsvp} rsvpLoading={rsvpLoadingId === event.id} isJoined={!!rsvpState[event.id]} />)}
                       </motion.div>
                     ) : (
                       <div className="text-center py-16 frosted-card border-dashed border-zinc-800">
@@ -474,154 +478,157 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
 
       {/* --- Create Event Modal (Portal to escape stacking context) --- */}
       {showForm && createPortal(
-      <AnimatePresence>
-        {showForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-start justify-center pt-6 sm:pt-10 pb-4 sm:pb-6 px-3 sm:px-6 bg-black/85 backdrop-blur-xl overflow-y-auto" onClick={() => setShowForm(false)}>
+        <AnimatePresence>
+          {showForm && (
             <motion.div
-              initial={{ scale: 0.9, y: 30, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 15, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[24px] sm:rounded-[32px] w-full max-w-2xl max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),0_0_60px_rgba(245,158,11,0.08)] my-auto"
-              onClick={e => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-start justify-center p-4 sm:p-6 pt-6 sm:pt-10 pb-4 sm:pb-6 bg-black/80 backdrop-blur-xl overflow-y-auto"
+              onClick={() => setShowForm(false)}
             >
-              {/* Header with gradient accent */}
-              <div className="relative p-4 sm:p-6 md:p-8 pb-4 sm:pb-5 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-                    <CalendarDays size={22} className="text-amber-400" />
-                  </div>
-                  <div>
-                    <h2 className="font-unbounded text-base sm:text-lg font-bold text-white uppercase tracking-tight">Neues Event planen</h2>
-                    <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Erstelle ein eigenes Event für dein Team.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Body */}
-              <form id="create-event-form" onSubmit={handleCreate} className="p-4 sm:p-6 md:p-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                {/* Title & Type */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar size={11} className="text-amber-400/60" /> Event-Titel</label>
-                    <input type="text" placeholder="z.B. Freitags-Convoy" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><List size={11} className="text-amber-400/60" /> Event-Typ</label>
-                    <select value={form.event_type} onChange={e => setForm({ ...form, event_type: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 appearance-none cursor-pointer">
-                      <option className="bg-zinc-900">Convoy</option>
-                      <option className="bg-zinc-900">Interne Schulung</option>
-                      <option className="bg-zinc-900">Sonstiges</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Date Picker Trigger */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock size={11} className="text-amber-400/60" /> Datum & Uhrzeit</label>
-                  <div className="relative group">
-                    <input type="text" readOnly value={formatLongDateTime(form.start_date)} onClick={() => setShowPickerModal(true)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 cursor-pointer focus:border-amber-400/40 outline-none transition-all duration-300 group-hover:border-amber-400/20" placeholder="Datum & Uhrzeit wählen..." required />
-                    <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 group-hover:text-amber-400 transition-colors" />
-                  </div>
-                </div>
-
-                {/* Route: Start → End */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-emerald-400/60" /> Startort</label>
-                    <input type="text" placeholder="z.B. Berlin" value={form.start_city} onChange={e => setForm({ ...form, start_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-red-400/60" /> Zielort</label>
-                    <input type="text" placeholder="z.B. München" value={form.end_city} onChange={e => setForm({ ...form, end_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
-                  </div>
-                </div>
-
-                {/* Server & Game */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={11} className="text-amber-400/60" /> Server</label>
-                    <input type="text" placeholder="z.B. Simulation 1" value={form.server} onChange={e => setForm({ ...form, server: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">🎮 Spiel</label>
-                    <select value={form.game} onChange={e => setForm({ ...form, game: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 appearance-none cursor-pointer">
-                      <option className="bg-zinc-900">ETS2</option>
-                      <option className="bg-zinc-900">ATS</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Information */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zusätzliche Informationen</label>
-                  <textarea placeholder="Beschreibe das Event, Regeln, Treffpunkt, etc..." value={form.information} onChange={e => setForm({ ...form, information: e.target.value })} className="w-full min-h-[80px] sm:min-h-[100px] bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 resize-y" />
-                </div>
-
-                {/* File Uploads */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <label className="group flex items-center gap-3 p-3 sm:p-4 bg-white/[0.02] border border-dashed border-white/10 rounded-xl cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300">
-                    <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <ImageIcon size={18} className="text-amber-400/70" />
+              <motion.div
+                initial={{ scale: 0.9, y: 30, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 15, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                className="frosted-card w-full max-w-2xl max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="relative p-5 sm:p-6 md:p-8 pb-5 sm:pb-6 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+                      <CalendarDays size={20} className="text-amber-400" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-xs font-bold block truncate ${coverFile ? 'text-white' : 'text-slate-500'}`}>{coverFile ? coverFile.name : 'Cover-Bild hochladen'}</span>
-                      <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Optional • PNG, JPG</span>
+                    <div>
+                      <h2 className="font-unbounded text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{editingEvent ? "Event bearbeiten" : "Neues Event planen"}</h2>
+                      <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Erstelle ein eigenes Event für dein Team.</p>
                     </div>
-                    {coverFile && <XIcon size={14} className="text-slate-500 hover:text-red-400 shrink-0" onClick={(e) => { e.preventDefault(); setCoverFile(null); }} />}
-                    <input type="file" onChange={e => handleFileSelect(e, 'cover')} className="hidden" accept="image/*" />
-                  </label>
-                  <label className="group flex items-center gap-3 p-3 sm:p-4 bg-white/[0.02] border border-dashed border-white/10 rounded-xl cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300">
-                    <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                      <Upload size={18} className="text-amber-400/70" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-xs font-bold block truncate ${routeFile ? 'text-white' : 'text-slate-500'}`}>{routeFile ? routeFile.name : 'Route hochladen'}</span>
-                      <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Optional • Bild-Datei</span>
-                    </div>
-                    {routeFile && <XIcon size={14} className="text-slate-500 hover:text-red-400 shrink-0" onClick={(e) => { e.preventDefault(); setRouteFile(null); }} />}
-                    <input type="file" onChange={e => handleFileSelect(e, 'route')} className="hidden" accept=".png,.jpg,.jpeg" />
-                  </label>
+                  </div>
                 </div>
 
-                {/* Cover Image Preview */}
-                {coverFile && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-2xl overflow-hidden border border-white/10">
-                    <img src={URL.createObjectURL(coverFile)} alt="Cover Preview" className="w-full h-40 object-cover opacity-80" />
-                  </motion.div>
-                )}
-              </form>
+                <form id="create-event-form" onSubmit={editingEvent ? handleUpdate : handleCreate} className="p-5 sm:p-6 md:p-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar size={11} className="text-amber-400/60" /> Event-Titel</label>
+                      <input type="text" placeholder="z.B. Freitags-Convoy" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><List size={11} className="text-amber-400/60" /> Event-Typ</label>
+                      <select value={form.event_type} onChange={e => setForm({ ...form, event_type: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 appearance-none cursor-pointer">
+                        <option className="bg-zinc-900">Convoy</option>
+                        <option className="bg-zinc-900">Interne Schulung</option>
+                        <option className="bg-zinc-900">Sonstiges</option>
+                      </select>
+                    </div>
+                  </div>
 
-              {/* Footer */}
-              <div className="p-4 sm:p-6 md:p-8 pt-3 sm:pt-4 border-t border-white/5 bg-black/40 flex items-center justify-between shrink-0">
-                <button type="button" onClick={() => setShowForm(false)} className="px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-xl hover:bg-white/5">Abbrechen</button>
-                <button type="submit" form="create-event-form" disabled={submitting} className="px-7 py-3 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {submitting ? <><Loader2 className="animate-spin" size={16} /> Erstelle...</> : <><Plus size={16} /> Event erstellen</>}
-                </button>
-              </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock size={11} className="text-amber-400/60" /> Datum & Uhrzeit</label>
+                    <div className="relative group">
+                      <input type="text" readOnly value={formatLongDateTime(form.start_date)} onClick={() => setShowPickerModal(true)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 cursor-pointer focus:border-amber-400/40 outline-none transition-all duration-300 group-hover:border-amber-400/20" placeholder="Datum & Uhrzeit wählen..." required />
+                      <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 group-hover:text-amber-400 transition-colors" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-emerald-400/60" /> Startort</label>
+                      <input type="text" placeholder="z.B. Berlin" value={form.start_city} onChange={e => setForm({ ...form, start_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-red-400/60" /> Zielort</label>
+                      <input type="text" placeholder="z.B. München" value={form.end_city} onChange={e => setForm({ ...form, end_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={11} className="text-amber-400/60" /> Server</label>
+                      <input type="text" placeholder="z.B. Simulation 1" value={form.server} onChange={e => setForm({ ...form, server: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">🎮 Spiel</label>
+                      <select value={form.game} onChange={e => setForm({ ...form, game: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 appearance-none cursor-pointer">
+                        <option className="bg-zinc-900">ETS2</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zusätzliche Informationen</label>
+                    <textarea placeholder="Beschreibe das Event, Regeln, Treffpunkt, etc..." value={form.information} onChange={e => setForm({ ...form, information: e.target.value })} className="w-full min-h-[80px] sm:min-h-[100px] bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 resize-y" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Shield size={11} className="text-amber-400/60" /> Regeln</label>
+                    <textarea placeholder="z.B. Abstand halten&#10;Anweisungen der Guides befolgen&#10;Kein Rammen" value={form.rules} onChange={e => setForm({ ...form, rules: e.target.value })} className="w-full min-h-[70px] sm:min-h-[90px] bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 resize-y" />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MessageCircle size={11} className="text-indigo-400/60" /> Discord-Link</label>
+                      <input type="url" placeholder="https://discord.gg/..." value={form.voice_link} onChange={e => setForm({ ...form, voice_link: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Link2 size={11} className="text-sky-400/60" /> Externe Eventseite</label>
+                      <input type="url" placeholder="https://truckersmp.com/events/..." value={form.external_url} onChange={e => setForm({ ...form, external_url: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <label className="group flex flex-col items-center justify-center gap-2 h-24 sm:h-28 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02]">
+                      <input type="file" onChange={e => handleFileSelect(e, 'cover')} className="hidden" accept="image/*" />
+                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400/10 group-hover:scale-110 transition-transform">
+                        <ImageIcon size={18} className="text-amber-400/70" />
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${coverFile ? 'text-white' : 'text-slate-500'}`}>{coverFile ? coverFile.name : 'Cover-Bild'}</span>
+                    </label>
+                    <label className="group flex flex-col items-center justify-center gap-2 h-24 sm:h-28 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02]">
+                      <input type="file" onChange={e => handleFileSelect(e, 'route')} className="hidden" accept=".png,.jpg,.jpeg" />
+                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400/10 group-hover:scale-110 transition-transform">
+                        <Upload size={18} className="text-amber-400/70" />
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${routeFile ? 'text-white' : 'text-slate-500'}`}>{routeFile ? routeFile.name : 'Route-Bild'}</span>
+                    </label>
+                  </div>
+
+                  {coverFile && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-2xl overflow-hidden border border-white/10">
+                      <img src={URL.createObjectURL(coverFile)} alt="Cover Preview" className="w-full h-40 object-cover opacity-80" />
+                    </motion.div>
+                  )}
+                </form>
+
+                <div className="p-4 sm:p-6 md:p-8 pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between shrink-0">
+                  <button type="button" onClick={() => { setShowForm(false); setEditingEvent(null); setCoverFile(null); setRouteFile(null); }} className="px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-xl hover:bg-white/5">Abbrechen</button>
+                  <button type="submit" form="create-event-form" disabled={submitting} className="px-7 py-3 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {submitting ? <><Loader2 className="animate-spin" size={16} /> {editingEvent ? "Speichere..." : "Erstelle..."}</> : <><Plus size={16} /> {editingEvent ? "Änderungen speichern" : "Event erstellen"}</>}
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>,
-      document.body
-      )}
+           )}
+         </AnimatePresence>,
+         document.body
+       )}
 
       {/* --- Date & Time Picker Modal (Portal) --- */}
       {showPickerModal && createPortal(
       <AnimatePresence>
         {showPickerModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/85 backdrop-blur-xl" onClick={() => setShowPickerModal(false)}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl" onClick={() => setShowPickerModal(false)}>
             <motion.div
               initial={{ scale: 0.9, y: 20, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.95, y: 10, opacity: 0 }}
               transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] w-full max-w-sm overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),0_0_60px_rgba(245,158,11,0.08)]"
+              className="frosted-card w-full max-w-sm flex flex-col overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="relative p-6 pb-4 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5">
+              <div className="relative p-6 pb-4 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
                 <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
@@ -656,9 +663,9 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
               </div>
 
               {/* Footer */}
-              <div className="p-5 border-t border-white/5 bg-black/40 flex items-center justify-between">
+              <div className="p-5 border-t border-white/5 flex items-center justify-between shrink-0">
                 <button type="button" onClick={() => setShowPickerModal(false)} className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-xl hover:bg-white/5">Abbrechen</button>
-                <button type="button" onClick={handlePickerConfirm} className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-widest hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300">Bestätigen</button>
+                <button type="button" onClick={handlePickerConfirm} className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300">Bestätigen</button>
               </div>
             </motion.div>
           </motion.div>

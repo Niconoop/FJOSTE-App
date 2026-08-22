@@ -1,0 +1,18 @@
+{
+  "showLogo": true,
+  "showMainHud": true,
+  "showDrivers": true,
+  "showEvent": true,
+  "showSpotify": true,
+  "showCarPlay": true,
+  "carPlayTheme": "dark",
+  "carPlayTextScale": "medium",
+  "carPlayHotkeys": {
+    "toggle": "F9",
+    "next": "Ctrl+Alt+Right",
+    "prev": "Ctrl+Alt+Left",
+    "home": "Ctrl+Alt+H",
+    "playPause": "Ctrl+Alt+Space"
+  },
+  "mapDataDir": "C:\\Users\\Ally\\Documents\\Open Pipe Club\\maps-data"
+}

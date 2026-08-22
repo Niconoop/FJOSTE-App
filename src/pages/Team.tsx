@@ -81,10 +81,31 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
     return members.filter(m => (m.name || m.username)?.toLowerCase().includes(s));
   }, [members, search]);
 
+  const getRoleName = (m: any): string => {
+    if (typeof m.role === 'object' && m.role?.name) return m.role.name;
+    if (typeof m.role === 'string' && m.role.trim()) return m.role;
+    if (m.is_admin) return "Admin";
+    return "Fahrer";
+  };
+
+  const getRoleOrder = (roleName: string): number => {
+    const r = (roleName || "").toLowerCase().trim();
+    if (r === "inhaber" || r === "owner") return 1;
+    if (r.includes("stv") || r.includes("stellv")) return 2;
+    if (r === "admin" || r === "administrator") return 3;
+    if (r.includes("management") || r.includes("manager")) return 4;
+    if (r.includes("personal") || r.includes("hr")) return 5;
+    if (r.includes("event")) return 6;
+    if (r.includes("modding") || r.includes("technik") || r.includes("dev")) return 7;
+    if (r === "fahrer" || r === "driver" || r === "trucker") return 8;
+    if (r.includes("probe")) return 9;
+    return 10;
+  };
+
   const groups = useMemo(() => {
     const grouped: any = {};
     filteredMembers.forEach(m => {
-      const rn = m.role?.name || "Mitglied";
+      const rn = getRoleName(m);
       if (!grouped[rn]) {
         let color = m.role?.color || "#f59e0b";
         const nameLower = rn.toLowerCase();
@@ -93,7 +114,7 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
 
         grouped[rn] = {
           name: rn,
-          order: m.role?.order ?? 999,
+          order: getRoleOrder(rn),
           color: color,
           isOwner: nameLower === "inhaber" || nameLower === "owner",
           members: []
@@ -244,13 +265,11 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
                             <h3 className="text-base font-bold text-white truncate group-hover:text-amber-400 transition-colors duration-200">
                               {member.name}
                             </h3>
-                            {member.role && (
-                              <span
-                                className={`text-xs font-semibold uppercase tracking-wider truncate block text-zinc-500 mt-0.5 ${group.isOwner ? "text-amber-400/80" : ""}`}
-                              >
-                                {member.role.name}
-                              </span>
-                            )}
+                            <span
+                              className={`text-xs font-semibold uppercase tracking-wider truncate block text-zinc-500 mt-0.5 ${group.isOwner ? "text-amber-400/80" : ""}`}
+                            >
+                              {getRoleName(member)}
+                            </span>
                           </div>
                         </div>
 

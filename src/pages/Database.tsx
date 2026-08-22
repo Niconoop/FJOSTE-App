@@ -130,7 +130,7 @@ export const DatabasePage: React.FC<DatabaseProps> = ({ onBack }) => {
       }
 
       const res = await axios.patch(
-        `${API_URL}/management/database/collections/${selectedCol.name}/${inspectorCell.record.id}`,
+        `${API_URL}/admin/database/collections/${selectedCol.name}/${inspectorCell.record.id}`,
         payload,
         { headers: h }
       );
@@ -169,7 +169,7 @@ export const DatabasePage: React.FC<DatabaseProps> = ({ onBack }) => {
   const loadCollections = useCallback(async () => {
     setLoadingCols(true);
     try {
-      const res = await axios.get(`${API_URL}/management/database/collections`, { headers: h });
+      const res = await axios.get(`${API_URL}/admin/database/collections`, { headers: h });
       if (Array.isArray(res.data)) {
         setCollections(res.data);
         if (res.data.length > 0) {
@@ -198,7 +198,7 @@ export const DatabasePage: React.FC<DatabaseProps> = ({ onBack }) => {
         sortParam = sortDir === "desc" ? `-${sortField}` : sortField;
       }
 
-      const res = await axios.get(`${API_URL}/management/database/collections/${selectedCol.name}`, {
+      const res = await axios.get(`${API_URL}/admin/database/collections/${selectedCol.name}`, {
         headers: h,
         params: {
           page,

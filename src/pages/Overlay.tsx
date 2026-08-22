@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, Unlock, Calendar, Users, Package, Gauge, Fuel, MapPin, Clock, AlertTriangle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Lock, Unlock, Calendar, Users, Package, Gauge, Fuel, MapPin, Clock, AlertTriangle, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import axios from 'axios';
 import { Toaster, toast } from 'sonner';
 import { API_URL, getAvatarUrl } from '../config';
 import SpotifyWidget from '../components/SpotifyWidget';
-import GameMapWidget from '../components/GameMapWidget';
+import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
+import { loadAllCities, findCity, findClosestCity } from '../data/ets2Cities';
 
 interface Telemetry {
   connected: boolean;
@@ -31,11 +32,26 @@ interface Telemetry {
   wearCargo: number;
   paused: boolean;
   activeTitle?: string;
+  activeProcess?: string;
   gameType?: number;
   posX?: number;
   posY?: number;
   posZ?: number;
   heading?: number;
+  parkBrake?: boolean;
+  blinkerLeftActive?: boolean;
+  blinkerRightActive?: boolean;
+  blinkerLeftOn?: boolean;
+  blinkerRightOn?: boolean;
+  lightsBeamLow?: boolean;
+  lightsBeamHigh?: boolean;
+  lightsHazard?: boolean;
+  lightsBeacon?: boolean;
+  fuelWarning?: boolean;
+  airPressureWarning?: boolean;
+  oilPressureWarning?: boolean;
+  waterTemperatureWarning?: boolean;
+  batteryVoltageWarning?: boolean;
 }
 
 interface Settings {
@@ -60,7 +76,13 @@ interface Settings {
   widgetSizes?: Record<string, { w: number, h: number }>;
   singleRowHud?: boolean;
   customAccentColor?: string;
-  blockCollisions?: boolean;
+  trafficJamNotify?: boolean;
+  trafficServer?: string;
+  showTacho?: boolean;
+  tachoDesign?: 'modern' | 'classic' | 'racing' | 'custom';
+  tachoWidgetPositions?: Record<string, Position>;
+  tachoWidgetSizes?: Record<string, { w: number, h: number }>;
+  tachoEnabledWidgets?: Record<string, boolean>;
 }
 
 interface Position {
@@ -150,35 +172,47 @@ const DEFAULT_SETTINGS: Settings = {
   },
   singleRowHud: false,
   customAccentColor: '#f59e0b',
-  blockCollisions: true
-};
-
-const MOCK_TELEMETRY: Telemetry = {
-  connected: true,
-  gameVersion: 1,
-  speed: 82.4,
-  speedLimit: 80,
-  cruiseControl: 80,
-  gear: 12,
-  rpm: 1250,
-  fuel: 380,
-  fuelRange: 940,
-  cargo: 'Bagger (Liebherr)',
-  cargoMass: 24.5,
-  source: 'Berlin',
-  dest: 'München',
-  navDistance: 452000,
-  navTime: 23200,
-  income: 38500,
-  brand: 'Scania',
-  model: 'S 580 V8',
-  wearTruck: 1.2,
-  wearCargo: 0,
-  paused: false,
-  posX: 10070.25,
-  posY: 37.763,
-  posZ: -9774.412,
-  heading: 0.5,
+  blockCollisions: true,
+  cityEntryNotify: true,
+  trafficJamNotify: true,
+  trafficServer: 'sim1',
+  tachoDesign: 'modern',
+  tachoWidgetPositions: {
+    analogSpeed: { x: 40, y: 65 },
+    analogRpm: { x: 734, y: 65 },
+    digitalSpeed: { x: 362, y: 160 },
+    digitalRpm: { x: 272, y: 70 },
+    indicators: { x: 387, y: 15 },
+    cargoStats: { x: 20, y: 20 },
+    damageStats: { x: 20, y: 240 },
+    routeDetails: { x: 764, y: 20 },
+    fuelStats: { x: 764, y: 240 },
+    jobFooter: { x: 50, y: 320 }
+  },
+  tachoWidgetSizes: {
+    analogSpeed: { w: 250, h: 250 },
+    analogRpm: { w: 250, h: 250 },
+    digitalSpeed: { w: 300, h: 130 },
+    digitalRpm: { w: 480, h: 70 },
+    indicators: { w: 250, h: 40 },
+    cargoStats: { w: 240, h: 200 },
+    damageStats: { w: 240, h: 100 },
+    routeDetails: { w: 240, h: 200 },
+    fuelStats: { w: 240, h: 100 },
+    jobFooter: { w: 924, h: 45 }
+  },
+  tachoEnabledWidgets: {
+    analogSpeed: false,
+    analogRpm: false,
+    digitalSpeed: true,
+    digitalRpm: true,
+    indicators: true,
+    cargoStats: true,
+    damageStats: true,
+    routeDetails: true,
+    fuelStats: true,
+    jobFooter: false
+  }
 };
 
 const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
@@ -254,12 +288,150 @@ const OverlayPage: React.FC = () => {
     return defaultPositions;
   });
 
-  // Use batched telemetry updates; fallback to mock data when not connected
-  const telemetry = useTelemetry(MOCK_TELEMETRY);
+  // Use batched telemetry updates via requestAnimationFrame
+  const telemetry = useTelemetry({ connected: false } as Telemetry);
+
+  useEffect(() => {
+    if (!telemetry.jobActive) {
+      mapWidgetRef.current?.clearRoute();
+    }
+  }, [telemetry.jobActive]);
 
   const [isLocked, setIsLocked] = useState(true);
   const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
+
+  // Overlay Notification State & Refs
+  interface OverlayNotification {
+    id: string;
+    type: 'city' | 'traffic';
+    title: string;
+    message: string;
+  }
+
+  const [overlayNotify, setOverlayNotify] = useState<OverlayNotification | null>(null);
+  const lastCityGameNameRef = useRef<string | null>(null);
+  const lastWarnedTrafficJamsRef = useRef<Record<string, number>>({});
+  const trafficDataRef = useRef<any[]>([]);
+  const mapWidgetRef = useRef<GameMapWidgetHandle>(null);
+
+  // Load cities once
+  useEffect(() => {
+    loadAllCities();
+  }, []);
+
+  // Poll traffic data for notifications
+  useEffect(() => {
+    const fetchTrafficForOverlay = async () => {
+      if (settings.cityEntryNotify === false && settings.trafficJamNotify === false) return;
+      try {
+        const server = settings.trafficServer || 'sim1';
+        const res = await axios.get(`${API_URL}/trucky/traffic?server=${server}&game=ets2`);
+        if (Array.isArray(res.data?.response)) {
+          trafficDataRef.current = res.data.response;
+        }
+      } catch (e) { }
+    };
+
+    fetchTrafficForOverlay();
+    const interval = setInterval(fetchTrafficForOverlay, 25000);
+    return () => clearInterval(interval);
+  }, [settings.cityEntryNotify, settings.trafficJamNotify, settings.trafficServer]);
+
+  // Telemetry position check for City Entry & Traffic Jam Warning
+  useEffect(() => {
+    if (!telemetry || !telemetry.connected || telemetry.posX == null || telemetry.posZ == null) return;
+    if (telemetry.posX === 0 && telemetry.posZ === 0) return;
+
+    const px = telemetry.posX;
+    const pz = telemetry.posZ;
+
+    // 1. City Entry Check
+    if (settings.cityEntryNotify !== false) {
+      const closest = findClosestCity(px, pz, 3000);
+      if (closest && closest.city) {
+        const cityKey = closest.city.gameName.toLowerCase();
+        if (lastCityGameNameRef.current !== cityKey) {
+          lastCityGameNameRef.current = cityKey;
+
+          let playersInCity = 0;
+          trafficDataRef.current.forEach((countryItem: any) => {
+            (countryItem.locations || []).forEach((loc: any) => {
+              const matchedCity = findCity(loc.name);
+              if (matchedCity && matchedCity.gameName.toLowerCase() === cityKey) {
+                playersInCity = Math.max(playersInCity, loc.players || 0);
+              }
+            });
+          });
+
+          setOverlayNotify({
+            id: `city-${Date.now()}`,
+            type: 'city',
+            title: `Stadt betreten: ${closest.city.realName}`,
+            message: `${playersInCity} ${playersInCity === 1 ? 'Spieler' : 'Spieler'} in der Stadt (${closest.city.country.toUpperCase()})`
+          });
+
+          setTimeout(() => {
+            setOverlayNotify(current => current?.id.startsWith('city-') ? null : current);
+          }, 6000);
+        }
+      }
+    }
+
+    // 2. Traffic Jam Proximity Warning
+    if (settings.trafficJamNotify !== false && trafficDataRef.current.length > 0) {
+      const SPECIAL_ROAD_COORDS: Record<string, [number, number]> = {
+        "alpen road": [47.263, 11.395],
+        "c-d road": [51.050, 4.350],
+        "cd road": [51.050, 4.350],
+        "calais - duisburg": [51.050, 4.350],
+      };
+
+      const now = Date.now();
+      trafficDataRef.current.forEach((countryItem: any) => {
+        (countryItem.locations || []).forEach((loc: any) => {
+          if (loc.trafficJams > 0 || loc.severity === 'Congested' || loc.severity === 'Heavy' || loc.severity === 'Jam') {
+            let gameX: number | null = null;
+            let gameZ: number | null = null;
+
+            const locLower = (loc.name || '').toLowerCase().trim();
+            if (SPECIAL_ROAD_COORDS[locLower]) {
+              const city = findCity(loc.name);
+              if (city) { gameX = city.x; gameZ = city.z; }
+            } else {
+              const city = findCity(loc.name);
+              if (city) { gameX = city.x; gameZ = city.z; }
+            }
+
+            if (gameX != null && gameZ != null) {
+              const dx = gameX - px;
+              const dz = gameZ - pz;
+              const dist = Math.sqrt(dx * dx + dz * dz);
+
+              if (dist <= 4000) {
+                const lastWarned = lastWarnedTrafficJamsRef.current[loc.name] || 0;
+                if (now - lastWarned > 180000) { // Warn once every 3 minutes per location
+                  lastWarnedTrafficJamsRef.current[loc.name] = now;
+
+                  const cleanName = loc.name.replace(/\s*\((City|Road)\)/i, '');
+                  setOverlayNotify({
+                    id: `traffic-${Date.now()}`,
+                    type: 'traffic',
+                    title: `⚠️ Stau-Warnung: ${cleanName}`,
+                    message: `${loc.playersInvolvedInTrafficJams || loc.players} Spieler im Stau (${loc.severity})`
+                  });
+
+                  setTimeout(() => {
+                    setOverlayNotify(current => current?.id.startsWith('traffic-') ? null : current);
+                  }, 7000);
+                }
+              }
+            }
+          }
+        });
+      });
+    }
+  }, [telemetry?.posX, telemetry?.posZ, telemetry?.connected, settings.cityEntryNotify, settings.trafficJamNotify]);
 
   // Absolute forced transparency on body, html, and root elements, and prevent right-click context menu
   useEffect(() => {
@@ -479,7 +651,7 @@ const OverlayPage: React.FC = () => {
         const token = localStorage.getItem('token');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const [mapRes, usersRes] = await Promise.all([
-          axios.get(`${API_URL}/trucky/live-map`, { headers }),
+          axios.get(`${API_URL}/live-map`, { headers }).catch(() => ({ data: [] })),
           axios.get(`${API_URL}/management/users`, { headers }).catch(() => ({ data: [] }))
         ]);
         const liveData = Array.isArray(mapRes.data) ? mapRes.data : [];
@@ -516,14 +688,8 @@ const OverlayPage: React.FC = () => {
       try {
         const token = localStorage.getItem('token');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const [res1, res2] = await Promise.all([
-          axios.get(`${API_URL}/trucky/events`, { headers }).catch(() => ({ data: [] })),
-          axios.get(`${API_URL}/events/custom`, { headers }).catch(() => ({ data: [] }))
-        ]);
-        const all = [
-          ...(Array.isArray(res1.data) ? res1.data : []),
-          ...(Array.isArray(res2.data) ? res2.data : [])
-        ];
+        const res = await axios.get(`${API_URL}/events`, { headers }).catch(() => ({ data: [] }));
+        const all = Array.isArray(res.data) ? res.data : [];
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const upcoming = all
@@ -586,7 +752,7 @@ const OverlayPage: React.FC = () => {
     switch (settings.style) {
       case 'carbon':
         return {
-          card: 'border border-amber-500/20 rounded-3xl text-slate-200 select-none shadow-[0_20px_50px_rgba(0,0,0,0.85)] relative overflow-hidden',
+          card: 'border border-amber-500/20 rounded-3xl text-slate-200 select-none backdrop-blur-md relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-amber-400 font-bold drop-shadow-[0_0_6px_rgba(245,158,11,0.35)]',
           primaryAccent: 'bg-amber-500',
@@ -597,7 +763,7 @@ const OverlayPage: React.FC = () => {
         };
       case 'minimal':
         return {
-          card: 'border border-white/10 rounded-2xl text-slate-200 select-none shadow-2xl relative overflow-hidden',
+          card: 'border border-white/10 rounded-2xl text-slate-200 select-none backdrop-blur-md relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-white',
           primaryAccent: 'bg-white',
@@ -608,7 +774,7 @@ const OverlayPage: React.FC = () => {
         };
       case 'custom':
         return {
-          card: 'border-2 border-[var(--custom-border)] rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
+          card: 'border border-[var(--custom-border)] rounded-3xl text-slate-200 select-none backdrop-blur-md relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-[var(--custom-accent)] font-bold drop-shadow-[0_0_6px_var(--custom-glow)]',
           primaryAccent: 'bg-[var(--custom-accent)]',
@@ -620,7 +786,7 @@ const OverlayPage: React.FC = () => {
       case 'neon':
       default:
         return {
-          card: 'border-2 border-[#f59e0b]/30 rounded-3xl text-slate-200 select-none shadow-[0_15px_50px_rgba(0,0,0,0.8)] relative overflow-hidden',
+          card: 'border border-[#f59e0b]/30 rounded-3xl text-slate-200 select-none backdrop-blur-md relative overflow-hidden',
           textMuted: 'text-slate-500',
           textActive: 'text-[#f59e0b]',
           primaryAccent: 'bg-primary',
@@ -956,13 +1122,14 @@ const OverlayPage: React.FC = () => {
     const mapH = settings.widgetSizes?.gameMap?.h || 200;
     return (
       <GameMapWidget
+        ref={mapWidgetRef}
         gameX={telemetry?.posX}
         gameY={telemetry?.posZ}
         heading={telemetry?.heading}
-        source={telemetry?.source}
-        dest={telemetry?.dest}
-        navDistance={telemetry?.navDistance}
-        connected={telemetry?.connected}
+        source={(telemetry?.jobActive && telemetry?.source) || undefined}
+        dest={(telemetry?.jobActive && telemetry?.dest) || undefined}
+        navDistance={(telemetry?.jobActive && telemetry?.navDistance) || undefined}
+        connected={(telemetry?.connected && telemetry?.jobActive) || false}
         accentColor={
           settings.style === 'carbon' ? '#f59e0b' :
             settings.style === 'minimal' ? '#ffffff' :
@@ -1028,6 +1195,46 @@ const OverlayPage: React.FC = () => {
         </div>
       )}
 
+      {/* Top Overlay Notification Banner (City Entry & Traffic Jam Warning) */}
+      <AnimatePresence>
+        {overlayNotify && (
+          <motion.div
+            key={overlayNotify.id}
+            initial={{ opacity: 0, y: -40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] pointer-events-auto"
+          >
+            <div className={`px-5 py-3 rounded-2xl border backdrop-blur-2xl shadow-2xl flex items-center gap-3.5 ${
+              overlayNotify.type === 'traffic'
+                ? 'bg-zinc-950/95 border-red-500/50 text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)]'
+                : 'bg-zinc-950/95 border-amber-500/50 text-white shadow-[0_10px_30px_rgba(245,158,11,0.35)]'
+            }`}>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                overlayNotify.type === 'traffic' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+              }`}>
+                {overlayNotify.type === 'traffic' ? <AlertTriangle size={20} className="animate-pulse" /> : <MapPin size={20} />}
+              </div>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                  {overlayNotify.title}
+                </h4>
+                <p className="text-[11px] font-bold text-slate-300">
+                  {overlayNotify.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setOverlayNotify(null)}
+                className="ml-2 p-1 text-slate-500 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Widgets */}
       {settings.widgetOrder.map((widget) => {
         const isEnabled =
@@ -1082,7 +1289,7 @@ const OverlayPage: React.FC = () => {
             }}
           >
             <div
-              className={`${dimensions} ${c.card} ${!isLocked ? 'border-dashed border-primary/50' : 'border-solid'}`}
+              className={`${dimensions} ${c.card} ${!isLocked ? 'border-dashed border-primary/50' : isLocked && settings.bgOpacity === 0 ? 'border-none shadow-none' : 'border-solid'}`}
               style={{
                 // Apply stored widget dimensions if available
                 width: settings.widgetSizes?.[widget]?.w
@@ -1097,7 +1304,9 @@ const OverlayPage: React.FC = () => {
                 transformOrigin: 'top left',
                 position: 'relative',
                 overflow: 'hidden',
-                backgroundColor: `rgba(0, 0, 0, ${settings.bgOpacity / 100})`,
+                backgroundColor: settings.bgOpacity > 0 ? `rgba(0, 0, 0, ${settings.bgOpacity / 100})` : 'transparent',
+                boxShadow: isLocked && settings.bgOpacity === 0 ? 'none' : undefined,
+                border: isLocked && settings.bgOpacity === 0 ? 'none' : undefined,
                 // Custom accent properties
                 '--custom-accent': settings.customAccentColor || '#f59e0b',
                 '--custom-border': `${settings.customAccentColor || '#f59e0b'}33`,
@@ -1124,16 +1333,18 @@ const OverlayPage: React.FC = () => {
         position="top-center"
         toastOptions={{
           style: {
-            background: 'rgba(10, 10, 10, 0.95)',
-            backdropFilter: 'blur(20px)',
-            border: '2px solid var(--border)',
-            color: 'var(--foreground)',
+            background: 'rgba(13, 15, 23, 0.35)',
+            backdropFilter: 'blur(24px) saturate(210%) contrast(105%)',
+            WebkitBackdropFilter: 'blur(24px) saturate(210%) contrast(105%)',
+            border: '1px solid rgba(255, 255, 255, 0.13)',
+            color: '#f8fafc',
+            boxShadow: 'none',
           },
-          className: 'frosted-card',
+          className: 'custom-toast',
         }}
       />
 
-      <style jsx global>{`
+      <style>{`
         .acrylic-noise {
           position: absolute;
           inset: 0;

@@ -30,7 +30,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, setEditTmpId, bio, setBio, instagram, setInstagram, youtube, setYoutube, twitch, setTwitch, tiktok, setTiktok, twitter, setTwitter, website, setWebsite, saving, handleSave, oldPassword, setOldPassword, newPassword, setNewPassword, confirmPassword, setConfirmPassword, changingPwd, token, setShowDeleteModal, user, handleDeleteAccount, deleting, deleteConfirmText, setDeleteConfirmText, logout }: any) => {
+const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, setEditTmpId, editTlmpId, setEditTlmpId, editSteamId, setEditSteamId, bio, setBio, instagram, setInstagram, youtube, setYoutube, twitch, setTwitch, tiktok, setTiktok, twitter, setTwitter, saving, handleSave, oldPassword, setOldPassword, newPassword, setNewPassword, confirmPassword, setConfirmPassword, changingPwd, token, setShowDeleteModal, user, handleDeleteAccount, deleting, deleteConfirmText, setDeleteConfirmText, logout }: any) => {
   if (!isSelf) return null;
   return (
     <>
@@ -45,6 +45,14 @@ const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, set
         <div>
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">TruckersMP ID</label>
           <input value={editTmpId} onChange={e => setEditTmpId(e.target.value)} placeholder="Z.B. 5635834" className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
+        </div>
+        <div>
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">TrucklineMP ID</label>
+          <input value={editTlmpId} onChange={e => setEditTlmpId(e.target.value)} placeholder="Z.B. 85133" className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
+        </div>
+        <div>
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">Steam ID</label>
+          <input value={editSteamId} onChange={e => setEditSteamId(e.target.value)} placeholder="Z.B. 7656119..." className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
         </div>
         <div>
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">Biografie / Info</label>
@@ -72,10 +80,6 @@ const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, set
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">Twitter / X URL</label>
             <input value={twitter} onChange={e => setTwitter(e.target.value)} placeholder="https://x.com/..." className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
-          </div>
-          <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">Website URL</label>
-            <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
           </div>
         </div>
 
@@ -195,12 +199,13 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
 
   const [editUsername, setEditUsername] = useState("");
   const [editTmpId, setEditTmpId] = useState("");
+  const [editTlmpId, setEditTlmpId] = useState("");
+  const [editSteamId, setEditSteamId] = useState("");
   const [instagram, setInstagram] = useState("");
   const [youtube, setYoutube] = useState("");
   const [twitch, setTwitch] = useState("");
   const [tiktok, setTiktok] = useState("");
   const [twitter, setTwitter] = useState("");
-  const [website, setWebsite] = useState("");
   const [bio, setBio] = useState("");
   const [localStats, setLocalStats] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -248,7 +253,7 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
     const headers = { Authorization: `Bearer ${token}` };
     try {
       // 1. Load member data from single member endpoint (already merged in backend)
-      const memberRes = await axios.get(`${API_URL}/trucky/member/${encodeURIComponent(targetId)}`, { headers });
+      const memberRes = await axios.get(`${API_URL}/members/${encodeURIComponent(targetId)}`, { headers });
       const me = memberRes.data;
 
       if (me) {
@@ -261,11 +266,10 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
           setTwitch(socials.twitch || "");
           setTiktok(socials.tiktok || "");
           setTwitter(socials.twitter || "");
-          setWebsite(socials.website || "");
         }
         // 2. Load jobs (already merged in backend)
         try {
-          const jobsRes = await axios.get(`${API_URL}/trucky/member/${encodeURIComponent(targetId)}/jobs`, { headers });
+          const jobsRes = await axios.get(`${API_URL}/members/${encodeURIComponent(targetId)}/jobs`, { headers });
 
           let tJobs: any[] = Array.isArray(jobsRes.data) ? jobsRes.data : (jobsRes.data?.data || []);
           let dJobs: any[] = [];
@@ -370,10 +374,12 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
       if (isSelf) {
         setEditUsername(user?.username || "");
         setEditTmpId(user?.truckersmp_id ? String(user.truckersmp_id) : "");
+        setEditTlmpId(user?.trucklinemp_id ? String(user.trucklinemp_id) : "");
+        setEditSteamId(user?.steam_id ? String(user.steam_id) : "");
       }
 
       // 3. Load live position
-      const mapRes = await axios.get(`${API_URL}/trucky/live-map`, { headers });
+      const mapRes = await axios.get(`${API_URL}/live-map`, { headers });
       if (Array.isArray(mapRes.data)) {
         const live = mapRes.data.find((m: any) => m.id == targetId || (m.trucky_id && m.trucky_id == targetId));
         setLiveData(live);
@@ -438,12 +444,13 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
       await axios.put(`${API_URL}/auth/profile`, {
         username: editUsername,
         truckersmp_id: parseInt(editTmpId) || 0,
+        trucklinemp_id: editTlmpId ? parseInt(editTlmpId) || editTlmpId : undefined,
+        steam_id: editSteamId ? parseInt(editSteamId) || editSteamId : undefined,
         instagram,
         youtube,
         twitch,
         tiktok,
         twitter,
-        website,
         bio
       });
       toast.success("Profil erfolgreich aktualisiert");
@@ -527,8 +534,16 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
 
   const openJobOnWebsite = (job: any) => {
     if (!job?.id) return;
-    const driverId = driver?.id || driver?.trucky_id || targetId;
-    const url = `https://www.openpipeclub.com/job/${job.id}`;
+    const effectiveDriverId = driver?.id || driver?.trucky_id || driver?.uid || targetId || "";
+    const cleanId = String(job.id);
+    const url = `https://openpipeclub.com/job/${encodeURIComponent(cleanId)}${effectiveDriverId ? `?driverId=${encodeURIComponent(effectiveDriverId)}` : ''}`;
+    try {
+      const { shell } = window.require('electron');
+      if (shell) {
+        shell.openExternal(url);
+        return;
+      }
+    } catch {}
     window.open(url, "_blank");
   };
 
@@ -614,8 +629,8 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header-Bereich (Full Width Banner) */}
       <div className="relative w-full h-[35vh] sm:h-[45vh] shadow-2xl overflow-hidden bg-black">
-        <img src={finalBanner} alt="Profile Banner" className="w-full h-full object-cover filter brightness-[0.4] scale-105" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+        <img src={finalBanner} alt="Profile Banner" className="w-full h-full object-cover scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
         {/* Zurück Button (floating overlay at top-left) */}
         <div className="absolute top-24 lg:top-24 left-4 sm:left-6 lg:left-8 z-50">
@@ -987,8 +1002,10 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
                   setTiktok={setTiktok}
                   twitter={twitter}
                   setTwitter={setTwitter}
-                  website={website}
-                  setWebsite={setWebsite}
+                  editTlmpId={editTlmpId}
+                  setEditTlmpId={setEditTlmpId}
+                  editSteamId={editSteamId}
+                  setEditSteamId={setEditSteamId}
                   saving={saving}
                   handleSave={handleSave}
                   oldPassword={oldPassword}
@@ -1032,8 +1049,10 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
                 setTiktok={setTiktok}
                 twitter={twitter}
                 setTwitter={setTwitter}
-                website={website}
-                setWebsite={setWebsite}
+                editTlmpId={editTlmpId}
+                setEditTlmpId={setEditTlmpId}
+                editSteamId={editSteamId}
+                setEditSteamId={setEditSteamId}
                 saving={saving}
                 handleSave={handleSave}
                 oldPassword={oldPassword}

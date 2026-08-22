@@ -1,39 +1,49 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe } from 'lucide-react';
+import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Flame, Car, ChevronDown, Check, Radio, Navigation, List } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, getAvatarUrl } from '../config';
 import * as proj4 from 'proj4';
 import * as pmtiles from 'pmtiles';
+import { loadAllCities, findCity } from '../data/ets2Cities';
+
+const SIDEBAR_WIDTH = 320;
+
+const SPECIAL_ROAD_COORDS: Record<string, [number, number]> = {
+  "alpen road": [47.263, 11.395],
+  "c-d road": [51.050, 4.350],
+  "cd road": [51.050, 4.350],
+  "calais - duisburg": [51.050, 4.350],
+};
 
 // Register PMTiles protocol once
 let pmTilesProtocolAdded = false;
 function addPmTilesProtocol() {
   if (pmTilesProtocolAdded) return;
   const protocol = new pmtiles.Protocol();
-  maplibregl.addProtocol('pmtiles', protocol.tile);
+  maplibregl.addProtocol('pmtiles', (params: any, abortController: any) => protocol.tile(params, abortController));
   pmTilesProtocolAdded = true;
 }
-
-const PROXY_BASE = `${API_URL}/map/proxy`;
 
 function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-    sprite: 'https://truckermudgeon.github.io/sprites',
+    sprite: `${API_URL}/maps/sprites`,
     sources: {
       ets2: {
         type: 'vector',
-        url: `pmtiles://${PROXY_BASE}/ets2.pmtiles`,
+        url: `pmtiles://${API_URL}/maps/ets2.pmtiles`,
       },
       world: {
         type: 'vector',
-        url: `pmtiles://${PROXY_BASE}/world.pmtiles`,
+        url: `pmtiles://${API_URL}/maps/world.pmtiles`,
       },
     },
+
+
     layers: [
       {
         id: 'background',
@@ -313,16 +323,124 @@ function projectGameToLatLng(gx: number, gz: number): [number, number] | null {
   return null;
 }
 
+// Custom Frosted Glass Server Dropdown Component
+const ServerDropdown = ({
+  value,
+  onChange,
+  servers = []
+}: {
+  value: string;
+  onChange: (serverUrl: string) => void;
+  servers?: any[];
+}) => {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const defaultServers = [
+    { url: 'sim1', name: 'EU Simulation 1' },
+    { url: 'sim2', name: 'EU Simulation 2' },
+    { url: 'arc2', name: 'US Simulation' },
+    { url: 'ets2promods', name: 'ProMods Europe' },
+  ];
+
+  const allServers = [...defaultServers];
+  servers.forEach((s) => {
+    if (s.url && !allServers.find((ds) => ds.url === s.url)) {
+      allServers.push({ url: s.url, name: s.name || s.short || s.url });
+    }
+  });
+
+  const selectedServer = allServers.find((s) => s.url === value) || allServers[0];
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-zinc-950/80 backdrop-blur-xl border border-white/10 hover:border-amber-500/40 text-xs font-bold text-white transition-all cursor-pointer shadow-lg group"
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          <Globe size={13} className="text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
+          <span className="truncate text-[11px] font-bold text-slate-200">{selectedServer.name}</span>
+        </div>
+        <ChevronDown size={13} className={`text-slate-400 shrink-0 transition-transform duration-300 ${open ? 'rotate-180 text-amber-400' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto custom-scrollbar"
+          >
+            {allServers.map((server) => {
+              const isSelected = server.url === value;
+              return (
+                <button
+                  key={server.url}
+                  type="button"
+                  onClick={() => {
+                    onChange(server.url);
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all text-left cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'text-slate-300 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span className="truncate">{server.name}</span>
+                  {isSelected && <Check size={12} className="text-amber-400 shrink-0" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { onViewProfile?: (id: string | number) => void, initialSelectedId?: string | number | null, onClearInitialId?: () => void, theme?: string }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const trafficMarkersRef = useRef<any[]>([]);
+  const currentPopupRef = useRef<any>(null);
   const [mapData, setMapData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Traffic State
+  const [showTraffic, setShowTraffic] = useState(true);
+  const [trafficData, setTrafficData] = useState<any[]>([]);
+  const [trafficServer, setTrafficServer] = useState("sim1");
+  const [trafficServers, setTrafficServers] = useState<any[]>([]);
+  const [trafficHotspotsOpen, setTrafficHotspotsOpen] = useState(false);
+  const [trafficLoading, setTrafficLoading] = useState(false);
+  const [mapZoom, setMapZoom] = useState<number>(4.5);
+
+  // Live TruckersMP ID Tracking state
+  const [trackedTmpPlayer, setTrackedTmpPlayer] = useState<any>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [autoFollow, setAutoFollow] = useState(true);
+  const trackedMarkerRef = useRef<any>(null);
 
   const getAvatarUrlLocal = (url?: string) => getAvatarUrl(url);
 
@@ -331,10 +449,243 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
+  const getMapAnchor = useCallback(() => {
+    if (!mapContainer.current) return undefined;
+    const w = mapContainer.current.offsetWidth;
+    const h = mapContainer.current.offsetHeight;
+    const sw = sidebarOpen ? SIDEBAR_WIDTH : 0;
+    return { x: (w - sw) / 2, y: h / 2 };
+  }, [sidebarOpen]);
+
+  const trackTmpPlayer = useCallback(async (tmpId: string | number) => {
+    const cleanId = String(tmpId).trim();
+    if (!cleanId) return;
+
+    setSelectedDriver(null); // Close driver detail card if open
+    setTrackingLoading(true);
+    setTrackingError(null);
+
+    try {
+      let data: any = null;
+      let tmpProfile: any = null;
+
+      // 1. Fetch TruckersMP profile info via Trucky's unblocked API endpoint
+      try {
+        const pRes = await axios.get(`https://api.truckyapp.com/v2/truckersmp/player?playerID=${cleanId}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'OpenPipeClub/1.0' }
+        });
+        const respData = pRes.data?.response?.response || pRes.data?.response;
+        if (respData && respData.name) {
+          tmpProfile = respData;
+        }
+      } catch (e) {}
+
+      // 2. Fetch session / live map data
+      try {
+        const res = await axios.get(`${API_URL}/truckersmp/server/${cleanId}`);
+        data = res.data;
+      } catch (err) {
+        const fallbackRes = await axios.get(`https://api.truckyapp.com/v3/map/online?playerID=${cleanId}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'OpenPipeClub/1.0' }
+        });
+        const info = fallbackRes.data?.response;
+        if (info && info.online && info.x != null && info.y != null) {
+          const projected = projectGameToLatLng(info.x, info.y);
+          data = {
+            online: true,
+            tmp_id: cleanId,
+            game_x: info.x,
+            game_y: info.y,
+            speed: info.speed,
+            server_name: info.serverDetails?.name || "Simulation",
+            city: info.location?.poi?.realName || "Unterwegs",
+            country: info.location?.poi?.country || "Europa",
+            lat: projected ? projected[0] : null,
+            lng: projected ? projected[1] : null,
+          };
+        } else {
+          data = { online: false, tmp_id: cleanId };
+        }
+      }
+
+      const realName = data?.name || tmpProfile?.name || `TruckersMP #${cleanId}`;
+      const realAvatar = data?.avatar || tmpProfile?.avatar || tmpProfile?.smallAvatar || null;
+      const realGroup = data?.group || tmpProfile?.groupName || "TruckersMP Spieler";
+
+      if (data && data.online && data.lat != null && data.lng != null) {
+        const playerObj = {
+          tmp_id: cleanId,
+          name: realName,
+          avatar: realAvatar,
+          group: realGroup,
+          online: true,
+          server_name: data.server_name || "Online",
+          lat: data.lat,
+          lng: data.lng,
+          speed: data.speed || 0,
+          city: data.city || "Unterwegs",
+          country: data.country || "",
+          last_updated: new Date()
+        };
+        setTrackedTmpPlayer(playerObj);
+
+        if (mapRef.current) {
+            mapRef.current.flyTo({ center: [data.lng, data.lat], zoom: 13, speed: 1.5, anchor: getMapAnchor() });
+          }
+      } else {
+        setTrackingError(`Spieler ${realName} ist aktuell OFFLINE oder nicht auf der Karte.`);
+        setTrackedTmpPlayer({
+          tmp_id: cleanId,
+          name: realName,
+          avatar: realAvatar,
+          group: realGroup,
+          online: false,
+          last_updated: new Date()
+        });
+      }
+    } catch (e: any) {
+      setTrackingError(`Konnte TruckersMP ID #${cleanId} nicht finden.`);
+    } finally {
+      setTrackingLoading(false);
+    }
+  }, []);
+
+  // 5s Live polling for tracked TruckersMP ID
+  useEffect(() => {
+    if (!trackedTmpPlayer || !trackedTmpPlayer.tmp_id || !trackedTmpPlayer.online) return;
+
+    const interval = setInterval(async () => {
+      try {
+        let data: any = null;
+        try {
+          const res = await axios.get(`${API_URL}/truckersmp/server/${trackedTmpPlayer.tmp_id}`);
+          data = res.data;
+        } catch (e) {
+          const fallbackRes = await axios.get(`https://api.truckyapp.com/v3/map/online?playerID=${trackedTmpPlayer.tmp_id}`, {
+            headers: { 'Accept': 'application/json', 'User-Agent': 'OpenPipeClub/1.0' }
+          });
+          const info = fallbackRes.data?.response;
+          if (info && info.online && info.x != null && info.y != null) {
+            const projected = projectGameToLatLng(info.x, info.y);
+            data = {
+              online: true,
+              tmp_id: trackedTmpPlayer.tmp_id,
+              speed: info.speed,
+              server_name: info.serverDetails?.name || "Simulation",
+              city: info.location?.poi?.realName || "Unterwegs",
+              country: info.location?.poi?.country || "Europa",
+              lat: projected ? projected[0] : null,
+              lng: projected ? projected[1] : null,
+            };
+          }
+        }
+
+        if (data && data.online && data.lat != null && data.lng != null) {
+          setTrackedTmpPlayer((prev: any) => ({
+            ...prev,
+            online: true,
+            lat: data.lat,
+            lng: data.lng,
+            speed: data.speed || 0,
+            server_name: data.server_name || prev?.server_name,
+            city: data.city || prev?.city,
+            country: data.country || prev?.country,
+            last_updated: new Date()
+          }));
+
+          if (autoFollow && mapRef.current) {
+            mapRef.current.easeTo({ center: [data.lng, data.lat], duration: 1500 });
+          }
+        }
+      } catch (err) {
+        console.warn("Tracking update error:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [trackedTmpPlayer?.tmp_id, trackedTmpPlayer?.online, autoFollow]);
+
+  // Tracked player map marker rendering (Theme Orange)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (trackedMarkerRef.current) {
+      trackedMarkerRef.current.remove();
+      trackedMarkerRef.current = null;
+    }
+
+    if (trackedTmpPlayer && trackedTmpPlayer.online && trackedTmpPlayer.lat != null && trackedTmpPlayer.lng != null) {
+      const el = document.createElement("div");
+      el.className = "tracked-tmp-marker";
+      el.style.cssText = `
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 3px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.25);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 0 25px rgba(245, 158, 11, 0.9), inset 0 0 15px rgba(245, 158, 11, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 30;
+      `;
+      el.innerHTML = `
+        <div style="font-size: 20px; line-height: 1; filter: drop-shadow(0 0 6px rgba(245,158,11,0.9));">📡</div>
+      `;
+
+      el.addEventListener("click", () => {
+        map.flyTo({ center: [trackedTmpPlayer.lng, trackedTmpPlayer.lat], zoom: 13, duration: 1500, anchor: getMapAnchor() });
+      });
+
+      const marker = new (maplibregl as any).Marker({ element: el })
+        .setLngLat([trackedTmpPlayer.lng, trackedTmpPlayer.lat])
+        .addTo(map);
+
+      trackedMarkerRef.current = marker;
+    }
+  }, [trackedTmpPlayer]);
+
+  const fetchTraffic = useCallback(async (srv?: string) => {
+    const targetServer = srv || trafficServer;
+    try {
+      setTrafficLoading(true);
+      const [tRes, sRes] = await Promise.all([
+        axios.get(`https://api.truckyapp.com/v2/traffic?server=${encodeURIComponent(targetServer)}&game=ets2`).catch(() => ({ data: { response: [] } })),
+        axios.get(`https://api.truckyapp.com/v2/traffic/servers`).catch(() => ({ data: { response: [] } }))
+      ]);
+      const resp = tRes.data?.response;
+      setTrafficData(Array.isArray(resp) ? resp : []);
+      const serversList = sRes.data?.response;
+      if (Array.isArray(serversList) && serversList.length > 0) {
+        const ets2Only = serversList.filter((s: any) => !(s.game || s.short_name || s.name || "").toUpperCase().includes("ATS"));
+        setTrafficServers(ets2Only);
+      }
+    } catch (e) {
+      console.warn("Traffic fetch error:", e);
+    } finally {
+      setTrafficLoading(false);
+    }
+  }, [trafficServer]);
+
+  useEffect(() => {
+    loadAllCities();
+  }, []);
+
+  useEffect(() => {
+    if (showTraffic) {
+      fetchTraffic(trafficServer);
+      const interval = setInterval(() => fetchTraffic(trafficServer), 30000);
+      return () => clearInterval(interval);
+    }
+  }, [showTraffic, trafficServer, fetchTraffic]);
+
   const fetchData = useCallback(async () => {
     try {
       const [mapRes, usersRes] = await Promise.all([
-        axios.get(`${API_URL}/trucky/live-map`),
+        axios.get(`${API_URL}/live-map`).catch(() => ({ data: [] })),
         axios.get(`${API_URL}/management/users`).catch(() => ({ data: [] }))
       ]);
 
@@ -396,8 +747,16 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     map.setMinZoom(4.5);
     map.setMaxZoom(14);
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+
+    const handleZoom = () => setMapZoom(map.getZoom());
+    map.on('zoom', handleZoom);
+    setMapZoom(map.getZoom());
+
     mapRef.current = map;
-    return () => map.remove();
+    return () => {
+      map.off('zoom', handleZoom);
+      map.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -449,7 +808,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
             }
           }
           if (lat != null && lng != null) {
-            mapRef.current.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+            mapRef.current.flyTo({ center: [lng, lat], zoom: 12, duration: 1500, anchor: getMapAnchor() });
           }
         }
       }
@@ -501,7 +860,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       el.className = "map-marker";
       const isSelected = selectedDriver?.id === member.id;
       const avatarUrl = getAvatarUrl(member.avatar_url);
-      el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background:${avatarUrl ? `url(${avatarUrl}) center/cover` : "#1a1a2e"};box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:${isSelected ? 10 : 1};${member.online ? "animation:pulse 2s infinite;" : ""}`;
+      el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background:${avatarUrl ? `url(${avatarUrl}) center/cover` : "#1a1a2e"};box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:${isSelected ? 10 : 1};${member.online ? "animation:map-marker-pulse 2s infinite;" : ""}`;
 
       if (!avatarUrl) {
         el.innerHTML = '<svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>';
@@ -509,7 +868,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
       el.addEventListener("click", () => {
         setSelectedDriver(member);
-        map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+        setTrackedTmpPlayer(null);
+        map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500, anchor: getMapAnchor() });
       });
 
       const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
@@ -517,8 +877,266 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     });
   }, [mapData, selectedDriver]);
 
-  const onlineCount = mapData.filter(m => m.online).length;
+  // GPU-Accelerated WebGL Traffic Layer (Zero Lag / 60 FPS)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
+    const cleanupLayers = () => {
+      if (map.getLayer('traffic-labels')) map.removeLayer('traffic-labels');
+      if (map.getLayer('traffic-warning-icons')) map.removeLayer('traffic-warning-icons');
+      if (map.getSource('traffic-data')) map.removeSource('traffic-data');
+    };
+
+    if (!showTraffic || !trafficData || trafficData.length === 0) {
+      cleanupLayers();
+      return;
+    }
+
+    const features: any[] = [];
+    trafficData.forEach((countryItem: any) => {
+      const locs = countryItem.locations || [];
+      locs.forEach((loc: any) => {
+        let lat: number | null = null;
+        let lng: number | null = null;
+
+        const locLower = (loc.name || '').toLowerCase().trim();
+        if (SPECIAL_ROAD_COORDS[locLower]) {
+          [lat, lng] = SPECIAL_ROAD_COORDS[locLower];
+        } else {
+          const city = findCity(loc.name);
+          if (city) {
+            lat = city.lat;
+            lng = city.lng;
+          }
+        }
+
+        if (lat == null || lng == null) return;
+
+        const isJam = loc.trafficJams > 0 || loc.severity === 'Congested' || loc.severity === 'Heavy' || loc.severity === 'Jam';
+        const isModerate = loc.severity === 'Moderate';
+
+        // Grün (Freie Fahrt) komplett ausblenden! Nur Rot (Stau) und Orange (Zähfließend) anzeigen!
+        if (!isJam && !isModerate) return;
+
+        const color = isJam ? '#ff0033' : '#f59e0b';
+        const cleanName = loc.name.replace(/\s*\((City|Road)\)/i, '');
+        const labelText = `${cleanName} (${loc.players} 🚗)`;
+
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [lng, lat]
+          },
+          properties: {
+            name: loc.name,
+            cleanName,
+            country: loc.country,
+            players: loc.players,
+            trafficJams: loc.trafficJams,
+            playersStuck: loc.playersInvolvedInTrafficJams || 0,
+            averageSpeed: Math.round(loc.averageSpeed || 0),
+            severity: loc.severity,
+            color,
+            isJam: isJam ? 1 : 0,
+            isModerate: isModerate ? 1 : 0,
+            label: labelText
+          }
+        });
+      });
+    });
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features
+    };
+
+    if (map.getSource('traffic-data')) {
+      (map.getSource('traffic-data') as any).setData(geojson);
+    } else {
+      map.addSource('traffic-data', {
+        type: 'geojson',
+        data: geojson
+      });
+
+      // Zentriertes Ausrufezeichen-Schild Icon Layer (Ohne Glow)
+      map.addLayer({
+        id: 'traffic-warning-icons',
+        type: 'symbol',
+        source: 'traffic-data',
+        minzoom: 1.0,
+        layout: {
+          'text-field': '⚠️',
+          'text-size': ['interpolate', ['linear'], ['zoom'], 1, 14, 5, 20, 9, 26, 12, 34],
+          'text-anchor': 'center',
+          'text-offset': [0, 0],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true
+        },
+        paint: {
+          'text-color': ['get', 'color'],
+          'text-halo-color': '#000000',
+          'text-halo-width': 3.0
+        }
+      });
+
+      // High Visibility Traffic Labels
+      map.addLayer({
+        id: 'traffic-labels',
+        type: 'symbol',
+        source: 'traffic-data',
+        minzoom: 3.5,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Open Sans Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 3.5, 10, 8, 12, 12, 15],
+          'text-offset': [0, 1.4],
+          'text-anchor': 'top',
+          'text-allow-overlap': true
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#000000',
+          'text-halo-width': 3.5
+        }
+      });
+
+      // Click handler for popup
+      map.on('click', 'traffic-warning-icons', (e: any) => {
+        if (!e.features || e.features.length === 0) return;
+        const feat = e.features[0];
+        const props = feat.properties;
+        const coords = feat.geometry.coordinates.slice();
+        const speedVal = props.averageSpeed || 0;
+        const speedText = speedVal > 0 
+          ? `${speedVal} km/h`
+          : (props.isJam ? '< 15 km/h (Stau)' : '~45 km/h (Zähfließend)');
+
+        const popupHtml = `
+          <div class="frosted-card" style="padding: 16px; min-width: 230px; color: #fff; font-family: system-ui, -apple-system, sans-serif;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+              <div style="font-weight:900; font-size:14px; color:#f59e0b; letter-spacing:-0.2px;">${props.cleanName || props.name}</div>
+              <span style="font-size:9px; font-weight:900; text-transform:uppercase; padding:3px 8px; border-radius:20px; background:${props.color}25; color:${props.color}; border:1px solid ${props.color}50;">${props.severity}</span>
+            </div>
+            <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">${props.country}</div>
+            
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 12px;">
+              <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="color:#cbd5e1; font-weight:600;">Fahrer in Region:</span>
+                <strong style="color:#fff; font-weight:800;">${props.players} 🚗</strong>
+              </div>
+              <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="color:#cbd5e1; font-weight:600;">Staus:</span>
+                <strong style="color:${props.isJam ? '#ef4444' : '#f59e0b'}; font-weight:800;">${props.trafficJams} (${props.playersStuck} im Stau)</strong>
+              </div>
+              <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="color:#cbd5e1; font-weight:600;">Verkehrsfluss / Tempo:</span>
+                <strong style="color:${props.isJam ? '#ef4444' : '#f59e0b'}; font-weight:800;">${speedText}</strong>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (currentPopupRef.current) {
+          currentPopupRef.current.remove();
+        }
+        const popup = new (maplibregl as any).Popup({ offset: [0, -10], closeButton: false, className: 'frosted-map-popup' })
+          .setLngLat(coords)
+          .setHTML(popupHtml)
+          .addTo(map);
+        currentPopupRef.current = popup;
+      });
+
+      map.on('mouseenter', 'traffic-warning-icons', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'traffic-warning-icons', () => {
+        map.getCanvas().style.cursor = '';
+      });
+    }
+  }, [showTraffic, trafficData]);
+
+  // Extract all traffic hotspots
+  const allTrafficLocations: any[] = [];
+  trafficData.forEach((c: any) => {
+    (c.locations || []).forEach((l: any) => {
+      const isJam = l.trafficJams > 0 || l.severity === 'Congested' || l.severity === 'Heavy' || l.severity === 'Jam';
+      const isModerate = l.severity === 'Moderate';
+      if (isJam || isModerate) {
+        allTrafficLocations.push({ ...l, country: c.country || c.name });
+      }
+    });
+  });
+
+  const trafficHotspots = [...allTrafficLocations].sort((a: any, b: any) => {
+    if (b.trafficJams !== a.trafficJams) return b.trafficJams - a.trafficJams;
+    return b.players - a.players;
+  });
+
+  const totalTrafficJams = allTrafficLocations.reduce((sum: number, l: any) => sum + (l.trafficJams || 0), 0);
+
+  const triggerHotspotClick = (hotspot: any) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    let lat: number | null = null;
+    let lng: number | null = null;
+    const locLower = (hotspot.name || '').toLowerCase().trim();
+    if (SPECIAL_ROAD_COORDS[locLower]) {
+      [lat, lng] = SPECIAL_ROAD_COORDS[locLower];
+    } else {
+      const c = findCity(hotspot.name);
+      if (c) { lat = c.lat; lng = c.lng; }
+    }
+
+    if (lat != null && lng != null) {
+      map.flyTo({ center: [lng, lat], zoom: 9, speed: 1.5 });
+
+      const isJam = hotspot.trafficJams > 0 || hotspot.severity === 'Congested' || hotspot.severity === 'Heavy' || hotspot.severity === 'Jam';
+      const isModerate = hotspot.severity === 'Moderate';
+      const speedVal = hotspot.averageSpeed || 0;
+      const speedText = speedVal > 0 
+        ? `${Math.round(speedVal)} km/h`
+        : (isJam ? '< 15 km/h (Stau)' : '~45 km/h (Zähfließend)');
+
+      const popupHtml = `
+        <div class="frosted-card" style="padding: 16px; min-width: 230px; color: #fff; font-family: system-ui, -apple-system, sans-serif;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+            <div style="font-weight:900; font-size:14px; color:#f59e0b; letter-spacing:-0.2px;">${hotspot.name.replace(/\s*\((City|Road)\)/i, '')}</div>
+            <span style="font-size:9px; font-weight:900; text-transform:uppercase; padding:3px 8px; border-radius:20px; background:${isJam ? '#ff003325' : '#f59e0b25'}; color:${isJam ? '#ff0033' : '#f59e0b'}; border:1px solid ${isJam ? '#ff003350' : '#f59e0b50'};">${hotspot.severity}</span>
+          </div>
+          <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">${hotspot.country}</div>
+          
+          <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 12px;">
+            <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="color:#cbd5e1; font-weight:600;">Fahrer in Region:</span>
+              <strong style="color:#fff; font-weight:800;">${hotspot.players} 🚗</strong>
+            </div>
+            <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="color:#cbd5e1; font-weight:600;">Staus:</span>
+              <strong style="color:${isJam ? '#ef4444' : '#f59e0b'}; font-weight:800;">${hotspot.trafficJams || 0} (${hotspot.playersInvolvedInTrafficJams || 0} im Stau)</strong>
+            </div>
+            <div style="font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:#cbd5e1; font-weight:600;">Verkehrsfluss / Tempo:</span>
+              <strong style="color:${isJam ? '#ef4444' : '#f59e0b'}; font-weight:800;">${speedText}</strong>
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (currentPopupRef.current) {
+        currentPopupRef.current.remove();
+      }
+      const popup = new (maplibregl as any).Popup({ offset: [0, -10], closeButton: false, className: 'frosted-map-popup' })
+        .setLngLat([lng, lat])
+        .setHTML(popupHtml)
+        .addTo(map);
+      currentPopupRef.current = popup;
+    }
+  };
+
+  const onlineCount = mapData.filter(m => m.online).length;
   const filteredDrivers = mapData.filter(m => (m.name || "").toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
@@ -536,33 +1154,149 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
             </div>
           </div>
 
-          <button
-            onClick={() => { setLoading(true); fetchData(); }}
-            className="frosted-card !w-10 !h-10 !p-0 backdrop-blur-xl flex items-center justify-center text-slate-400 hover:text-white transition-all shadow-xl border border-white/5"
-          >
-            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-          </button>
+          {/* Traffic Toggle Card */}
+          <div className="frosted-card !p-3 backdrop-blur-xl shadow-2xl border border-white/5 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setShowTraffic(!showTraffic)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                  showTraffic
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                    : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
+                }`}
+              >
+                <AlertTriangle size={14} className={showTraffic ? "text-amber-400" : ""} />
+                <span>Staus {totalTrafficJams > 0 ? `(${totalTrafficJams})` : ""}</span>
+              </button>
+
+              <button
+                onClick={() => { setLoading(true); fetchData(); if (showTraffic) fetchTraffic(); }}
+                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all"
+                title="Aktualisieren"
+              >
+                <RefreshCw size={14} className={loading || trafficLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
+
+            {showTraffic && (
+              <div className="flex flex-col gap-2 pt-1 border-t border-white/5">
+                <div className="flex items-center gap-2">
+                  <div>
+                    <ServerDropdown
+                      value={trafficServer}
+                      onChange={setTrafficServer}
+                      servers={trafficServers}
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => setTrafficHotspotsOpen(!trafficHotspotsOpen)}
+                    className={`p-1.5 rounded-lg border text-[10px] font-bold transition-all flex items-center gap-1 ${
+                      trafficHotspotsOpen
+                        ? "bg-primary/20 text-primary border-primary/30"
+                        : "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    <List size={12} />
+                    Top Hotspots
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {trafficHotspotsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden flex flex-col w-full max-h-60 mt-1.5"
+                    >
+                      <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                        {trafficHotspots.slice(0, 15).map((hotspot: any, idx: number) => {
+                          const isJam = hotspot.trafficJams > 0 || hotspot.severity === 'Congested' || hotspot.severity === 'Heavy';
+                          const isModerate = hotspot.severity === 'Moderate';
+                          const speedVal = hotspot.averageSpeed || 0;
+                          const speedText = speedVal > 0 
+                            ? `${Math.round(speedVal)} km/h`
+                            : (isJam ? '< 15 km/h' : isModerate ? '~45 km/h' : 'Flüssig');
+
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => triggerHotspotClick(hotspot)}
+                              className="w-full text-left p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/5 border border-white/5 transition-all flex flex-col gap-1 group cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-bold text-white truncate group-hover:text-amber-400 transition-colors">
+                                    {hotspot.name.replace(/\s*\((City|Road)\)/i, '')}
+                                  </p>
+                                  <p className="text-[8px] text-slate-500 uppercase font-bold tracking-wider">{hotspot.country}</p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-lg ${
+                                    isJam ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-amber-500/20 text-amber-400"
+                                  }`}>
+                                    {hotspot.players} 🚗
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between text-[8px] text-slate-400 pt-1 border-t border-white/5 font-semibold">
+                                <span>{hotspot.trafficJams > 0 ? `${hotspot.trafficJams} Staus (${hotspot.playersInvolvedInTrafficJams || 0} im Stau)` : 'Freie Fahrt'}</span>
+                                <span className={isJam ? 'text-red-400' : 'text-slate-350'}>{speedText}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+
+                        {trafficHotspots.length === 0 && (
+                          <p className="text-center text-[10px] text-slate-500 py-3 font-bold uppercase">Keine aktiven Staus</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Sidebar */}
-      <div className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-30 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
-        <div className="p-6 border-b border-white/5 flex items-center justify-between">
-          <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Fahrer ({filteredDrivers.length})</h2>
-          <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-white/5 rounded-lg text-slate-500">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-4 border-b border-white/5">
+      <div className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-50 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
+        <div className="p-4 border-b border-white/5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Fahrer ({filteredDrivers.length})</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-1.5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="Seitenleiste schließen"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Fahrer suchen..."
+              placeholder="Fahrer oder TMP ID suchen..."
               className="w-full bg-black/30 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-[#f59e0b]/30 outline-none transition-all"
             />
           </div>
+
+          {search.trim().length > 0 && /^\d+$/.test(search.trim()) && (
+            <button
+              onClick={() => trackTmpPlayer(search.trim())}
+              disabled={trackingLoading}
+              className="w-full flex items-center justify-between gap-2 p-2.5 mt-2.5 rounded-xl bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary font-bold text-xs transition-all shadow-lg cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Radio size={14} className="text-primary animate-pulse shrink-0" />
+                <span className="truncate">TruckersMP ID #{search.trim()} orten</span>
+              </div>
+              {trackingLoading ? <RefreshCw size={14} className="animate-spin text-primary shrink-0" /> : <Navigation size={14} className="text-primary shrink-0" />}
+            </button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {filteredDrivers.map(m => {
@@ -573,6 +1307,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                 key={m.id}
                 onClick={() => {
                   setSelectedDriver(m);
+                  setTrackedTmpPlayer(null); // Close TruckersMP tracking card when a driver is selected
                   if (hasPos && mapRef.current) {
                     let lat = loc.lat;
                     let lng = loc.lng;
@@ -632,16 +1367,141 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         </div>
       </div>
 
-      {/* Driver Detail Card */}
+      {/* Tracked TruckersMP Player Detail Card (Top-Level) */}
       <AnimatePresence>
-        {selectedDriver && (
+        {trackedTmpPlayer && (
           <motion.div
             initial={{ opacity: 0, x: 20, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, scale: 0.95 }}
             style={{ right: sidebarOpen ? "340px" : "24px" }}
-            className="absolute bottom-6 z-[40] w-80 frosted-card !p-0 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
+            className="absolute bottom-6 z-[9999] w-80 frosted-card !p-0 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
           >
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" />
+
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-14 h-14 rounded-2xl bg-zinc-900 border-2 overflow-hidden flex items-center justify-center transition-all shrink-0 ${trackedTmpPlayer.online ? "border-primary shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-[pulse_2s_infinite]" : "border-white/10"}`}>
+                    {trackedTmpPlayer.avatar ? (
+                      <img src={trackedTmpPlayer.avatar} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-primary/20 flex items-center justify-center font-black text-primary text-xl">
+                        {(trackedTmpPlayer.name || "T").charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-unbounded text-sm font-black text-white uppercase tracking-tight italic truncate">
+                      {trackedTmpPlayer.name || `TruckersMP #${trackedTmpPlayer.tmp_id}`}
+                    </h4>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mt-0.5 truncate">
+                      {trackedTmpPlayer.group || 'TruckersMP Spieler'} • #{trackedTmpPlayer.tmp_id}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setTrackedTmpPlayer(null)}
+                  className="p-2 hover:bg-white/5 rounded-xl text-slate-500 transition-colors group shrink-0"
+                  title="Ortung beenden"
+                >
+                  <X size={18} className="group-hover:rotate-90 transition-transform" />
+                </button>
+              </div>
+
+              {trackingLoading ? (
+                <div className="flex items-center justify-center py-6 gap-2 text-slate-400 text-xs font-bold">
+                  <RefreshCw size={16} className="animate-spin text-primary" />
+                  <span>Suche Live Position...</span>
+                </div>
+              ) : trackingError ? (
+                <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold text-center">
+                  {trackingError}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Status & Speed */}
+                  <div className="flex items-center justify-between p-3.5 bg-white/[0.02] border border-white/5 rounded-2xl">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2.5 h-2.5 rounded-full ${trackedTmpPlayer.online ? "bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]" : "bg-slate-600"}`} />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        {trackedTmpPlayer.online ? "In Fahrt (Online)" : "Außer Dienst (Offline)"}
+                      </span>
+                    </div>
+                    {trackedTmpPlayer.online && (
+                      <div className="flex items-center gap-2 text-primary">
+                        <Gauge size={14} />
+                        <span className="text-sm font-black italic tracking-tighter">
+                          {Math.round(trackedTmpPlayer.speed || 0)} <span className="text-[9px] not-italic text-slate-500">KM/H</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Server / Mode */}
+                  {trackedTmpPlayer.online && (
+                    <div className="flex items-center gap-2.5 p-3 bg-white/[0.01] border border-white/5 rounded-2xl">
+                      <Globe size={14} className="text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-0.5">TruckersMP Server</p>
+                        <p className="text-[10px] font-bold text-white leading-none truncate">{trackedTmpPlayer.server_name || "Simulation"}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location */}
+                  <div className="flex items-start gap-3.5 p-4 bg-white/[0.02] border border-white/5 rounded-2xl relative overflow-hidden group/loc">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-full -mr-8 -mt-8 blur-2xl group-hover/loc:bg-primary/10 transition-colors" />
+                    <MapPin size={18} className="text-primary shrink-0 mt-0.5 relative z-10" />
+                    <div className="min-w-0 relative z-10">
+                      <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">Aktuelle Position</p>
+                      <p className="text-xs font-bold text-white leading-tight">
+                        {trackedTmpPlayer.city ? `${trackedTmpPlayer.city}${trackedTmpPlayer.country ? `, ${trackedTmpPlayer.country}` : ''}` : 'Unterwegs auf den Straßen'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Auto Follow & Refresh Controls */}
+                  {trackedTmpPlayer.online && (
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <button
+                        onClick={() => setAutoFollow(!autoFollow)}
+                        className={`flex-1 py-2.5 px-3 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                          autoFollow
+                            ? 'bg-primary/20 text-primary border-primary/40 shadow-lg shadow-primary/20'
+                            : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'
+                        }`}
+                      >
+                        <Navigation size={14} className={autoFollow ? 'animate-bounce' : ''} />
+                        <span>{autoFollow ? 'Kamera Folgt' : 'Kamera Folgen'}</span>
+                      </button>
+                      <button
+                        onClick={() => trackTmpPlayer(trackedTmpPlayer.tmp_id)}
+                        className="p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all"
+                        title="Jetzt aktualisieren"
+                      >
+                        <RefreshCw size={14} className={trackingLoading ? "animate-spin" : ""} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Driver Detail Card */}
+      <AnimatePresence>
+         {selectedDriver && (
+           <motion.div
+             key={selectedDriver.id}
+             initial={{ opacity: 0, x: 20, scale: 0.95 }}
+             animate={{ opacity: 1, x: 0, scale: 1 }}
+             exit={{ opacity: 0, x: 20, scale: 0.95 }}
+             style={{ right: sidebarOpen ? "340px" : "24px" }}
+             className="absolute bottom-6 z-[9999] w-80 frosted-card !p-0 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
+           >
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
             <div className="p-6">
@@ -767,7 +1627,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       )}
 
       <style>{`
-        @keyframes pulse {
+        @keyframes map-marker-pulse {
           0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
           70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
           100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }

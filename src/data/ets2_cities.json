@@ -1,0 +1,3732 @@
+[
+  {
+    "gameName": "aalborg",
+    "realName": "Aalborg",
+    "country": "denmark",
+    "x": 854.443,
+    "y": 7.992,
+    "z": -36001.876,
+    "lat": 57.046263,
+    "lng": 9.921526
+  },
+  {
+    "gameName": "aarhus",
+    "realName": "Aarhus",
+    "country": "denmark",
+    "x": 1382.455,
+    "y": 2.51,
+    "z": -30628.709,
+    "lat": 56.149628,
+    "lng": 10.213405
+  },
+  {
+    "gameName": "aberdeen",
+    "realName": "Aberdeen",
+    "country": "scotland",
+    "x": -38846.668,
+    "y": 132.673,
+    "z": -55270.344,
+    "lat": 57.148243,
+    "lng": -2.092809
+  },
+  {
+    "gameName": "ajaccio",
+    "realName": "Ajaccio",
+    "country": "france",
+    "x": -10031.473,
+    "y": 27.56,
+    "z": 48620.893,
+    "lat": 41.926399,
+    "lng": 8.737603
+  },
+  {
+    "gameName": "albacete",
+    "realName": "Albacete",
+    "country": "spain",
+    "x": -58305.34,
+    "y": 23.178,
+    "z": 58465.132,
+    "lat": 38.995092,
+    "lng": -1.855915
+  },
+  {
+    "gameName": "alban",
+    "realName": "Saint-Alban-du-Rhône (Alban)",
+    "country": "france",
+    "x": -25953.586,
+    "y": 40.677,
+    "z": 28986.346,
+    "lat": 45.4243,
+    "lng": 4.76
+  },
+  {
+    "gameName": "alesund",
+    "realName": "Ålesund",
+    "country": "norway",
+    "x": -7676.777,
+    "y": 13.094,
+    "z": -67160.295,
+    "lat": 62.480236,
+    "lng": 6.555074
+  },
+  {
+    "gameName": "algeciras",
+    "realName": "Algeciras",
+    "country": "spain",
+    "x": -79942.516,
+    "y": 68.487,
+    "z": 70281.547,
+    "lat": 36.131172,
+    "lng": -5.447399
+  },
+  {
+    "gameName": "alta",
+    "realName": "Alta",
+    "country": "canada",
+    "x": 33622.629,
+    "y": 80.048,
+    "z": -113313.904,
+    "lat": 55.001251,
+    "lng": -115.002136
+  },
+  {
+    "gameName": "amsterdam",
+    "realName": "Amsterdam",
+    "country": "netherlands",
+    "x": -19042.082,
+    "y": 1.45,
+    "z": -11308.295,
+    "lat": 52.37308,
+    "lng": 4.892453
+  },
+  {
+    "gameName": "ancona",
+    "realName": "Ancona",
+    "country": "italy",
+    "x": 10324.406,
+    "y": 21.501,
+    "z": 39758.287,
+    "lat": 43.480119,
+    "lng": 13.218728
+  },
+  {
+    "gameName": "andenes",
+    "realName": "Andenes",
+    "country": "norway",
+    "x": 19085.834,
+    "y": 6.425,
+    "z": -108480.917,
+    "lat": 69.312299,
+    "lng": 16.105708
+  },
+  {
+    "gameName": "antwerp",
+    "realName": "Antwerpen",
+    "country": "belgium",
+    "x": -21700.676,
+    "y": 44.181,
+    "z": -5680.764,
+    "lat": 51.22111,
+    "lng": 4.399708
+  },
+  {
+    "gameName": "argostoli",
+    "realName": "Αργοστόλι (Argostoli)",
+    "country": "greece",
+    "x": 41635.23,
+    "y": 4.775,
+    "z": 71521.189,
+    "lat": 38.175673,
+    "lng": 20.48788
+  },
+  {
+    "gameName": "arvidsjaur",
+    "realName": "Arvidsjaur",
+    "country": "sweden",
+    "x": 26476.754,
+    "y": 83.282,
+    "z": -83892.021,
+    "lat": 65.666667,
+    "lng": 19.25
+  },
+  {
+    "gameName": "athens",
+    "realName": "Αθήνα (Athens)",
+    "country": "greece",
+    "x": 56730.625,
+    "y": 26.6,
+    "z": 69993.642,
+    "lat": 37.975565,
+    "lng": 23.734832
+  },
+  {
+    "gameName": "a_coruna",
+    "realName": "A Coruña",
+    "country": "spain",
+    "x": -82022.156,
+    "y": 72.466,
+    "z": 26714.281,
+    "lat": 43.346645,
+    "lng": -8.412703
+  },
+  {
+    "gameName": "bacau",
+    "realName": "Bacău (Bacau)",
+    "country": "romania",
+    "x": 62137.61,
+    "y": 8.045,
+    "z": 18496.237,
+    "lat": 46.556049,
+    "lng": 26.915356
+  },
+  {
+    "gameName": "bailen",
+    "realName": "Bailén",
+    "country": "spain",
+    "x": -69288.359,
+    "y": 43.872,
+    "z": 61705.377,
+    "lat": 38.096787,
+    "lng": -3.77656
+  },
+  {
+    "gameName": "banja_luka",
+    "realName": "Бања Лука (Banja luka)",
+    "country": "bosnia and herzegovina",
+    "x": 26087.173,
+    "y": 27.041,
+    "z": 33235.376,
+    "lat": 44.772084,
+    "lng": 17.191765
+  },
+  {
+    "gameName": "barcelona",
+    "realName": "Barcelona",
+    "country": "spain",
+    "x": -38266.383,
+    "y": 30.017,
+    "z": 48093.486,
+    "lat": 41.38258,
+    "lng": 2.177073
+  },
+  {
+    "gameName": "bari",
+    "realName": "Bari",
+    "country": "italy",
+    "x": 24031.164,
+    "y": 30.01,
+    "z": 54351.4,
+    "lat": 41.125784,
+    "lng": 16.862029
+  },
+  {
+    "gameName": "bastia",
+    "realName": "Bastia",
+    "country": "france",
+    "x": -7139.547,
+    "y": 3.771,
+    "z": 44186.346,
+    "lat": 42.697461,
+    "lng": 9.449771
+  },
+  {
+    "gameName": "beja",
+    "realName": "Beja",
+    "country": "portugal",
+    "x": -87970.375,
+    "y": 5.525,
+    "z": 57010.826,
+    "lat": 38.015448,
+    "lng": -7.865037
+  },
+  {
+    "gameName": "beograd",
+    "realName": "Београд (Beograd)",
+    "country": "serbia",
+    "x": 39347.5,
+    "y": 25.005,
+    "z": 32074.776,
+    "lat": 44.815332,
+    "lng": 20.445659
+  },
+  {
+    "gameName": "bergen",
+    "realName": "Bergen",
+    "country": "norway",
+    "x": -10371.589,
+    "y": 2.745,
+    "z": -55777.331,
+    "lat": 60.394306,
+    "lng": 5.325919
+  },
+  {
+    "gameName": "berlin",
+    "realName": "Berlin",
+    "country": "germany",
+    "x": 10070.25,
+    "y": 37.763,
+    "z": -9774.412,
+    "lat": 52.517389,
+    "lng": 13.395131
+  },
+  {
+    "gameName": "bern",
+    "realName": "Bern",
+    "country": "switzerland",
+    "x": -12304.097,
+    "y": 47.257,
+    "z": 20489.087,
+    "lat": 46.948474,
+    "lng": 7.452175
+  },
+  {
+    "gameName": "bihac",
+    "realName": "Бихаћ (Bihac)",
+    "country": "bosnia and herzegovina",
+    "x": 21009.559,
+    "y": 33.549,
+    "z": 32936.131,
+    "lat": 44.814656,
+    "lng": 15.86896
+  },
+  {
+    "gameName": "bijelo_polje",
+    "realName": "Бијело Поље (Bijelo polje)",
+    "country": "montenegro",
+    "x": 36468.242,
+    "y": 54.704,
+    "z": 42042.027,
+    "lat": 43.03416,
+    "lng": 19.747356
+  },
+  {
+    "gameName": "bilbao",
+    "realName": "Bilbao",
+    "country": "spain",
+    "x": -58108.191,
+    "y": 63.274,
+    "z": 32949.643,
+    "lat": 43.263002,
+    "lng": -2.935004
+  },
+  {
+    "gameName": "birmingham",
+    "realName": "Birmingham",
+    "country": "england",
+    "x": -45951.125,
+    "y": 56.595,
+    "z": -20422.998,
+    "lat": 52.494899,
+    "lng": -1.851844
+  },
+  {
+    "gameName": "bitola",
+    "realName": "Битола (Bitola)",
+    "country": "north macedonia",
+    "x": 45069.074,
+    "y": 67.972,
+    "z": 52784.635,
+    "lat": 41.031601,
+    "lng": 21.330251
+  },
+  {
+    "gameName": "bodo",
+    "realName": "Bodø",
+    "country": "norway",
+    "x": 15049.165,
+    "y": 37.971,
+    "z": -93655.39,
+    "lat": 67.284431,
+    "lng": 14.38175
+  },
+  {
+    "gameName": "bologna",
+    "realName": "Bologna",
+    "country": "italy",
+    "x": 1120.178,
+    "y": 36.446,
+    "z": 33802.964,
+    "lat": 44.49382,
+    "lng": 11.342633
+  },
+  {
+    "gameName": "bonifacio",
+    "realName": "Bonifacio",
+    "country": "france",
+    "x": -8469.77,
+    "y": 26.47,
+    "z": 52254.943,
+    "lat": 41.387235,
+    "lng": 9.159061
+  },
+  {
+    "gameName": "bordeaux",
+    "realName": "Bordeaux",
+    "country": "france",
+    "x": -46138.562,
+    "y": 42.915,
+    "z": 27274.396,
+    "lat": 44.841225,
+    "lng": -0.580036
+  },
+  {
+    "gameName": "borlange",
+    "realName": "Borlänge",
+    "country": "sweden",
+    "x": 17545.052,
+    "y": 30.238,
+    "z": -54327.245,
+    "lat": 60.485643,
+    "lng": 15.423456
+  },
+  {
+    "gameName": "bourges",
+    "realName": "Bourges",
+    "country": "france",
+    "x": -31951.695,
+    "y": 28.165,
+    "z": 16275.472,
+    "lat": 47.081166,
+    "lng": 2.399125
+  },
+  {
+    "gameName": "brasov",
+    "realName": "Brașov (Brasov)",
+    "country": "romania",
+    "x": 58252.359,
+    "y": 43.196,
+    "z": 23552.85,
+    "lat": 45.65251,
+    "lng": 25.610565
+  },
+  {
+    "gameName": "bratislava",
+    "realName": "Bratislava",
+    "country": "slovakia",
+    "x": 24823.297,
+    "y": 72.153,
+    "z": 14831.022,
+    "lat": 48.151699,
+    "lng": 17.109306
+  },
+  {
+    "gameName": "bremen",
+    "realName": "Bremen",
+    "country": "germany",
+    "x": -5184.582,
+    "y": 23.372,
+    "z": -14018.432,
+    "lat": 53.07582,
+    "lng": 8.807165
+  },
+  {
+    "gameName": "brest",
+    "realName": "Brest",
+    "country": "france",
+    "x": -56771.414,
+    "y": 84.136,
+    "z": 3869.305,
+    "lat": 48.390528,
+    "lng": -4.486009
+  },
+  {
+    "gameName": "brno",
+    "realName": "Brno",
+    "country": "czech republic",
+    "x": 22272.788,
+    "y": 47.02,
+    "z": 8965.072,
+    "lat": 49.192244,
+    "lng": 16.611338
+  },
+  {
+    "gameName": "brussel",
+    "realName": "Brussel",
+    "country": "belgium",
+    "x": -22100.25,
+    "y": 32.619,
+    "z": -2415.147,
+    "lat": 50.855103,
+    "lng": 4.351091
+  },
+  {
+    "gameName": "bucuresti",
+    "realName": "București (Bucuresti)",
+    "country": "romania",
+    "x": 61121.012,
+    "y": 11.35,
+    "z": 31703.736,
+    "lat": 44.436141,
+    "lng": 26.102684
+  },
+  {
+    "gameName": "budapest",
+    "realName": "Budapest",
+    "country": "hungary",
+    "x": 32367.82,
+    "y": 71.93,
+    "z": 17882.724,
+    "lat": 47.497879,
+    "lng": 19.040238
+  },
+  {
+    "gameName": "burgas",
+    "realName": "Бургас (Burgas)",
+    "country": "bulgaria",
+    "x": 68297.172,
+    "y": 10.152,
+    "z": 40880.67,
+    "lat": 42.34485,
+    "lng": -3.681248
+  },
+  {
+    "gameName": "burgos",
+    "realName": "Burgos",
+    "country": "spain",
+    "x": -61833.984,
+    "y": 93.084,
+    "z": 37727.057,
+    "lat": 42.34485,
+    "lng": -3.681248
+  },
+  {
+    "gameName": "cagliari",
+    "realName": "Cagliari",
+    "country": "italy",
+    "x": -9760.73,
+    "y": 57.687,
+    "z": 64471.942,
+    "lat": 39.217199,
+    "lng": 9.113311
+  },
+  {
+    "gameName": "calais",
+    "realName": "Calais",
+    "country": "france",
+    "x": -30340.402,
+    "y": 39.259,
+    "z": -4985.639,
+    "lat": 50.952477,
+    "lng": 1.853845
+  },
+  {
+    "gameName": "calarasi",
+    "realName": "Călărași (Calarasi)",
+    "country": "romania",
+    "x": 66074.625,
+    "y": 17.545,
+    "z": 31257.846,
+    "lat": 44.315187,
+    "lng": 27.139016
+  },
+  {
+    "gameName": "calvi",
+    "realName": "Calvi",
+    "country": "france",
+    "x": -10035.844,
+    "y": 97.525,
+    "z": 46017.523,
+    "lat": 42.567664,
+    "lng": 8.75887
+  },
+  {
+    "gameName": "cambridge",
+    "realName": "Cambridge",
+    "country": "england",
+    "x": -36822.688,
+    "y": 118.223,
+    "z": -16119.396,
+    "lat": 52.197585,
+    "lng": 0.139154
+  },
+  {
+    "gameName": "cardiff",
+    "realName": "Cardiff",
+    "country": "wales",
+    "x": -54005.277,
+    "y": 118.423,
+    "z": -14698.443,
+    "lat": 51.481655,
+    "lng": -3.179193
+  },
+  {
+    "gameName": "carlisle",
+    "realName": "Carlisle",
+    "country": "england",
+    "x": -45889.176,
+    "y": 140.915,
+    "z": -39573.476,
+    "lat": 54.894848,
+    "lng": -2.936231
+  },
+  {
+    "gameName": "cassino",
+    "realName": "Cassino",
+    "country": "italy",
+    "x": 12294.02,
+    "y": 22.024,
+    "z": 52235.253,
+    "lat": 41.492558,
+    "lng": 13.83053
+  },
+  {
+    "gameName": "catania",
+    "realName": "Catania",
+    "country": "italy",
+    "x": 16470.84,
+    "y": 4.45,
+    "z": 75052.549,
+    "lat": 37.502361,
+    "lng": 15.087372
+  },
+  {
+    "gameName": "cernavoda",
+    "realName": "Cernavodă (Cernavoda)",
+    "country": "romania",
+    "x": 69579.484,
+    "y": 37.024,
+    "z": 30015.373,
+    "lat": 44.341635,
+    "lng": 28.031625
+  },
+  {
+    "gameName": "chania",
+    "realName": "Χανιά (Chania)",
+    "country": "greece",
+    "x": 58022.752,
+    "y": 6.379,
+    "z": 84934.215,
+    "lat": 35.512083,
+    "lng": 24.019154
+  },
+  {
+    "gameName": "chios",
+    "realName": "Χίος (Chios)",
+    "country": "greece",
+    "x": 66300.016,
+    "y": 17.41,
+    "z": 66274.33,
+    "lat": 38.375813,
+    "lng": 26.064655
+  },
+  {
+    "gameName": "ciudad_real",
+    "realName": "Ciudad Real",
+    "country": "spain",
+    "x": -68445.837,
+    "y": 66.435,
+    "z": 56475.036,
+    "lat": 38.959735,
+    "lng": -3.882874
+  },
+  {
+    "gameName": "civaux",
+    "realName": "Civaux",
+    "country": "france",
+    "x": -39029.723,
+    "y": 34.731,
+    "z": 18291.967,
+    "lat": 46.444814,
+    "lng": 0.664645
+  },
+  {
+    "gameName": "clermont",
+    "realName": "Clermont-Ferrand",
+    "country": "france",
+    "x": -30447.302,
+    "y": 49.663,
+    "z": 24698.549,
+    "lat": 45.777455,
+    "lng": 3.081943
+  },
+  {
+    "gameName": "cluj_napoca",
+    "realName": "Cluj-Napoca",
+    "country": "romania",
+    "x": 50303.332,
+    "y": 11.196,
+    "z": 18277.178,
+    "lat": 46.769379,
+    "lng": 23.589954
+  },
+  {
+    "gameName": "coimbra",
+    "realName": "Coimbra",
+    "country": "portugal",
+    "x": -86584.984,
+    "y": 30.553,
+    "z": 44746.959,
+    "lat": 40.211193,
+    "lng": -8.429463
+  },
+  {
+    "gameName": "constanta",
+    "realName": "Constanța (Constanta)",
+    "country": "romania",
+    "x": 71731.666,
+    "y": 10.386,
+    "z": 30870.966,
+    "lat": 44.176716,
+    "lng": 28.65076
+  },
+  {
+    "gameName": "cordoba",
+    "realName": "Córdoba",
+    "country": "spain",
+    "x": -74352.031,
+    "y": 30.017,
+    "z": 61483.026,
+    "lat": 37.884581,
+    "lng": -4.776014
+  },
+  {
+    "gameName": "corticadas",
+    "realName": "Cortiçadas de Lavre",
+    "country": "portugal",
+    "x": -88518.797,
+    "y": 31.838,
+    "z": 52678.565,
+    "lat": 38.804664,
+    "lng": -8.406059
+  },
+  {
+    "gameName": "craiova",
+    "realName": "Craiova",
+    "country": "romania",
+    "x": 51918.543,
+    "y": 15.798,
+    "z": 33228.518,
+    "lat": 44.319016,
+    "lng": 23.796561
+  },
+  {
+    "gameName": "daugavpils",
+    "realName": "Daugavpils",
+    "country": "latvia",
+    "x": 53075.402,
+    "y": 56.972,
+    "z": -31905.656,
+    "lat": 55.871227,
+    "lng": 26.515934
+  },
+  {
+    "gameName": "debrecen",
+    "realName": "Debrecen",
+    "country": "hungary",
+    "x": 41641.575,
+    "y": 79.283,
+    "z": 17483.838,
+    "lat": 47.531399,
+    "lng": 21.625978
+  },
+  {
+    "gameName": "dijon",
+    "realName": "Dijon",
+    "country": "france",
+    "x": -22469.978,
+    "y": 44.758,
+    "z": 16655.615,
+    "lat": 47.321581,
+    "lng": 5.04147
+  },
+  {
+    "gameName": "dombas",
+    "realName": "Dombås",
+    "country": "norway",
+    "x": -198.039,
+    "y": 68.342,
+    "z": -64839.67,
+    "lat": 62.075554,
+    "lng": 9.127898
+  },
+  {
+    "gameName": "dortmund",
+    "realName": "Dortmund",
+    "country": "germany",
+    "x": -10883.449,
+    "y": 48.907,
+    "z": -6378.83,
+    "lat": 51.514227,
+    "lng": 7.465279
+  },
+  {
+    "gameName": "dover",
+    "realName": "Dover",
+    "country": "england",
+    "x": -33321.949,
+    "y": 46.423,
+    "z": -7884.354,
+    "lat": 51.125127,
+    "lng": 1.313423
+  },
+  {
+    "gameName": "dresden",
+    "realName": "Dresden",
+    "country": "germany",
+    "x": 11634.922,
+    "y": 57.768,
+    "z": -1841.874,
+    "lat": 51.049329,
+    "lng": 13.738144
+  },
+  {
+    "gameName": "duisburg",
+    "realName": "Duisburg",
+    "country": "germany",
+    "x": -13800.526,
+    "y": 56.338,
+    "z": -6466.346,
+    "lat": 51.434999,
+    "lng": 6.759562
+  },
+  {
+    "gameName": "durres",
+    "realName": "Durrës (Durres)",
+    "country": "albania",
+    "x": 36192.03,
+    "y": 3.536,
+    "z": 52037.846,
+    "lat": 41.313255,
+    "lng": 19.446235
+  },
+  {
+    "gameName": "dusseldorf",
+    "realName": "Düsseldorf",
+    "country": "germany",
+    "x": -13576.793,
+    "y": 66.826,
+    "z": -4598.689,
+    "lat": 51.225402,
+    "lng": 6.776314
+  },
+  {
+    "gameName": "edinburgh",
+    "realName": "Edinburgh",
+    "country": "scotland",
+    "x": -44900.743,
+    "y": 89.083,
+    "z": -47219.373,
+    "lat": 55.953346,
+    "lng": -3.188375
+  },
+  {
+    "gameName": "edirne",
+    "realName": "Edirne",
+    "country": "turkey",
+    "x": 65096.043,
+    "y": 16.044,
+    "z": 46829.17,
+    "lat": 41.675933,
+    "lng": 26.558722
+  },
+  {
+    "gameName": "eindhoven",
+    "realName": "Eindhoven",
+    "country": "netherlands",
+    "x": -17554.516,
+    "y": 30.299,
+    "z": -6868.131,
+    "lat": 51.439265,
+    "lng": 5.478633
+  },
+  {
+    "gameName": "el_ejido",
+    "realName": "El Ejido",
+    "country": "spain",
+    "x": -67667.157,
+    "y": 15.525,
+    "z": 69086.77,
+    "lat": 36.774386,
+    "lng": -2.812489
+  },
+  {
+    "gameName": "erfurt",
+    "realName": "Erfurt",
+    "country": "germany",
+    "x": 2824.176,
+    "y": 43.457,
+    "z": -2012.947,
+    "lat": 50.977797,
+    "lng": 11.028736
+  },
+  {
+    "gameName": "esbjerg",
+    "realName": "Esbjerg",
+    "country": "denmark",
+    "x": -4699.43,
+    "y": 17.781,
+    "z": -27555.889,
+    "lat": 55.466489,
+    "lng": 8.452075
+  },
+  {
+    "gameName": "evora",
+    "realName": "Évora",
+    "country": "portugal",
+    "x": -86917.375,
+    "y": 7.778,
+    "z": 54590.585,
+    "lat": 38.570774,
+    "lng": -7.909281
+  },
+  {
+    "gameName": "falun",
+    "realName": "Falun",
+    "country": "sweden",
+    "x": 18558.242,
+    "y": 139.357,
+    "z": -56060.022,
+    "lat": 60.607007,
+    "lng": 15.632306
+  },
+  {
+    "gameName": "faro",
+    "realName": "Faro",
+    "country": "portugal",
+    "x": -90480.211,
+    "y": 26.017,
+    "z": 62485.713,
+    "lat": 37.016294,
+    "lng": -7.935182
+  },
+  {
+    "gameName": "felixstowe",
+    "realName": "Felixstowe",
+    "country": "england",
+    "x": -31664.559,
+    "y": 85.454,
+    "z": -13837.218,
+    "lat": 51.964296,
+    "lng": 1.328994
+  },
+  {
+    "gameName": "fier",
+    "realName": "Fier",
+    "country": "albania",
+    "x": 38304.816,
+    "y": 5.361,
+    "z": 55012.76,
+    "lat": 40.725112,
+    "lng": 19.558208
+  },
+  {
+    "gameName": "frankfurt",
+    "realName": "Frankfurt am Main",
+    "country": "germany",
+    "x": -5583.613,
+    "y": 62.877,
+    "z": 2517.174,
+    "lat": 50.110644,
+    "lng": 8.682092
+  },
+  {
+    "gameName": "frederikshv",
+    "realName": "Frederikshavn",
+    "country": "unknown",
+    "x": 2711.518,
+    "y": 18.78,
+    "z": -38139.828,
+    "lat": 57.441213,
+    "lng": 10.533622
+  },
+  {
+    "gameName": "galati",
+    "realName": "Galați (Galati)",
+    "country": "romania",
+    "x": 67046.156,
+    "y": 15.86,
+    "z": 24473.002,
+    "lat": 45.433822,
+    "lng": 28.054939
+  },
+  {
+    "gameName": "gavle",
+    "realName": "Gävle",
+    "country": "sweden",
+    "x": 23433.863,
+    "y": 8.54,
+    "z": -56164.732,
+    "lat": 60.675013,
+    "lng": 17.146702
+  },
+  {
+    "gameName": "gdansk",
+    "realName": "Gdańsk (Gdansk)",
+    "country": "poland",
+    "x": 28343.098,
+    "y": 38.255,
+    "z": -20619.537,
+    "lat": 54.348291,
+    "lng": 18.654023
+  },
+  {
+    "gameName": "gedser",
+    "realName": "Gedser",
+    "country": "denmark",
+    "x": 6271.105,
+    "y": 8.896,
+    "z": -21999.34,
+    "lat": 54.577045,
+    "lng": 11.931356
+  },
+  {
+    "gameName": "geneve",
+    "realName": "Genève (Geneve)",
+    "country": "switzerland",
+    "x": -17433.782,
+    "y": 30.401,
+    "z": 23859.151,
+    "lat": 46.201756,
+    "lng": 6.146601
+  },
+  {
+    "gameName": "genova",
+    "realName": "Genova",
+    "country": "italy",
+    "x": -8032.254,
+    "y": 9.501,
+    "z": 35396.104,
+    "lat": 44.40726,
+    "lng": 8.933862
+  },
+  {
+    "gameName": "gijon",
+    "realName": "Gijón",
+    "country": "spain",
+    "x": -70227.984,
+    "y": 29.174,
+    "z": 29264.041,
+    "lat": 43.544942,
+    "lng": -5.66275
+  },
+  {
+    "gameName": "glasgow",
+    "realName": "Glasgow",
+    "country": "scotland",
+    "x": -50384.699,
+    "y": 124.212,
+    "z": -48471.621,
+    "lat": 55.861155,
+    "lng": -4.250169
+  },
+  {
+    "gameName": "golfech",
+    "realName": "Golfech",
+    "country": "france",
+    "x": -40395.391,
+    "y": 38.509,
+    "z": 31472.557,
+    "lat": 44.114722,
+    "lng": 0.851944
+  },
+  {
+    "gameName": "goteborg",
+    "realName": "Göteborg",
+    "country": "sweden",
+    "x": 7440.812,
+    "y": 20.899,
+    "z": -40285.463,
+    "lat": 57.707233,
+    "lng": 11.967017
+  },
+  {
+    "gameName": "granada",
+    "realName": "Granada",
+    "country": "spain",
+    "x": -70181.961,
+    "y": 37.388,
+    "z": 66102.002,
+    "lat": 37.173499,
+    "lng": -3.599534
+  },
+  {
+    "gameName": "groningen",
+    "realName": "Groningen",
+    "country": "netherlands",
+    "x": -12662.056,
+    "y": 19.911,
+    "z": -15700.678,
+    "lat": 53.219065,
+    "lng": 6.568008
+  },
+  {
+    "gameName": "guarda",
+    "realName": "Guarda",
+    "country": "portugal",
+    "x": -81790.334,
+    "y": 66.499,
+    "z": 44030.393,
+    "lat": 40.704607,
+    "lng": -7.195139
+  },
+  {
+    "gameName": "hamar",
+    "realName": "Hamar",
+    "country": "norway",
+    "x": 5642.243,
+    "y": 31.466,
+    "z": -57373.935,
+    "lat": 61.001494,
+    "lng": 11.164796
+  },
+  {
+    "gameName": "hamburg",
+    "realName": "Hamburg",
+    "country": "germany",
+    "x": -1689.938,
+    "y": 15.915,
+    "z": -16335.494,
+    "lat": 53.550172,
+    "lng": 10.001316
+  },
+  {
+    "gameName": "hannover",
+    "realName": "Hannover",
+    "country": "germany",
+    "x": -2003.726,
+    "y": 15.957,
+    "z": -9065.479,
+    "lat": 52.374478,
+    "lng": 9.738553
+  },
+  {
+    "gameName": "haparanda",
+    "realName": "Haparanda",
+    "country": "sweden",
+    "x": 37199.047,
+    "y": 20.091,
+    "z": -86730.322,
+    "lat": 65.835667,
+    "lng": 24.135721
+  },
+  {
+    "gameName": "helsingborg",
+    "realName": "Helsingborg",
+    "country": "sweden",
+    "x": 9404.276,
+    "y": 20.866,
+    "z": -29882.2,
+    "lat": 56.04421,
+    "lng": 12.703706
+  },
+  {
+    "gameName": "helsinki",
+    "realName": "Helsinki",
+    "country": "finland",
+    "x": 44944.754,
+    "y": 25.663,
+    "z": -55691.205,
+    "lat": 60.16662,
+    "lng": 24.943541
+  },
+  {
+    "gameName": "heraklion",
+    "realName": "Ηράκλειο (Heraklion)",
+    "country": "greece",
+    "x": 66307.057,
+    "y": 17.396,
+    "z": 85699.666,
+    "lat": 35.33908,
+    "lng": 25.133284
+  },
+  {
+    "gameName": "hirtshals",
+    "realName": "Hirtshals",
+    "country": "denmark",
+    "x": 1425.468,
+    "y": 3.691,
+    "z": -38873.266,
+    "lat": 57.590803,
+    "lng": 9.964974
+  },
+  {
+    "gameName": "honningsvag",
+    "realName": "Honningsvåg",
+    "country": "norway",
+    "x": 37581.562,
+    "y": 12.232,
+    "z": -119979.764,
+    "lat": 70.980264,
+    "lng": 25.977841
+  },
+  {
+    "gameName": "huelva",
+    "realName": "Huelva",
+    "country": "spain",
+    "x": -84687.453,
+    "y": 46.95,
+    "z": 62584.295,
+    "lat": 37.257587,
+    "lng": -6.948494
+  },
+  {
+    "gameName": "hunedoara",
+    "realName": "Hunedoara",
+    "country": "romania",
+    "x": 49016.859,
+    "y": 44.388,
+    "z": 26114.834,
+    "lat": 45.795407,
+    "lng": 22.945243
+  },
+  {
+    "gameName": "iasi",
+    "realName": "Iași (Iasi)",
+    "country": "romania",
+    "x": 64746.418,
+    "y": 59.726,
+    "z": 14963.867,
+    "lat": 47.16156,
+    "lng": 27.583781
+  },
+  {
+    "gameName": "innsbruck",
+    "realName": "Innsbruck",
+    "country": "austria",
+    "x": 2510.973,
+    "y": 13.511,
+    "z": 19601.684,
+    "lat": 47.26543,
+    "lng": 11.392769
+  },
+  {
+    "gameName": "ioannina",
+    "realName": "Ιωάννινα (Ioannina)",
+    "country": "greece",
+    "x": 42243.876,
+    "y": 68.938,
+    "z": 61500.267,
+    "lat": 39.663982,
+    "lng": 20.852278
+  },
+  {
+    "gameName": "istanbul",
+    "realName": "İstanbul (Istanbul)",
+    "country": "turkey",
+    "x": 75753.5,
+    "y": 56.196,
+    "z": 47643.953,
+    "lat": 41.006381,
+    "lng": 28.975872
+  },
+  {
+    "gameName": "ivalo",
+    "realName": "Ivalo",
+    "country": "finland",
+    "x": 43279.208,
+    "y": 13.135,
+    "z": -104648.401,
+    "lat": 68.658818,
+    "lng": 27.534811
+  },
+  {
+    "gameName": "joensuu",
+    "realName": "Joensuu",
+    "country": "finland",
+    "x": 55432.727,
+    "y": 28.247,
+    "z": -72269.42,
+    "lat": 62.600637,
+    "lng": 29.761976
+  },
+  {
+    "gameName": "jonkoping",
+    "realName": "Jönköping",
+    "country": "sweden",
+    "x": 14177.262,
+    "y": 18.103,
+    "z": -39575.592,
+    "lat": 57.782563,
+    "lng": 14.165719
+  },
+  {
+    "gameName": "kajaani",
+    "realName": "Kajaani",
+    "country": "finland",
+    "x": 48135.041,
+    "y": 21.98,
+    "z": -79056.951,
+    "lat": 64.224686,
+    "lng": 27.733928
+  },
+  {
+    "gameName": "kalamata",
+    "realName": "Καλαμάτα (Kalamata)",
+    "country": "greece",
+    "x": 50785.955,
+    "y": 14.534,
+    "z": 77068.23,
+    "lat": 37.037271,
+    "lng": 22.110707
+  },
+  {
+    "gameName": "kaliningrad",
+    "realName": "Калининград (Kaliningrad)",
+    "country": "russia",
+    "x": 34365.176,
+    "y": 0.028,
+    "z": -23181.377,
+    "lat": 54.710128,
+    "lng": 20.510584
+  },
+  {
+    "gameName": "kalmar",
+    "realName": "Kalmar",
+    "country": "sweden",
+    "x": 20559.484,
+    "y": 57.791,
+    "z": -33634.476,
+    "lat": 56.662883,
+    "lng": 16.366238
+  },
+  {
+    "gameName": "kapellskar",
+    "realName": "Kapellskär",
+    "country": "sweden",
+    "x": 28187.539,
+    "y": 42.756,
+    "z": -50962.656,
+    "lat": 59.720371,
+    "lng": 19.060776
+  },
+  {
+    "gameName": "karakaj",
+    "realName": "Каракај (Karakaj)",
+    "country": "unknown",
+    "x": 34237.714,
+    "y": 16.456,
+    "z": 33701.108,
+    "lat": 44.413603,
+    "lng": 19.121313
+  },
+  {
+    "gameName": "karesuando",
+    "realName": "Karesuando",
+    "country": "sweden",
+    "x": 32105.266,
+    "y": 82.001,
+    "z": -102648.045,
+    "lat": 68.440505,
+    "lng": 22.474315
+  },
+  {
+    "gameName": "karlovo",
+    "realName": "Карлово (Karlovo)",
+    "country": "bulgaria",
+    "x": 58056.256,
+    "y": 29.157,
+    "z": 42062.642,
+    "lat": 42.635816,
+    "lng": 24.804823
+  },
+  {
+    "gameName": "karlskrona",
+    "realName": "Karlskrona",
+    "country": "sweden",
+    "x": 17145.757,
+    "y": -1.838,
+    "z": -30862.706,
+    "lat": 56.162107,
+    "lng": 15.586642
+  },
+  {
+    "gameName": "karlstad",
+    "realName": "Karlstad",
+    "country": "sweden",
+    "x": 13088.238,
+    "y": 17.024,
+    "z": -48093.986,
+    "lat": 59.380915,
+    "lng": 13.502763
+  },
+  {
+    "gameName": "kassel",
+    "realName": "Kassel",
+    "country": "germany",
+    "x": -3419.635,
+    "y": 65.319,
+    "z": -3728.331,
+    "lat": 51.315783,
+    "lng": 9.497848
+  },
+  {
+    "gameName": "katowice",
+    "realName": "Katowice",
+    "country": "poland",
+    "x": 30728.686,
+    "y": 93.997,
+    "z": 2459.918,
+    "lat": 50.213732,
+    "lng": 19.005885
+  },
+  {
+    "gameName": "kaunas",
+    "realName": "Kaunas",
+    "country": "lithuania",
+    "x": 45564.008,
+    "y": 13.423,
+    "z": -25347.728,
+    "lat": 54.898214,
+    "lng": 23.904482
+  },
+  {
+    "gameName": "kavala",
+    "realName": "Καβάλα (Kavala)",
+    "country": "greece",
+    "x": 57735.344,
+    "y": 36.452,
+    "z": 52360.834,
+    "lat": 40.936922,
+    "lng": 24.412277
+  },
+  {
+    "gameName": "kiel",
+    "realName": "Kiel",
+    "country": "germany",
+    "x": 1137.48,
+    "y": 9.321,
+    "z": -21589.143,
+    "lat": 54.322708,
+    "lng": 10.135555
+  },
+  {
+    "gameName": "kiruna",
+    "realName": "Kiruna",
+    "country": "sweden",
+    "x": 27489.748,
+    "y": 51.038,
+    "z": -98263.831,
+    "lat": 67.849611,
+    "lng": 20.30625
+  },
+  {
+    "gameName": "klagenfurt",
+    "realName": "Klagenfurt am Wörthersee",
+    "country": "austria",
+    "x": 14047.105,
+    "y": -0.514,
+    "z": 23225.893,
+    "lat": 46.623943,
+    "lng": 14.307598
+  },
+  {
+    "gameName": "klaipeda",
+    "realName": "Klaipėda (Klaipeda)",
+    "country": "lithuania",
+    "x": 36342.804,
+    "y": 5.298,
+    "z": -28719.472,
+    "lat": 55.712753,
+    "lng": 21.135047
+  },
+  {
+    "gameName": "kokkola",
+    "realName": "Kokkola",
+    "country": "finland",
+    "x": 36959.336,
+    "y": 0.555,
+    "z": -74942.459,
+    "lat": 63.839142,
+    "lng": 23.133685
+  },
+  {
+    "gameName": "koln",
+    "realName": "Köln",
+    "country": "germany",
+    "x": -12548.582,
+    "y": 50.99,
+    "z": -2434.24,
+    "lat": 50.938361,
+    "lng": 6.959974
+  },
+  {
+    "gameName": "koper",
+    "realName": "Koper",
+    "country": "slovenia",
+    "x": 11233.906,
+    "y": 11.486,
+    "z": 29456.662,
+    "lat": 45.547986,
+    "lng": 13.730478
+  },
+  {
+    "gameName": "kosice",
+    "realName": "Košice (Kosice)",
+    "country": "slovakia",
+    "x": 39843.918,
+    "y": 37.024,
+    "z": 10494.385,
+    "lat": 48.717227,
+    "lng": 21.249677
+  },
+  {
+    "gameName": "kotka",
+    "realName": "Kotka",
+    "country": "finland",
+    "x": 50244.619,
+    "y": 12.537,
+    "z": -58042.42,
+    "lat": 60.467267,
+    "lng": 26.945946
+  },
+  {
+    "gameName": "kouvola",
+    "realName": "Kouvola",
+    "country": "finland",
+    "x": 48776.25,
+    "y": 13.423,
+    "z": -60408.947,
+    "lat": 60.867924,
+    "lng": 26.704112
+  },
+  {
+    "gameName": "kragujevac",
+    "realName": "Крагујевац (Kragujevac)",
+    "country": "serbia",
+    "x": 40681.211,
+    "y": 15.435,
+    "z": 36682.623,
+    "lat": 44.013179,
+    "lng": 20.919635
+  },
+  {
+    "gameName": "krakow",
+    "realName": "Kraków",
+    "country": "poland",
+    "x": 34470.252,
+    "y": 109.861,
+    "z": 3227.759,
+    "lat": 50.061947,
+    "lng": 19.936856
+  },
+  {
+    "gameName": "kristiansand",
+    "realName": "Kristiansand",
+    "country": "norway",
+    "x": -4638.323,
+    "y": 20.469,
+    "z": -42891.419,
+    "lat": 58.085628,
+    "lng": 7.931858
+  },
+  {
+    "gameName": "kristiansund",
+    "realName": "Kristiansund",
+    "country": "norway",
+    "x": -2971.105,
+    "y": 18.063,
+    "z": -70355.155,
+    "lat": 63.216819,
+    "lng": 7.545259
+  },
+  {
+    "gameName": "kunda",
+    "realName": "Kunda",
+    "country": "estonia",
+    "x": 49785.289,
+    "y": 15.442,
+    "z": -52304.682,
+    "lat": 59.505541,
+    "lng": 26.529222
+  },
+  {
+    "gameName": "kuopio",
+    "realName": "Kuopio",
+    "country": "finland",
+    "x": 49162.02,
+    "y": 2.025,
+    "z": -71794.006,
+    "lat": 62.892463,
+    "lng": 27.67836
+  },
+  {
+    "gameName": "kuusamo",
+    "realName": "Kuusamo",
+    "country": "finland",
+    "x": 49211.698,
+    "y": 30.41,
+    "z": -89678.885,
+    "lat": 65.964564,
+    "lng": 29.188328
+  },
+  {
+    "gameName": "lacq",
+    "realName": "Lacq",
+    "country": "france",
+    "x": -48853.496,
+    "y": 15.236,
+    "z": 35976.588,
+    "lat": 43.424748,
+    "lng": -0.613768
+  },
+  {
+    "gameName": "lahti",
+    "realName": "Lahti",
+    "country": "finland",
+    "x": 45453.43,
+    "y": 27.763,
+    "z": -60557.018,
+    "lat": 60.982628,
+    "lng": 25.661342
+  },
+  {
+    "gameName": "lamia",
+    "realName": "Λαμία (Lamia)",
+    "country": "greece",
+    "x": 49889.746,
+    "y": 20.004,
+    "z": 65483.1,
+    "lat": 38.899383,
+    "lng": 22.433582
+  },
+  {
+    "gameName": "lappeenranta",
+    "realName": "Lappeenranta",
+    "country": "finland",
+    "x": 52720.693,
+    "y": 1.109,
+    "z": -63232.139,
+    "lat": 61.058342,
+    "lng": 28.186229
+  },
+  {
+    "gameName": "larissa",
+    "realName": "Λάρισα (Larissa)",
+    "country": "unknown",
+    "x": 50113.598,
+    "y": 34.333,
+    "z": 62125.744,
+    "lat": 39.638309,
+    "lng": 22.416071
+  },
+  {
+    "gameName": "larochelle",
+    "realName": "La Rochelle",
+    "country": "unknown",
+    "x": -46575.547,
+    "y": 14.774,
+    "z": 19533.66,
+    "lat": 46.159732,
+    "lng": -1.151595
+  },
+  {
+    "gameName": "laurent",
+    "realName": "Saint-Laurent",
+    "country": "unknown",
+    "x": -35649.628,
+    "y": 4.954,
+    "z": 13704.49,
+    "lat": 43.3253,
+    "lng": 0.79977
+  },
+  {
+    "gameName": "lehavre",
+    "realName": "Le Havre",
+    "country": "unknown",
+    "x": -37894.168,
+    "y": 39.067,
+    "z": 1515.486,
+    "lat": 49.493898,
+    "lng": 0.107973
+  },
+  {
+    "gameName": "lemans",
+    "realName": "Le Mans",
+    "country": "unknown",
+    "x": -39749.738,
+    "y": 42.067,
+    "z": 9718.436,
+    "lat": 48.007385,
+    "lng": 0.196785
+  },
+  {
+    "gameName": "leon",
+    "realName": "León",
+    "country": "france",
+    "x": -70425.42,
+    "y": 38.9,
+    "z": 34819.144,
+    "lat": 45.757814,
+    "lng": 4.832011
+  },
+  {
+    "gameName": "liege",
+    "realName": "Liège (Liege)",
+    "country": "belgium",
+    "x": -17144.406,
+    "y": 100.742,
+    "z": -844.065,
+    "lat": 50.645094,
+    "lng": 5.573611
+  },
+  {
+    "gameName": "liepaja",
+    "realName": "Liepāja (Liepaja)",
+    "country": "latvia",
+    "x": 35329.492,
+    "y": 13.959,
+    "z": -33299.936,
+    "lat": 56.504843,
+    "lng": 21.00709
+  },
+  {
+    "gameName": "lile_rousse",
+    "realName": "L'Île-Rousse (Lile rousse)",
+    "country": "france",
+    "x": -8914.711,
+    "y": 35.054,
+    "z": 44676.325,
+    "lat": 42.63448,
+    "lng": 8.938137
+  },
+  {
+    "gameName": "lille",
+    "realName": "Lille",
+    "country": "france",
+    "x": -26539.391,
+    "y": 40.181,
+    "z": -2460.279,
+    "lat": 50.636565,
+    "lng": 3.063528
+  },
+  {
+    "gameName": "lillehammer",
+    "realName": "Lillehammer",
+    "country": "norway",
+    "x": 4467.055,
+    "y": 37.403,
+    "z": -59137.663,
+    "lat": 61.133341,
+    "lng": 10.426585
+  },
+  {
+    "gameName": "limoges",
+    "realName": "Limoges",
+    "country": "france",
+    "x": -37416.885,
+    "y": 47.393,
+    "z": 23635.094,
+    "lat": 45.835424,
+    "lng": 1.264485
+  },
+  {
+    "gameName": "linkoping",
+    "realName": "Linköping",
+    "country": "sweden",
+    "x": 18411.672,
+    "y": 19.196,
+    "z": -43092.9,
+    "lat": 58.409813,
+    "lng": 15.624525
+  },
+  {
+    "gameName": "lisboa",
+    "realName": "Lisboa",
+    "country": "portugal",
+    "x": -92710.391,
+    "y": 30.017,
+    "z": 50673.471,
+    "lat": 38.707751,
+    "lng": -9.136592
+  },
+  {
+    "gameName": "liverpool",
+    "realName": "Liverpool",
+    "country": "england",
+    "x": -48871.734,
+    "y": 115.336,
+    "z": -29091.831,
+    "lat": 53.393341,
+    "lng": -2.916639
+  },
+  {
+    "gameName": "livorno",
+    "realName": "Livorno",
+    "country": "italy",
+    "x": -2468.299,
+    "y": 8.825,
+    "z": 40201.879,
+    "lat": 42.790238,
+    "lng": 10.340224
+  },
+  {
+    "gameName": "ljubljana",
+    "realName": "Ljubljana",
+    "country": "slovenia",
+    "x": 15398.098,
+    "y": 78.763,
+    "z": 25965.211,
+    "lat": 46.050027,
+    "lng": 14.506929
+  },
+  {
+    "gameName": "london",
+    "realName": "London",
+    "country": "england",
+    "x": -39546.867,
+    "y": 120.023,
+    "z": -11564.213,
+    "lat": 51.507446,
+    "lng": -0.127765
+  },
+  {
+    "gameName": "loviisa",
+    "realName": "Loviisa",
+    "country": "finland",
+    "x": 47717.41,
+    "y": 6.72,
+    "z": -57187.799,
+    "lat": 60.457012,
+    "lng": 26.225645
+  },
+  {
+    "gameName": "lublin",
+    "realName": "Lublin",
+    "country": "poland",
+    "x": 43244.172,
+    "y": 82.155,
+    "z": -4105.767,
+    "lat": 51.218195,
+    "lng": 22.554678
+  },
+  {
+    "gameName": "luga",
+    "realName": "Луга (Luga)",
+    "country": "russia",
+    "x": 60046.453,
+    "y": 49.001,
+    "z": -50045.167,
+    "lat": 43.039527,
+    "lng": -7.456798
+  },
+  {
+    "gameName": "lulea",
+    "realName": "Luleå",
+    "country": "sweden",
+    "x": 32862.262,
+    "y": 2.165,
+    "z": -85238.967,
+    "lat": 65.583119,
+    "lng": 22.145954
+  },
+  {
+    "gameName": "luxembourg",
+    "realName": "Luxembourg",
+    "country": "luxembourg",
+    "x": -16345.312,
+    "y": 113.037,
+    "z": 3665.301,
+    "lat": 49.815868,
+    "lng": 6.129675
+  },
+  {
+    "gameName": "madrid",
+    "realName": "Madrid",
+    "country": "spain",
+    "x": -65397.66,
+    "y": 34.742,
+    "z": 48721.146,
+    "lat": 40.416782,
+    "lng": -3.703507
+  },
+  {
+    "gameName": "magdeburg",
+    "realName": "Magdeburg",
+    "country": "germany",
+    "x": 4449.238,
+    "y": 20.342,
+    "z": -8166.24,
+    "lat": 52.131478,
+    "lng": 11.640079
+  },
+  {
+    "gameName": "malaga",
+    "realName": "Málaga",
+    "country": "spain",
+    "x": -73044.188,
+    "y": 30.377,
+    "z": 68830.002,
+    "lat": 36.764791,
+    "lng": -4.442201
+  },
+  {
+    "gameName": "malmo",
+    "realName": "Malmö",
+    "country": "sweden",
+    "x": 10744.859,
+    "y": 13.364,
+    "z": -27481.166,
+    "lat": 55.605293,
+    "lng": 13.000157
+  },
+  {
+    "gameName": "manchester",
+    "realName": "Manchester",
+    "country": "england",
+    "x": -45545.033,
+    "y": 82.43,
+    "z": -27814.358,
+    "lat": 53.442462,
+    "lng": -2.232455
+  },
+  {
+    "gameName": "mangalia",
+    "realName": "Mangalia",
+    "country": "romania",
+    "x": 71577.719,
+    "y": 4.314,
+    "z": 33330.854,
+    "lat": 43.815079,
+    "lng": 28.583031
+  },
+  {
+    "gameName": "mannheim",
+    "realName": "Mannheim",
+    "country": "germany",
+    "x": -7936.733,
+    "y": 35.045,
+    "z": 6012.118,
+    "lat": 49.489291,
+    "lng": 8.46731
+  },
+  {
+    "gameName": "maribor",
+    "realName": "Maribor",
+    "country": "slovenia",
+    "x": 18694.704,
+    "y": 30.639,
+    "z": 23213.002,
+    "lat": 46.557644,
+    "lng": 15.645585
+  },
+  {
+    "gameName": "marseille",
+    "realName": "Marseille",
+    "country": "france",
+    "x": -23472.406,
+    "y": 0.931,
+    "z": 39210.795,
+    "lat": 43.296399,
+    "lng": 5.377789
+  },
+  {
+    "gameName": "mengibar",
+    "realName": "Mengíbar",
+    "country": "unknown",
+    "x": -67814.875,
+    "y": 40.302,
+    "z": 63139.783,
+    "lat": 37.96805,
+    "lng": -3.80878
+  },
+  {
+    "gameName": "messina",
+    "realName": "Messina",
+    "country": "italy",
+    "x": 18374.09,
+    "y": 9.179,
+    "z": 70988.057,
+    "lat": 38.193757,
+    "lng": 15.554208
+  },
+  {
+    "gameName": "mikkeli",
+    "realName": "Mikkeli",
+    "country": "finland",
+    "x": 49501.273,
+    "y": 4.887,
+    "z": -64918.844,
+    "lat": 61.687782,
+    "lng": 27.273192
+  },
+  {
+    "gameName": "milano",
+    "realName": "Milano",
+    "country": "italy",
+    "x": -6816.444,
+    "y": 55.274,
+    "z": 29439.016,
+    "lat": 45.464194,
+    "lng": 9.189635
+  },
+  {
+    "gameName": "mitilini",
+    "realName": "Μυτιλήνη (Mitilini)",
+    "country": "unknown",
+    "x": 67458.578,
+    "y": 29.126,
+    "z": 61970.677,
+    "lat": 39.103735,
+    "lng": 26.554788
+  },
+  {
+    "gameName": "montpellier",
+    "realName": "Montpellier",
+    "country": "france",
+    "x": -30052.363,
+    "y": 53.683,
+    "z": 36127.619,
+    "lat": 43.611242,
+    "lng": 3.876734
+  },
+  {
+    "gameName": "mostar",
+    "realName": "Мостар (Mostar)",
+    "country": "bosnia and herzegovina",
+    "x": 28483.785,
+    "y": 75.852,
+    "z": 41005.778,
+    "lat": 43.343586,
+    "lng": 17.807658
+  },
+  {
+    "gameName": "mo_i_rana",
+    "realName": "Mo i Rana",
+    "country": "norway",
+    "x": 14312.246,
+    "y": 64.848,
+    "z": -87673.467,
+    "lat": 66.311097,
+    "lng": 14.138699
+  },
+  {
+    "gameName": "munchen",
+    "realName": "München",
+    "country": "germany",
+    "x": 3782.234,
+    "y": 53.532,
+    "z": 14647.111,
+    "lat": 48.137108,
+    "lng": 11.575382
+  },
+  {
+    "gameName": "murcia",
+    "realName": "Murcia",
+    "country": "spain",
+    "x": -56251.719,
+    "y": 34.242,
+    "z": 65102.775,
+    "lat": 37.934752,
+    "lng": -1.113103
+  },
+  {
+    "gameName": "naantali",
+    "realName": "Naantali",
+    "country": "finland",
+    "x": 35110.06,
+    "y": 12.45,
+    "z": -56361.833,
+    "lat": 60.468869,
+    "lng": 22.029115
+  },
+  {
+    "gameName": "nantes",
+    "realName": "Nantes",
+    "country": "france",
+    "x": -47170.956,
+    "y": 4.687,
+    "z": 13162.166,
+    "lat": 47.218637,
+    "lng": -1.554136
+  },
+  {
+    "gameName": "napoli",
+    "realName": "Napoli",
+    "country": "italy",
+    "x": 13318.227,
+    "y": 2.552,
+    "z": 56097.057,
+    "lat": 40.835885,
+    "lng": 14.248768
+  },
+  {
+    "gameName": "narva",
+    "realName": "Narva",
+    "country": "estonia",
+    "x": 54382.409,
+    "y": 13.54,
+    "z": -52462.092,
+    "lat": 59.376746,
+    "lng": 28.191931
+  },
+  {
+    "gameName": "narvik",
+    "realName": "Narvik",
+    "country": "norway",
+    "x": 21320.707,
+    "y": 59.23,
+    "z": -100873.467,
+    "lat": 68.43838,
+    "lng": 17.427198
+  },
+  {
+    "gameName": "navia",
+    "realName": "Navia",
+    "country": "spain",
+    "x": -74861.953,
+    "y": 33.552,
+    "z": 27995.631,
+    "lat": 43.527505,
+    "lng": -6.675516
+  },
+  {
+    "gameName": "newcastle",
+    "realName": "Newcastle-upon-Tyne",
+    "country": "england",
+    "x": -39778.043,
+    "y": 118.992,
+    "z": -38787.718,
+    "lat": 54.973847,
+    "lng": -1.613157
+  },
+  {
+    "gameName": "nice",
+    "realName": "Nice",
+    "country": "france",
+    "x": -15520.371,
+    "y": 60.87,
+    "z": 38206.298,
+    "lat": 43.700936,
+    "lng": 7.268391
+  },
+  {
+    "gameName": "niksic",
+    "realName": "Никшић (Niksic)",
+    "country": "montenegro",
+    "x": 33588.253,
+    "y": 42.363,
+    "z": 43338.96,
+    "lat": 44.110496,
+    "lng": 21.001071
+  },
+  {
+    "gameName": "almaraz",
+    "realName": "Almaraz",
+    "country": "spain",
+    "x": -74583.601,
+    "y": 16.331,
+    "z": 49536.468,
+    "lat": 39.802775,
+    "lng": -5.673283
+  },
+  {
+    "gameName": "almeria",
+    "realName": "Almería",
+    "country": "spain",
+    "x": -63592.049,
+    "y": 60.735,
+    "z": 69260.895,
+    "lat": 36.868574,
+    "lng": -2.312028
+  },
+  {
+    "gameName": "badajoz",
+    "realName": "Badajoz",
+    "country": "spain",
+    "x": -82524.258,
+    "y": 56.255,
+    "z": 53496.072,
+    "lat": 38.878187,
+    "lng": -6.970111
+  },
+  {
+    "gameName": "bayonne",
+    "realName": "Bayonne",
+    "country": "france",
+    "x": -51734.832,
+    "y": 115.412,
+    "z": 33837.384,
+    "lat": 43.494514,
+    "lng": -1.473666
+  },
+  {
+    "gameName": "bialystok",
+    "realName": "Białystok (Bialystok)",
+    "country": "poland",
+    "x": 44098.395,
+    "y": 46.39,
+    "z": -15083.393,
+    "lat": 53.132398,
+    "lng": 23.159168
+  },
+  {
+    "gameName": "bystrica",
+    "realName": "Banská Bystrica",
+    "country": "unknown",
+    "x": 32657.626,
+    "y": 78.425,
+    "z": 10680.555,
+    "lat": 48.735429,
+    "lng": 19.145734
+  },
+  {
+    "gameName": "catanzaro",
+    "realName": "Catanzaro",
+    "country": "italy",
+    "x": 23791.781,
+    "y": 19.27,
+    "z": 66945.884,
+    "lat": 38.82996,
+    "lng": 16.431557
+  },
+  {
+    "gameName": "europoort",
+    "realName": "Europoort",
+    "country": "netherlands",
+    "x": 23785.554,
+    "y": 16.763,
+    "z": 66952.404,
+    "lat": 51.932873,
+    "lng": 4.17365
+  },
+  {
+    "gameName": "firenze",
+    "realName": "Firenze",
+    "country": "italy",
+    "x": 1085.835,
+    "y": 21.323,
+    "z": 38862.403,
+    "lat": 43.769796,
+    "lng": 11.25564
+  },
+  {
+    "gameName": "graz",
+    "realName": "Graz",
+    "country": "austria",
+    "x": 18665.082,
+    "y": 15.091,
+    "z": 20411.827,
+    "lat": 47.070868,
+    "lng": 15.438279
+  },
+  {
+    "gameName": "grimsby",
+    "realName": "Grimsby",
+    "country": "england",
+    "x": -36117.898,
+    "y": 101.214,
+    "z": -26575.183,
+    "lat": 53.567141,
+    "lng": -0.078804
+  },
+  {
+    "gameName": "jyvaskyla",
+    "realName": "Jyväskylä",
+    "country": "finland",
+    "x": 44465.281,
+    "y": 2.588,
+    "z": -67197.295,
+    "lat": 62.241672,
+    "lng": 25.749581
+  },
+  {
+    "gameName": "kozloduy",
+    "realName": "Козлодуй (Kozloduy)",
+    "country": "bulgaria",
+    "x": 7848.215,
+    "y": 20.442,
+    "z": -28138.626,
+    "lat": 43.775093,
+    "lng": 23.729331
+  },
+  {
+    "gameName": "kobenhavn",
+    "realName": "København",
+    "country": "denmark",
+    "x": 7849.44,
+    "y": 22.004,
+    "z": -28137.421,
+    "lat": 55.686724,
+    "lng": 12.570072
+  },
+  {
+    "gameName": "leipzig",
+    "realName": "Leipzig",
+    "country": "germany",
+    "x": 7000.52,
+    "y": 52.572,
+    "z": -3572.1,
+    "lat": 51.340632,
+    "lng": 12.374733
+  },
+  {
+    "gameName": "linz",
+    "realName": "Linz",
+    "country": "austria",
+    "x": 13636.457,
+    "y": 51.625,
+    "z": 13926.33,
+    "lat": 48.305908,
+    "lng": 14.286198
+  },
+  {
+    "gameName": "lleida",
+    "realName": "Lleida",
+    "country": "spain",
+    "x": -45505.809,
+    "y": 59.566,
+    "z": 45123.79,
+    "lat": 41.614761,
+    "lng": 0.626784
+  },
+  {
+    "gameName": "lodz",
+    "realName": "Łódź (Lodz)",
+    "country": "poland",
+    "x": 32014.453,
+    "y": 21.002,
+    "z": -6143.917,
+    "lat": 51.772824,
+    "lng": 19.478486
+  },
+  {
+    "gameName": "lyon",
+    "realName": "Lyon",
+    "country": "france",
+    "x": -23877.828,
+    "y": 102.117,
+    "z": 25578.029,
+    "lat": 45.757814,
+    "lng": 4.832011
+  },
+  {
+    "gameName": "mazeikiai",
+    "realName": "Mažeikiai (Mazeikiai)",
+    "country": "lithuania",
+    "x": 39433.67,
+    "y": 33.353,
+    "z": -32805.475,
+    "lat": 56.311048,
+    "lng": 22.348472
+  },
+  {
+    "gameName": "metz",
+    "realName": "Metz",
+    "country": "france",
+    "x": -16294.5,
+    "y": 79.248,
+    "z": 7463.716,
+    "lat": 49.119696,
+    "lng": 6.176355
+  },
+  {
+    "gameName": "nis",
+    "realName": "Ниш (Nis)",
+    "country": "serbia",
+    "x": 45301.258,
+    "y": 14.073,
+    "z": 39664.183,
+    "lat": 43.32113,
+    "lng": 21.895923
+  },
+  {
+    "gameName": "novi_sad",
+    "realName": "Нови Сад (Novi sad)",
+    "country": "serbia",
+    "x": 36108.227,
+    "y": 43.724,
+    "z": 30002.012,
+    "lat": 45.255134,
+    "lng": 19.845176
+  },
+  {
+    "gameName": "novo_mesto",
+    "realName": "Novo Mesto",
+    "country": "slovenia",
+    "x": 16812.723,
+    "y": 58.423,
+    "z": 27789.352,
+    "lat": 45.804048,
+    "lng": 15.169668
+  },
+  {
+    "gameName": "nurnberg",
+    "realName": "Nürnberg",
+    "country": "germany",
+    "x": 1849.238,
+    "y": 86.055,
+    "z": 6518.68,
+    "lat": 49.453872,
+    "lng": 11.077298
+  },
+  {
+    "gameName": "nynashamn",
+    "realName": "Nynäshamn",
+    "country": "sweden",
+    "x": 25031.98,
+    "y": 31.508,
+    "z": -46154.452,
+    "lat": 58.905646,
+    "lng": 17.947099
+  },
+  {
+    "gameName": "odense",
+    "realName": "Odense",
+    "country": "denmark",
+    "x": 1409.596,
+    "y": 28.381,
+    "z": -26416.555,
+    "lat": 55.399723,
+    "lng": 10.38521
+  },
+  {
+    "gameName": "olbia",
+    "realName": "Olbia",
+    "country": "italy",
+    "x": -7015.809,
+    "y": 31.878,
+    "z": 55235.532,
+    "lat": 40.923266,
+    "lng": 9.502744
+  },
+  {
+    "gameName": "olhao",
+    "realName": "Olhão (Olhao)",
+    "country": "portugal",
+    "x": -88641.281,
+    "y": 31.254,
+    "z": 62460.869,
+    "lat": 37.027037,
+    "lng": -7.841129
+  },
+  {
+    "gameName": "olkiluoto",
+    "realName": "Olkiluoto",
+    "country": "finland",
+    "x": 34255.262,
+    "y": 16.228,
+    "z": -60008.151,
+    "lat": 61.234064,
+    "lng": 21.490751
+  },
+  {
+    "gameName": "olsztyn",
+    "realName": "Olsztyn",
+    "country": "poland",
+    "x": 34758.598,
+    "y": 45.386,
+    "z": -17885.94,
+    "lat": 53.776684,
+    "lng": 20.476507
+  },
+  {
+    "gameName": "orebro",
+    "realName": "Örebro",
+    "country": "sweden",
+    "x": 17087.894,
+    "y": 12.347,
+    "z": -48374.698,
+    "lat": 59.274729,
+    "lng": 15.215118
+  },
+  {
+    "gameName": "ornskoldsvik",
+    "realName": "Örnsköldsvik",
+    "country": "sweden",
+    "x": 25702.102,
+    "y": 50.006,
+    "z": -70705.984,
+    "lat": 63.288861,
+    "lng": 18.716021
+  },
+  {
+    "gameName": "osijek",
+    "realName": "Osijek",
+    "country": "croatia",
+    "x": 31379.543,
+    "y": 14.824,
+    "z": 28718.84,
+    "lat": 45.554879,
+    "lng": 18.695369
+  },
+  {
+    "gameName": "oslo",
+    "realName": "Oslo",
+    "country": "norway",
+    "x": 4395.435,
+    "y": 19.748,
+    "z": -53406.498,
+    "lat": 59.91333,
+    "lng": 10.73897
+  },
+  {
+    "gameName": "osnabruck",
+    "realName": "Osnabrück",
+    "country": "germany",
+    "x": -7931.053,
+    "y": 40.322,
+    "z": -9745.514,
+    "lat": 52.27196,
+    "lng": 8.047635
+  },
+  {
+    "gameName": "ostersund",
+    "realName": "Östersund",
+    "country": "sweden",
+    "x": 15249.59,
+    "y": 70.485,
+    "z": -70178.203,
+    "lat": 63.179366,
+    "lng": 14.635706
+  },
+  {
+    "gameName": "ostrava",
+    "realName": "Ostrava",
+    "country": "czech republic",
+    "x": 28231.806,
+    "y": 85.987,
+    "z": 5139.243,
+    "lat": 49.834914,
+    "lng": 18.282008
+  },
+  {
+    "gameName": "oulu",
+    "realName": "Oulu",
+    "country": "finland",
+    "x": 41759.77,
+    "y": 27.834,
+    "z": -82463.374,
+    "lat": 65.011791,
+    "lng": 25.470197
+  },
+  {
+    "gameName": "o_barco",
+    "realName": "O Barco",
+    "country": "spain",
+    "x": -77271.766,
+    "y": 42.188,
+    "z": 34199.876,
+    "lat": 42.430103,
+    "lng": -6.980103
+  },
+  {
+    "gameName": "paldiski",
+    "realName": "Paldiski",
+    "country": "estonia",
+    "x": 42570.0,
+    "y": 30.896,
+    "z": -50011.949,
+    "lat": 59.349089,
+    "lng": 24.080174
+  },
+  {
+    "gameName": "palermo",
+    "realName": "Palermo",
+    "country": "italy",
+    "x": 8976.471,
+    "y": 11.006,
+    "z": 71131.435,
+    "lat": 38.111227,
+    "lng": 13.352443
+  },
+  {
+    "gameName": "paluel",
+    "realName": "Paluel",
+    "country": "france",
+    "x": -33608.636,
+    "y": 19.618,
+    "z": 230.207,
+    "lat": 49.832499,
+    "lng": 0.629444
+  },
+  {
+    "gameName": "pamplona",
+    "realName": "Pamplona",
+    "country": "spain",
+    "x": -53292.168,
+    "y": 72.666,
+    "z": 37451.579,
+    "lat": 42.815686,
+    "lng": -1.652235
+  },
+  {
+    "gameName": "panevezys",
+    "realName": "Panevėžys (Panevezys)",
+    "country": "lithuania",
+    "x": 46202.328,
+    "y": 41.478,
+    "z": -29962.812,
+    "lat": 55.734499,
+    "lng": 24.357806
+  },
+  {
+    "gameName": "paris",
+    "realName": "Paris",
+    "country": "france",
+    "x": -30427.348,
+    "y": 38.583,
+    "z": 6886.2,
+    "lat": 48.853495,
+    "lng": 2.348391
+  },
+  {
+    "gameName": "parma",
+    "realName": "Parma",
+    "country": "italy",
+    "x": -2906.441,
+    "y": 58.13,
+    "z": 33954.294,
+    "lat": 44.695201,
+    "lng": 10.097987
+  },
+  {
+    "gameName": "parnu",
+    "realName": "Pärnu",
+    "country": "estonia",
+    "x": 44626.77,
+    "y": 42.232,
+    "z": -45237.702,
+    "lat": 58.387066,
+    "lng": 24.502606
+  },
+  {
+    "gameName": "patras",
+    "realName": "Πάτρα (Patras)",
+    "country": "unknown",
+    "x": 46684.695,
+    "y": 107.287,
+    "z": 71014.329,
+    "lat": 38.246242,
+    "lng": 21.735085
+  },
+  {
+    "gameName": "pecs",
+    "realName": "Pécs",
+    "country": "hungary",
+    "x": 29040.274,
+    "y": 27.271,
+    "z": 26311.66,
+    "lat": 46.076509,
+    "lng": 18.228032
+  },
+  {
+    "gameName": "pernik",
+    "realName": "Перник (Pernik)",
+    "country": "bulgaria",
+    "x": 48398.249,
+    "y": 10.464,
+    "z": 45233.036,
+    "lat": 42.628442,
+    "lng": 22.882312
+  },
+  {
+    "gameName": "pescara",
+    "realName": "Pescara",
+    "country": "italy",
+    "x": 12898.121,
+    "y": 41.652,
+    "z": 46848.095,
+    "lat": 42.310262,
+    "lng": 13.95759
+  },
+  {
+    "gameName": "petersburg",
+    "realName": "Санкт-Петербург (Petersburg)",
+    "country": "unknown",
+    "x": 59773.82,
+    "y": 12.884,
+    "z": -57040.646,
+    "lat": 59.960674,
+    "lng": 30.158655
+  },
+  {
+    "gameName": "pirdop",
+    "realName": "Пирдоп (Pirdop)",
+    "country": "bulgaria",
+    "x": 55937.863,
+    "y": 47.09,
+    "z": 42161.102,
+    "lat": 42.700684,
+    "lng": 24.180333
+  },
+  {
+    "gameName": "pitesti",
+    "realName": "Pitești (Pitesti)",
+    "country": "romania",
+    "x": 56247.539,
+    "y": 40.109,
+    "z": 29912.497,
+    "lat": 44.857288,
+    "lng": 24.872116
+  },
+  {
+    "gameName": "pleven",
+    "realName": "Плевен (Pleven)",
+    "country": "bulgaria",
+    "x": 57594.582,
+    "y": 41.226,
+    "z": 37457.552,
+    "lat": 43.480989,
+    "lng": 24.606067
+  },
+  {
+    "gameName": "plovdiv",
+    "realName": "Пловдив (Plovdiv)",
+    "country": "bulgaria",
+    "x": 58234.793,
+    "y": 42.367,
+    "z": 46169.42,
+    "lat": 42.141854,
+    "lng": 24.74993
+  },
+  {
+    "gameName": "plymouth",
+    "realName": "Plymouth",
+    "country": "england",
+    "x": -60041.379,
+    "y": 57.191,
+    "z": -7882.344,
+    "lat": 50.371412,
+    "lng": -4.142445
+  },
+  {
+    "gameName": "podgorica",
+    "realName": "Подгорица (Podgorica)",
+    "country": "montenegro",
+    "x": 34326.113,
+    "y": 10.496,
+    "z": 45528.543,
+    "lat": 42.441524,
+    "lng": 19.262108
+  },
+  {
+    "gameName": "ponte_de_sor",
+    "realName": "Ponte de Sor",
+    "country": "portugal",
+    "x": -87009.805,
+    "y": 43.871,
+    "z": 50122.235,
+    "lat": 39.25193,
+    "lng": -8.008997
+  },
+  {
+    "gameName": "pori",
+    "realName": "Pori",
+    "country": "finland",
+    "x": 34862.336,
+    "y": 26.494,
+    "z": -61707.632,
+    "lat": 61.486613,
+    "lng": 21.797207
+  },
+  {
+    "gameName": "porto",
+    "realName": "Porto",
+    "country": "portugal",
+    "x": -85324.727,
+    "y": 37.702,
+    "z": 39550.952,
+    "lat": 41.150219,
+    "lng": -8.61035
+  },
+  {
+    "gameName": "porto_vecchi",
+    "realName": "Porto-Vecchio",
+    "country": "unknown",
+    "x": -7626.543,
+    "y": 51.84,
+    "z": 51010.173,
+    "lat": 41.591138,
+    "lng": 9.279447
+  },
+  {
+    "gameName": "port_sagunt",
+    "realName": "Port de Sagunt",
+    "country": "unknown",
+    "x": -50525.938,
+    "y": 40.786,
+    "z": 55708.349,
+    "lat": 39.663173,
+    "lng": -0.220858
+  },
+  {
+    "gameName": "poznan",
+    "realName": "Poznań (Poznan)",
+    "country": "poland",
+    "x": 22863.402,
+    "y": 6.625,
+    "z": -9112.198,
+    "lat": 52.400663,
+    "lng": 16.919733
+  },
+  {
+    "gameName": "prague",
+    "realName": "Praha",
+    "country": "unknown",
+    "x": 14299.707,
+    "y": 97.493,
+    "z": 3978.974,
+    "lat": 50.087465,
+    "lng": 14.421254
+  },
+  {
+    "gameName": "pristina",
+    "realName": "Prishtinë (Pristina)",
+    "country": "kosovo",
+    "x": 42673.637,
+    "y": 43.534,
+    "z": 43605.765,
+    "lat": 42.663877,
+    "lng": 21.164085
+  },
+  {
+    "gameName": "pskov",
+    "realName": "Псков (Pskov)",
+    "country": "russia",
+    "x": 56968.324,
+    "y": 46.059,
+    "z": -44002.367,
+    "lat": 57.817392,
+    "lng": 28.334346
+  },
+  {
+    "gameName": "puertollano",
+    "realName": "Puertollano",
+    "country": "spain",
+    "x": -69812.905,
+    "y": 68.878,
+    "z": 59074.231,
+    "lat": 38.685216,
+    "lng": -4.111175
+  },
+  {
+    "gameName": "reims",
+    "realName": "Reims",
+    "country": "france",
+    "x": -24054.703,
+    "y": 38.244,
+    "z": 5682.585,
+    "lat": 49.257789,
+    "lng": 4.031926
+  },
+  {
+    "gameName": "rennes",
+    "realName": "Rennes",
+    "country": "france",
+    "x": -46539.824,
+    "y": 83.876,
+    "z": 8064.61,
+    "lat": 48.111339,
+    "lng": -1.68002
+  },
+  {
+    "gameName": "resita",
+    "realName": "Reșița (Resita)",
+    "country": "romania",
+    "x": 43990.359,
+    "y": 45.75,
+    "z": 29154.583,
+    "lat": 45.289011,
+    "lng": 21.887768
+  },
+  {
+    "gameName": "rezekne",
+    "realName": "Rēzekne (Rezekne)",
+    "country": "latvia",
+    "x": 54953.434,
+    "y": 37.226,
+    "z": -36075.616,
+    "lat": 56.506281,
+    "lng": 27.330662
+  },
+  {
+    "gameName": "rhodes",
+    "realName": "Ρόδος (Rhodes)",
+    "country": "greece",
+    "x": 77441.656,
+    "y": -25.65,
+    "z": 76538.8,
+    "lat": 36.17253,
+    "lng": 27.919402
+  },
+  {
+    "gameName": "riga",
+    "realName": "Rīga (Riga)",
+    "country": "latvia",
+    "x": 44678.0,
+    "y": 6.779,
+    "z": -37089.681,
+    "lat": 56.949398,
+    "lng": 24.105185
+  },
+  {
+    "gameName": "rijeka",
+    "realName": "Rijeka",
+    "country": "croatia",
+    "x": 14366.27,
+    "y": 17.329,
+    "z": 30236.265,
+    "lat": 45.326798,
+    "lng": 14.442208
+  },
+  {
+    "gameName": "roma",
+    "realName": "Roma",
+    "country": "italy",
+    "x": 6261.25,
+    "y": 25.469,
+    "z": 49499.337,
+    "lat": 41.89332,
+    "lng": 12.482932
+  },
+  {
+    "gameName": "roscoff",
+    "realName": "Roscoff",
+    "country": "france",
+    "x": -53697.863,
+    "y": 17.594,
+    "z": 3120.416,
+    "lat": 48.725582,
+    "lng": -3.982898
+  },
+  {
+    "gameName": "rostock",
+    "realName": "Rostock",
+    "country": "germany",
+    "x": 6554.91,
+    "y": 1.025,
+    "z": -19012.885,
+    "lat": 54.088671,
+    "lng": 12.140021
+  },
+  {
+    "gameName": "rotterdam",
+    "realName": "Rotterdam",
+    "country": "netherlands",
+    "x": -18991.98,
+    "y": 71.309,
+    "z": -9455.922,
+    "lat": 51.924442,
+    "lng": 4.47775
+  },
+  {
+    "gameName": "rovaniemi",
+    "realName": "Rovaniemi",
+    "country": "finland",
+    "x": 39886.236,
+    "y": 23.503,
+    "z": -90307.567,
+    "lat": 66.502554,
+    "lng": 25.730391
+  },
+  {
+    "gameName": "ruse",
+    "realName": "Русе (Ruse)",
+    "country": "bulgaria",
+    "x": 61453.996,
+    "y": 43.673,
+    "z": 35069.759,
+    "lat": 43.848041,
+    "lng": 25.954206
+  },
+  {
+    "gameName": "salamanca",
+    "realName": "Salamanca",
+    "country": "spain",
+    "x": -73475.867,
+    "y": 58.461,
+    "z": 43487.829,
+    "lat": 40.965157,
+    "lng": -5.664018
+  },
+  {
+    "gameName": "salzburg",
+    "realName": "Salzburg",
+    "country": "austria",
+    "x": 9146.371,
+    "y": 60.875,
+    "z": 16039.606,
+    "lat": 47.798135,
+    "lng": 13.046481
+  },
+  {
+    "gameName": "sangiovanni",
+    "realName": "Villa San Giovanni",
+    "country": "unknown",
+    "x": 19265.828,
+    "y": 26.083,
+    "z": 70689.165,
+    "lat": 38.218059,
+    "lng": 15.638486
+  },
+  {
+    "gameName": "santander",
+    "realName": "Santander",
+    "country": "spain",
+    "x": -61881.086,
+    "y": 10.171,
+    "z": 31926.811,
+    "lat": 43.461893,
+    "lng": -3.810026
+  },
+  {
+    "gameName": "sarajevo",
+    "realName": "Сарајево (Sarajevo)",
+    "country": "bosnia and herzegovina",
+    "x": 30802.726,
+    "y": 17.489,
+    "z": 38345.702,
+    "lat": 43.857071,
+    "lng": 18.412615
+  },
+  {
+    "gameName": "sassari",
+    "realName": "Sassari",
+    "country": "italy",
+    "x": -11553.572,
+    "y": 2.806,
+    "z": 55210.505,
+    "lat": 40.723475,
+    "lng": 8.561267
+  },
+  {
+    "gameName": "setubal",
+    "realName": "Setúbal",
+    "country": "portugal",
+    "x": -91466.785,
+    "y": 1.803,
+    "z": 54477.552,
+    "lat": 38.524178,
+    "lng": -8.893234
+  },
+  {
+    "gameName": "sevilla",
+    "realName": "Sevilla",
+    "country": "spain",
+    "x": -79725.969,
+    "y": -3.66,
+    "z": 62856.039,
+    "lat": 37.38863,
+    "lng": -5.99534
+  },
+  {
+    "gameName": "sheffield",
+    "realName": "Sheffield",
+    "country": "england",
+    "x": -42688.754,
+    "y": 75.58,
+    "z": -26687.565,
+    "lat": 53.380663,
+    "lng": -1.470228
+  },
+  {
+    "gameName": "siauliai",
+    "realName": "Šiauliai (Siauliai)",
+    "country": "lithuania",
+    "x": 43188.758,
+    "y": 41.155,
+    "z": -30503.816,
+    "lat": 55.934082,
+    "lng": 23.315777
+  },
+  {
+    "gameName": "sines",
+    "realName": "Sines",
+    "country": "portugal",
+    "x": -91831.359,
+    "y": 37.652,
+    "z": 56468.618,
+    "lat": 37.956549,
+    "lng": -8.868964
+  },
+  {
+    "gameName": "skelleftea",
+    "realName": "Skellefteå",
+    "country": "sweden",
+    "x": 29890.02,
+    "y": 38.294,
+    "z": -80715.085,
+    "lat": 64.752019,
+    "lng": 20.959339
+  },
+  {
+    "gameName": "skopje",
+    "realName": "Скопје (Skopje)",
+    "country": "north macedonia",
+    "x": 43657.363,
+    "y": 68.172,
+    "z": 48230.501,
+    "lat": 41.996216,
+    "lng": 21.431894
+  },
+  {
+    "gameName": "sodertalje",
+    "realName": "Södertälje",
+    "country": "sweden",
+    "x": 23524.369,
+    "y": 2.661,
+    "z": -46319.6,
+    "lat": 59.196429,
+    "lng": 17.627166
+  },
+  {
+    "gameName": "sofia",
+    "realName": "София (Sofia)",
+    "country": "bulgaria",
+    "x": 51154.785,
+    "y": 74.353,
+    "z": 42490.645,
+    "lat": 42.697703,
+    "lng": 23.321736
+  },
+  {
+    "gameName": "soria",
+    "realName": "Soria",
+    "country": "spain",
+    "x": -58874.184,
+    "y": 57.746,
+    "z": 42048.219,
+    "lat": 41.60125,
+    "lng": -2.721938
+  },
+  {
+    "gameName": "sosnovy_bor",
+    "realName": "Сосновый Бор (Sosnovy bor)",
+    "country": "unknown",
+    "x": 54949.145,
+    "y": 44.786,
+    "z": -54514.491,
+    "lat": 59.896865,
+    "lng": 29.076563
+  },
+  {
+    "gameName": "southampton",
+    "realName": "Southampton",
+    "country": "england",
+    "x": -46338.742,
+    "y": 72.86,
+    "z": -7523.245,
+    "lat": 50.902535,
+    "lng": -1.404189
+  },
+  {
+    "gameName": "split",
+    "realName": "Split",
+    "country": "croatia",
+    "x": 22115.074,
+    "y": -4.515,
+    "z": 40582.682,
+    "lat": 43.511638,
+    "lng": 16.439966
+  },
+  {
+    "gameName": "stavanger",
+    "realName": "Stavanger",
+    "country": "norway",
+    "x": -10538.789,
+    "y": 28.204,
+    "z": -48053.857,
+    "lat": 58.969968,
+    "lng": 5.73181
+  },
+  {
+    "gameName": "steinkjer",
+    "realName": "Steinkjer",
+    "country": "norway",
+    "x": 6719.718,
+    "y": 14.081,
+    "z": -75178.989,
+    "lat": 64.050737,
+    "lng": 11.481909
+  },
+  {
+    "gameName": "stockholm",
+    "realName": "Stockholm",
+    "country": "sweden",
+    "x": 24794.602,
+    "y": 27.902,
+    "z": -47932.694,
+    "lat": 59.325117,
+    "lng": 18.071093
+  },
+  {
+    "gameName": "strasbourg",
+    "realName": "Strasbourg",
+    "country": "france",
+    "x": -10786.945,
+    "y": 47.56,
+    "z": 11198.673,
+    "lat": 48.584614,
+    "lng": 7.750713
+  },
+  {
+    "gameName": "stuttgart",
+    "realName": "Stuttgart",
+    "country": "germany",
+    "x": -4635.663,
+    "y": 77.2,
+    "z": 10059.313,
+    "lat": 48.778449,
+    "lng": 9.180013
+  },
+  {
+    "gameName": "sundsvall",
+    "realName": "Sundsvall",
+    "country": "sweden",
+    "x": 22379.395,
+    "y": -21.923,
+    "z": -65796.567,
+    "lat": 62.390755,
+    "lng": 17.307102
+  },
+  {
+    "gameName": "suzzara",
+    "realName": "Suzzara",
+    "country": "italy",
+    "x": -780.824,
+    "y": 66.554,
+    "z": 32296.794,
+    "lat": 44.991873,
+    "lng": 10.74309
+  },
+  {
+    "gameName": "swansea",
+    "realName": "Swansea",
+    "country": "wales",
+    "x": -56896.004,
+    "y": 31.473,
+    "z": -16881.944,
+    "lat": 51.619596,
+    "lng": -3.945925
+  },
+  {
+    "gameName": "szczecin",
+    "realName": "Szczecin",
+    "country": "poland",
+    "x": 15052.676,
+    "y": 64.821,
+    "z": -15049.606,
+    "lat": 53.429811,
+    "lng": 14.592868
+  },
+  {
+    "gameName": "szeged",
+    "realName": "Szeged",
+    "country": "hungary",
+    "x": 36881.333,
+    "y": 26.723,
+    "z": 24569.0,
+    "lat": 46.254631,
+    "lng": 20.148602
+  },
+  {
+    "gameName": "tallinn",
+    "realName": "Tallinn",
+    "country": "estonia",
+    "x": 44388.488,
+    "y": 36.353,
+    "z": -50868.628,
+    "lat": 59.437242,
+    "lng": 24.757269
+  },
+  {
+    "gameName": "tampere",
+    "realName": "Tampere",
+    "country": "finland",
+    "x": 40238.848,
+    "y": 27.24,
+    "z": -62490.741,
+    "lat": 61.497793,
+    "lng": 23.761637
+  },
+  {
+    "gameName": "taranto",
+    "realName": "Taranto",
+    "country": "italy",
+    "x": 25990.551,
+    "y": 32.373,
+    "z": 58091.407,
+    "lat": 40.548816,
+    "lng": 17.08058
+  },
+  {
+    "gameName": "targu_mures",
+    "realName": "Târgu Mureș (Targu mures)",
+    "country": "romania",
+    "x": 53959.516,
+    "y": 22.2,
+    "z": 20159.908,
+    "lat": 46.544625,
+    "lng": 24.561196
+  },
+  {
+    "gameName": "tarragona",
+    "realName": "Tarragona",
+    "country": "spain",
+    "x": -42818.602,
+    "y": 60.735,
+    "z": 49142.154,
+    "lat": 41.117236,
+    "lng": 1.254606
+  },
+  {
+    "gameName": "tartu",
+    "realName": "Tartu",
+    "country": "estonia",
+    "x": 50947.086,
+    "y": 23.486,
+    "z": -46407.076,
+    "lat": 58.377953,
+    "lng": 26.729002
+  },
+  {
+    "gameName": "tekirdag",
+    "realName": "Tekirdağ (Tekirdag)",
+    "country": "turkey",
+    "x": 68590.547,
+    "y": 45.229,
+    "z": 49762.794,
+    "lat": 41.07314,
+    "lng": 27.410201
+  },
+  {
+    "gameName": "terni",
+    "realName": "Terni",
+    "country": "italy",
+    "x": 6716.617,
+    "y": 49.493,
+    "z": 46211.786,
+    "lat": 42.653949,
+    "lng": 12.439653
+  },
+  {
+    "gameName": "teruel",
+    "realName": "Teruel",
+    "country": "spain",
+    "x": -53707.043,
+    "y": 45.305,
+    "z": 51375.891,
+    "lat": 40.600526,
+    "lng": -0.922928
+  },
+  {
+    "gameName": "thessaloniki",
+    "realName": "Θεσσαλονίκη (Thessaloniki)",
+    "country": "greece",
+    "x": 51623.75,
+    "y": 66.513,
+    "z": 55931.152,
+    "lat": 40.640317,
+    "lng": 22.935272
+  },
+  {
+    "gameName": "torino",
+    "realName": "Torino",
+    "country": "italy",
+    "x": -12697.25,
+    "y": 63.129,
+    "z": 30932.009,
+    "lat": 45.067755,
+    "lng": 7.682489
+  },
+  {
+    "gameName": "tornio",
+    "realName": "Tornio",
+    "country": "finland",
+    "x": 38089.581,
+    "y": 12.127,
+    "z": -86729.789,
+    "lat": 65.845759,
+    "lng": 24.1464
+  },
+  {
+    "gameName": "toulouse",
+    "realName": "Toulouse",
+    "country": "france",
+    "x": -39213.805,
+    "y": 67.962,
+    "z": 35665.586,
+    "lat": 43.604464,
+    "lng": 1.444243
+  },
+  {
+    "gameName": "travemunde",
+    "realName": "Travemünde",
+    "country": "germany",
+    "x": 3057.457,
+    "y": -25.966,
+    "z": -19152.868,
+    "lat": 53.939609,
+    "lng": 10.858719
+  },
+  {
+    "gameName": "trelleborg",
+    "realName": "Trelleborg",
+    "country": "sweden",
+    "x": 10808.312,
+    "y": 33.286,
+    "z": -25887.031,
+    "lat": 55.37592,
+    "lng": 13.146152
+  },
+  {
+    "gameName": "trieste",
+    "realName": "Trieste",
+    "country": "italy",
+    "x": 10593.785,
+    "y": 19.968,
+    "z": 27566.765,
+    "lat": 45.649648,
+    "lng": 13.777278
+  },
+  {
+    "gameName": "trikala",
+    "realName": "Τρίκαλα (Trikala)",
+    "country": "greece",
+    "x": 46869.996,
+    "y": 25.147,
+    "z": 62412.929,
+    "lat": 39.556087,
+    "lng": 21.767884
+  },
+  {
+    "gameName": "tromso",
+    "realName": "Tromsø",
+    "country": "norway",
+    "x": 24516.758,
+    "y": 48.353,
+    "z": -111250.647,
+    "lat": 69.651635,
+    "lng": 18.955859
+  },
+  {
+    "gameName": "trondheim",
+    "realName": "Trondheim",
+    "country": "norway",
+    "x": 3550.629,
+    "y": 62.614,
+    "z": -72880.937,
+    "lat": 63.430447,
+    "lng": 10.395212
+  },
+  {
+    "gameName": "turku",
+    "realName": "Turku",
+    "country": "finland",
+    "x": 36718.042,
+    "y": 27.918,
+    "z": -56005.724,
+    "lat": 60.451593,
+    "lng": 22.266999
+  },
+  {
+    "gameName": "tuzla",
+    "realName": "Тузла (Tuzla)",
+    "country": "bosnia and herzegovina",
+    "x": 32062.689,
+    "y": 11.392,
+    "z": 33994.307,
+    "lat": 44.539298,
+    "lng": 18.674934
+  },
+  {
+    "gameName": "umea",
+    "realName": "Umeå",
+    "country": "sweden",
+    "x": 28991.348,
+    "y": 2.814,
+    "z": -75080.444,
+    "lat": 63.825657,
+    "lng": 20.263074
+  },
+  {
+    "gameName": "utena",
+    "realName": "Utena",
+    "country": "lithuania",
+    "x": 50778.176,
+    "y": 44.618,
+    "z": -29540.422,
+    "lat": 55.498438,
+    "lng": 25.602577
+  },
+  {
+    "gameName": "svolvaer",
+    "realName": "Svolvær",
+    "country": "norway",
+    "x": 13393.711,
+    "y": 87.168,
+    "z": -100027.624,
+    "lat": 68.232171,
+    "lng": 14.564602
+  },
+  {
+    "gameName": "timisoara",
+    "realName": "Timișoara (Timisoara)",
+    "country": "romania",
+    "x": 41402.355,
+    "y": 12.779,
+    "z": 27290.177,
+    "lat": 45.753836,
+    "lng": 21.225747
+  },
+  {
+    "gameName": "tirana",
+    "realName": "Tiranë (Tirana)",
+    "country": "unknown",
+    "x": 38274.93,
+    "y": -23.691,
+    "z": 51343.195,
+    "lat": 41.328148,
+    "lng": 19.818444
+  },
+  {
+    "gameName": "uppsala",
+    "realName": "Uppsala",
+    "country": "sweden",
+    "x": 24021.457,
+    "y": 16.427,
+    "z": -51634.436,
+    "lat": 59.858613,
+    "lng": 17.638744
+  },
+  {
+    "gameName": "vaasa",
+    "realName": "Vaasa",
+    "country": "finland",
+    "x": 32998.32,
+    "y": 35.469,
+    "z": -71016.999,
+    "lat": 63.095772,
+    "lng": 21.615919
+  },
+  {
+    "gameName": "valencia",
+    "realName": "València (Valencia)",
+    "country": "spain",
+    "x": -51533.137,
+    "y": 58.834,
+    "z": 57457.259,
+    "lat": 39.469707,
+    "lng": -0.376335
+  },
+  {
+    "gameName": "valladolid",
+    "realName": "Valladolid",
+    "country": "spain",
+    "x": -67923.117,
+    "y": 61.919,
+    "z": 40807.689,
+    "lat": 41.620002,
+    "lng": -4.725991
+  },
+  {
+    "gameName": "valmiera",
+    "realName": "Valmiera",
+    "country": "latvia",
+    "x": 47973.055,
+    "y": 20.55,
+    "z": -40783.745,
+    "lat": 57.538915,
+    "lng": 25.426169
+  },
+  {
+    "gameName": "vandellos",
+    "realName": "Vandellòs (Vandellos)",
+    "country": "spain",
+    "x": -45657.609,
+    "y": 26.479,
+    "z": 50442.756,
+    "lat": 40.998524,
+    "lng": 0.849353
+  },
+  {
+    "gameName": "varna",
+    "realName": "Варна (Varna)",
+    "country": "bulgaria",
+    "x": 70093.422,
+    "y": 32.653,
+    "z": 36462.232,
+    "lat": 43.207387,
+    "lng": 27.916665
+  },
+  {
+    "gameName": "vasteraas",
+    "realName": "Västerås",
+    "country": "unknown",
+    "x": 20988.136,
+    "y": 19.952,
+    "z": -50458.83,
+    "lat": 59.611099,
+    "lng": 16.546368
+  },
+  {
+    "gameName": "vaxjo",
+    "realName": "Växjö",
+    "country": "sweden",
+    "x": 15965.605,
+    "y": 62.634,
+    "z": -34770.171,
+    "lat": 56.878718,
+    "lng": 14.809439
+  },
+  {
+    "gameName": "veli_tarnovo",
+    "realName": "Велико Търново (Veli tarnovo)",
+    "country": "unknown",
+    "x": 60763.383,
+    "y": 75.491,
+    "z": 38859.454,
+    "lat": 43.082058,
+    "lng": 25.632131
+  },
+  {
+    "gameName": "venezia",
+    "realName": "Venezia",
+    "country": "italy",
+    "x": 5089.879,
+    "y": 16.001,
+    "z": 30085.634,
+    "lat": 45.404617,
+    "lng": 12.310523
+  },
+  {
+    "gameName": "ventspils",
+    "realName": "Ventspils",
+    "country": "latvia",
+    "x": 36679.746,
+    "y": 20.683,
+    "z": -38562.007,
+    "lat": 57.390392,
+    "lng": 21.563599
+  },
+  {
+    "gameName": "verona",
+    "realName": "Verona",
+    "country": "italy",
+    "x": 39.128,
+    "y": 47.707,
+    "z": 29453.375,
+    "lat": 45.442498,
+    "lng": 10.985738
+  },
+  {
+    "gameName": "vigo",
+    "realName": "Vigo",
+    "country": "spain",
+    "x": -84721.383,
+    "y": 42.599,
+    "z": 32600.685,
+    "lat": 42.198639,
+    "lng": -8.727956
+  },
+  {
+    "gameName": "villarreal",
+    "realName": "Vila-real",
+    "country": "unknown",
+    "x": -49729.48,
+    "y": 19.577,
+    "z": 53683.935,
+    "lat": 39.937262,
+    "lng": -0.100446
+  },
+  {
+    "gameName": "vilnius",
+    "realName": "Vilnius",
+    "country": "lithuania",
+    "x": 50562.562,
+    "y": 26.177,
+    "z": -24885.659,
+    "lat": 54.687046,
+    "lng": 25.282911
+  },
+  {
+    "gameName": "vlore",
+    "realName": "Vlorë (Vlore)",
+    "country": "albania",
+    "x": 36890.478,
+    "y": 18.639,
+    "z": 57258.32,
+    "lat": 40.47076,
+    "lng": 19.491272
+  },
+  {
+    "gameName": "vyborg",
+    "realName": "Выборг (Vyborg)",
+    "country": "unknown",
+    "x": 54465.266,
+    "y": 28.323,
+    "z": -60221.808,
+    "lat": 60.709217,
+    "lng": 28.744051
+  },
+  {
+    "gameName": "warszawa",
+    "realName": "Warszawa",
+    "country": "poland",
+    "x": 37444.914,
+    "y": 46.768,
+    "z": -9435.834,
+    "lat": 52.233374,
+    "lng": 21.071149
+  },
+  {
+    "gameName": "wien",
+    "realName": "Wien",
+    "country": "austria",
+    "x": 20824.758,
+    "y": 87.821,
+    "z": 13986.032,
+    "lat": 48.208354,
+    "lng": 16.372504
+  },
+  {
+    "gameName": "wroclaw",
+    "realName": "Wrocław (Wroclaw)",
+    "country": "poland",
+    "x": 23502.898,
+    "y": 86.416,
+    "z": -1950.979,
+    "lat": 51.108978,
+    "lng": 17.032669
+  },
+  {
+    "gameName": "zadar",
+    "realName": "Zadar",
+    "country": "croatia",
+    "x": 17622.055,
+    "y": 17.754,
+    "z": 36990.146,
+    "lat": 44.116859,
+    "lng": 15.235326
+  },
+  {
+    "gameName": "zagreb",
+    "realName": "Zagreb",
+    "country": "croatia",
+    "x": 21617.836,
+    "y": 18.563,
+    "z": 26970.242,
+    "lat": 45.813097,
+    "lng": 15.977279
+  },
+  {
+    "gameName": "zaragoza",
+    "realName": "Zaragoza",
+    "country": "spain",
+    "x": -50627.64,
+    "y": 7.369,
+    "z": 44044.087,
+    "lat": 41.691585,
+    "lng": -0.910127
+  },
+  {
+    "gameName": "zenica",
+    "realName": "Зеница (Zenica)",
+    "country": "bosnia and herzegovina",
+    "x": 28716.824,
+    "y": 70.44,
+    "z": 36216.933,
+    "lat": 44.199828,
+    "lng": 17.909301
+  },
+  {
+    "gameName": "zurich",
+    "realName": "Zürich",
+    "country": "switzerland",
+    "x": -8744.934,
+    "y": 32.613,
+    "z": 17643.093,
+    "lat": 47.374449,
+    "lng": 8.541042
+  }
+]

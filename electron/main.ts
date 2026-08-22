@@ -8,6 +8,8 @@ import fs from 'node:fs'
 import crypto from 'node:crypto'
 import https from 'node:https'
 import os from 'node:os'
+import { validateMapDataDir } from './map-data-validator';
+import { getRoute } from './route-service';
 
 // --- Sicherer Primitiv-Logger ---
 const LOG_FILE = path.join(os.homedir(), 'Documents', 'openpipeclub_debug.log');
@@ -37,12 +39,13 @@ writeToLog('Globale Failsafes (uncaughtException, unhandledRejection) sind aktiv
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optimize Electron RAM footprint
-// V8: lower heap ceiling + prefer smaller code over peak speed
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=96 --optimize-for-size');
+// V8: heap ceiling set for React + MapLibre WebGL canvas
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256 --optimize-for-size');
 // One renderer process shared across same-origin pages
 app.commandLine.appendSwitch('process-per-site');
 // Disable APIs the app doesn't use
 app.commandLine.appendSwitch('disable-speech-api');
+// Disable voice input
 app.commandLine.appendSwitch('disable-voice-input');
 app.commandLine.appendSwitch('disable-notifications');
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
@@ -69,6 +72,25 @@ let overlayWin: BrowserWindow | null = null;
 let logoWin: BrowserWindow | null = null;
 let driversWin: BrowserWindow | null = null;
 let eventWin: BrowserWindow | null = null;
+let carplayWin: BrowserWindow | null = null;
+let carplayChild: any = null;
+const isCarPlayMode = process.argv.includes('--carplay-mode');
+
+// Read parent PID for clean process exiting in standalone mode
+const parentPidArg = process.argv.find(arg => arg.startsWith('--parent-pid='));
+const parentPid = parentPidArg ? parseInt(parentPidArg.split('=')[1], 10) : null;
+
+if (isCarPlayMode && parentPid) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch (e) {
+      app.quit();
+      process.exit(0);
+    }
+  }, 1000);
+}
+
 
 function safeSend(winInstance: BrowserWindow | null, channel: string, ...args: any[]) {
   if (winInstance && !winInstance.isDestroyed() && winInstance.webContents && !winInstance.webContents.isDestroyed()) {
@@ -113,7 +135,16 @@ let overlaySettings: any = {
   showMainHud: true,
   showDrivers: true,
   showEvent: true,
-  showSpotify: true
+  showSpotify: true,
+  showCarPlay: false,
+  carPlayTheme: 'dark',
+  carPlayHotkeys: {
+    toggle: 'F9',
+    next: 'Ctrl+Alt+Right',
+    prev: 'Ctrl+Alt+Left',
+    home: 'Ctrl+Alt+H',
+    playPause: 'Ctrl+Alt+Space'
+  }
 };
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'overlay-settings.json');
@@ -128,6 +159,7 @@ let prevJobActive = false;
 let lastPositionSent = 0;
 let rpcStartTime: Date | null = null;
 let lastSeenNotifId: string | null = null;
+let mapDataDir: string | null = path.join(app.getPath('documents'), 'Open Pipe Club', 'maps-data');
 
 // Job Tracking Stats
 let jobStartFuel = 0;
@@ -135,7 +167,7 @@ let jobTotalSpeed = 0;
 let jobSpeedTicks = 0;
 let jobMaxSpeed = 0;
 
-async function loadSettings() {
+async function loadSettings(isAppStart = false) {
   writeToLog('Attempting to load settings...');
   try {
     if (fs.existsSync(SETTINGS_PATH)) {
@@ -170,7 +202,11 @@ async function loadSettings() {
       spotifyW = saved.spotifyW || 280;
       spotifyH = saved.spotifyH || 140;
 
-      isOverlayLocked = true; // Always locked on app start
+      if (isAppStart) {
+        isOverlayLocked = true; // Always locked on app start
+      } else {
+        isOverlayLocked = saved.isOverlayLocked !== undefined ? saved.isOverlayLocked : isOverlayLocked;
+      }
       isOverlayActive = saved.isOverlayActive !== undefined ? saved.isOverlayActive : false;
       if (saved.overlaySettings !== undefined) {
         overlaySettings = {
@@ -179,9 +215,22 @@ async function loadSettings() {
           showDrivers: true,
           showEvent: true,
           showSpotify: true,
+          showCarPlay: false,
+          carPlayTheme: 'dark',
+          carPlayHotkeys: {
+            toggle: 'F9',
+            next: 'Ctrl+Alt+Right',
+            prev: 'Ctrl+Alt+Left',
+            home: 'Ctrl+Alt+H',
+            playPause: 'Ctrl+Alt+Space'
+          },
           ...saved.overlaySettings
         };
+        if (saved.overlaySettings.showTacho !== undefined && saved.overlaySettings.showCarPlay === undefined) {
+          overlaySettings.showCarPlay = saved.overlaySettings.showTacho;
+        }
       }
+      mapDataDir = saved.mapDataDir || path.join(app.getPath('documents'), 'Open Pipe Club', 'maps-data');
       writeToLog('📦 Settings: Einstellungen geladen');
     } else {
       writeToLog('Settings file does not exist, using defaults.');
@@ -220,7 +269,8 @@ function saveSettings() {
       spotifyH,
       isOverlayLocked,
       isOverlayActive,
-      overlaySettings
+      overlaySettings,
+      mapDataDir
     };
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
     writeToLog('📦 Settings: Einstellungen erfolgreich gespeichert');
@@ -229,7 +279,49 @@ function saveSettings() {
   }
 }
 
-loadSettings();
+let fsWatcher: any = null;
+function watchSettingsFile() {
+  if (fsWatcher) return;
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) {
+      let isUpdating = false;
+      fsWatcher = fs.watch(SETTINGS_PATH, (eventType) => {
+        if (eventType === 'change' && !isUpdating) {
+          isUpdating = true;
+          setTimeout(async () => {
+            try {
+              const oldShowCarPlay = overlaySettings?.showCarPlay;
+              const oldHotkeys = JSON.stringify(overlaySettings?.carPlayHotkeys);
+              
+              await loadSettings(false);
+              
+              if (isCarPlayMode) {
+                if (carplayWin && !carplayWin.isDestroyed()) {
+                  safeSend(carplayWin, 'overlay-settings-updated', overlaySettings);
+                }
+                if (!overlaySettings.showCarPlay) {
+                  app.quit();
+                }
+                if (oldHotkeys !== JSON.stringify(overlaySettings?.carPlayHotkeys)) {
+                  registerCarPlayHotkeys();
+                }
+              } else {
+                if (oldShowCarPlay !== overlaySettings.showCarPlay) {
+                  safeSend(win, 'overlay-settings-updated', overlaySettings);
+                  safeSend(overlayWin, 'overlay-settings-updated', overlaySettings);
+                }
+                if (oldHotkeys !== JSON.stringify(overlaySettings?.carPlayHotkeys) || oldShowCarPlay !== overlaySettings.showCarPlay) {
+                  registerCarPlayHotkeys();
+                }
+              }
+            } catch (err) {}
+            isUpdating = false;
+          }, 150);
+        }
+      });
+    }
+  } catch (e) {}
+}
 
 
 
@@ -457,6 +549,10 @@ function createWindow() {
     show: false,
   })
 
+  if (process.platform === 'win32') {
+    win.setAppDetails({ appId: 'com.openpipeclub.app.main' });
+  }
+
   // Intercept navigation requests and open external links in default browser
   win.webContents.on('will-navigate', (event, url) => {
     const isExternal = !url.startsWith('file://') && !url.startsWith(process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173');
@@ -496,6 +592,7 @@ function createWindow() {
 
   win.on('closed', () => {
     win = null;
+    closeTachoWindow();
     app.quit();
   });
 }
@@ -532,6 +629,9 @@ ipcMain.on('job-notification', (_, data) => {
   win?.webContents.send('job-notification', data);
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.webContents.send('job-notification', data);
+  }
+  if (carplayWin && !carplayWin.isDestroyed()) {
+    carplayWin.webContents.send('job-notification', data);
   }
 });
 
@@ -904,6 +1004,23 @@ public class SCSTelemetry {
 
                         result["income"] = BitConverter.ToUInt64(raw, 4000);
                         result["plannedDistance"] = BitConverter.ToUInt32(raw, 100);
+
+                        // Turn indicators, parking brake, lights, and system warnings from Zone 5 (booleans)
+                        result["parkBrake"] = raw[1566] > 0;
+                        result["blinkerLeftActive"] = raw[1578] > 0;
+                        result["blinkerRightActive"] = raw[1579] > 0;
+                        result["blinkerLeftOn"] = raw[1580] > 0;
+                        result["blinkerRightOn"] = raw[1581] > 0;
+                        result["lightsBeamLow"] = raw[1583] > 0;
+                        result["lightsBeamHigh"] = raw[1584] > 0;
+                        result["lightsHazard"] = raw[1588] > 0;
+                        result["lightsBeacon"] = raw[1585] > 0;
+                        result["fuelWarning"] = raw[1570] > 0;
+                        result["airPressureWarning"] = raw[1568] > 0;
+                        result["oilPressureWarning"] = raw[1572] > 0;
+                        result["waterTemperatureWarning"] = raw[1573] > 0;
+                        result["batteryVoltageWarning"] = raw[1574] > 0;
+
                         result["connected"] = true;
                     } else {
                         result["connected"] = false;
@@ -978,15 +1095,25 @@ function startTelemetryBridge() {
       stdoutBuffer = stdoutBuffer.substring(boundary + 1);
       boundary = stdoutBuffer.indexOf('\n');
 
-      if (!line) continue;
-      try {
-        const parsed = JSON.parse(line);
-        // Send updates throttled by the update interval to prevent high CPU usage on IPC & frontend rendering
-        if (Date.now() - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL) {
-          lastTelemetryUpdate = Date.now();
-          safeSend(win, 'telemetry-update', parsed);
-          safeSend(overlayWin, 'telemetry-update', parsed);
-        }
+       if (!line) continue;
+       try {
+         const parsed = JSON.parse(line);
+         
+         // Determine if a job is actually active (cargo loaded AND source/dest present)
+         const cargo = (parsed.cargo || "").trim();
+         const source = (parsed.source || "").trim();
+         const dest = (parsed.dest || "").trim();
+         const cargoValid = cargo.length > 0 && cargo.toLowerCase() !== 'none';
+         const routeValid = source.length > 0 && dest.length > 0;
+         parsed.jobActive = cargoValid && routeValid;
+         
+         // Send updates throttled by the update interval to prevent high CPU usage on IPC & frontend rendering
+         if (Date.now() - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL) {
+           lastTelemetryUpdate = Date.now();
+           safeSend(win, 'telemetry-update', parsed);
+           safeSend(overlayWin, 'telemetry-update', parsed);
+           safeSend(carplayWin, 'telemetry-update', parsed);
+         }
 
         // Standalone Tracking Logic - Runs every tick (internal 5s throttle)
         if (telemetryData === null) {
@@ -1114,7 +1241,9 @@ function resolveServerName(data: any): string {
   return lastResolvedServerName || "TruckersMP";
 }
 
-const BACKEND_URL = 'https://api.openpipeclub.com/api';
+const BACKEND_URL = process.env.VITE_BACKEND_URL 
+  ? `${process.env.VITE_BACKEND_URL}/api` 
+  : 'https://open-pipe-club-backend.nicohertling09.workers.dev/api';
 
 async function handleTrackingLogic(current: any, prev: any) {
   if (!userToken) return;
@@ -1168,7 +1297,7 @@ async function handleTrackingLogic(current: any, prev: any) {
           fuel: current.fuel,
           brand: current.brand,
           model: current.model,
-          city: current.source || current.dest || null,
+          city: current.city || currentCity || null,
           server_name: serverName,
           game: gameStr,
           steam_id: steamIdVal,
@@ -1370,13 +1499,13 @@ function createSingleOverlayWindow() {
   }
 
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.bounds;
+  const { x, y, width, height } = primaryDisplay.bounds;
 
   overlayWin = new BrowserWindow({
-    width: width,
-    height: height,
-    x: 0,
-    y: 0,
+    x,
+    y,
+    width,
+    height,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -1384,18 +1513,20 @@ function createSingleOverlayWindow() {
     resizable: false,
     hasShadow: false,
     skipTaskbar: true,
-    focusable: false, // Prevent the overlay from taking focus from other windows/games
-    show: false, // Start hidden to prevent startup DWM composition lag
+    focusable: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
       preload: path.join(__dirname, 'preload.cjs'),
-      backgroundThrottling: false, // Ensure page doesn't lag when game is in focus
+      backgroundThrottling: false,
       webSecurity: false,
     },
   });
 
-  // Ensure it ignores mouse events immediately on creation to prevent blocking window controls
+  overlayWin.setAlwaysOnTop(true, 'screen-saver');
+  overlayWin.setBounds({ x, y, width, height });
+
+  overlayWin.setBackgroundColor('#00000000');
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -1491,14 +1622,303 @@ ipcMain.on('overlay-positions-updated', (_, positions) => {
   }
 });
 
+const mediaKeyTempPath = path.join(app.getPath('temp'), 'openpipeclub_mediakey.ps1');
+
+function sendMediaKey(vkCode: number) {
+  const scriptContent = `param([int]$vkCode)
+$source = @"
+using System;
+using System.Runtime.InteropServices;
+public class User32 {
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
+}
+"@
+try {
+    Add-Type -TypeDefinition $source -ErrorAction SilentlyContinue
+} catch {}
+[User32]::keybd_event($vkCode, 0, 0, 0)
+[User32]::keybd_event($vkCode, 0, 2, 0)
+`;
+  try {
+    fs.writeFileSync(mediaKeyTempPath, scriptContent, 'utf8');
+  } catch (e) {}
+
+  exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${mediaKeyTempPath}" ${vkCode}`, (error) => {
+    if (error) writeToLog(`Failed to send media key ${vkCode}: ${error.message}`);
+  });
+}
+
+let lastCarPlayHotkeys: Record<string, string> = {};
+
+function registerCarPlayHotkeys() {
+  Object.values(lastCarPlayHotkeys).forEach(hk => {
+    if (hk) {
+      try {
+        globalShortcut.unregister(hk);
+      } catch (err) {
+        writeToLog(`Failed to unregister hotkey ${hk}: ${err}`);
+      }
+    }
+  });
+  lastCarPlayHotkeys = {};
+
+  if (!overlaySettings.showCarPlay) return;
+
+  const keys = overlaySettings.carPlayHotkeys || {
+    toggle: 'F9',
+    next: 'Ctrl+Alt+Right',
+    prev: 'Ctrl+Alt+Left',
+    home: 'Ctrl+Alt+H',
+    playPause: 'Ctrl+Alt+Space',
+    navUp: 'Ctrl+Alt+Up',
+    navDown: 'Ctrl+Alt+Down',
+    navLeft: 'Ctrl+Alt+Left',
+    navRight: 'Ctrl+Alt+Right',
+    navEnter: 'Ctrl+Alt+Enter',
+    navBack: 'Ctrl+Alt+Backspace'
+  };
+
+  const registerSafe = (keyName: string, accelerator: string, callback: () => void) => {
+    if (!accelerator) return;
+    try {
+      globalShortcut.register(accelerator, callback);
+      lastCarPlayHotkeys[keyName] = accelerator;
+      writeToLog(`Registered hotkey ${keyName}: ${accelerator}`);
+    } catch (err) {
+      writeToLog(`Failed to register hotkey ${keyName} (${accelerator}): ${err}`);
+    }
+  };
+
+  if (isCarPlayMode) {
+    // Registrations for the CarPlay overlay window itself
+    registerSafe('next', keys.next, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'next');
+      }
+    });
+    registerSafe('prev', keys.prev, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'prev');
+      }
+    });
+    registerSafe('home', keys.home, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'home');
+      }
+    });
+    registerSafe('playPause', keys.playPause, () => {
+      sendMediaKey(0xB3);
+    });
+    registerSafe('navUp', keys.navUp || 'Ctrl+Alt+Up', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'up');
+      }
+    });
+    registerSafe('navDown', keys.navDown || 'Ctrl+Alt+Down', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'down');
+      }
+    });
+    registerSafe('navLeft', keys.navLeft || 'Ctrl+Alt+Left', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'left');
+      }
+    });
+    registerSafe('navRight', keys.navRight || 'Ctrl+Alt+Right', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'right');
+      }
+    });
+    registerSafe('navEnter', keys.navEnter || 'Ctrl+Alt+Enter', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'enter');
+      }
+    });
+    registerSafe('navBack', keys.navBack || 'Ctrl+Alt+Backspace', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'back');
+      }
+    });
+  } else {
+    registerSafe('toggle', keys.toggle, () => {
+      toggleCarPlayWindow();
+    });
+    registerSafe('next', keys.next, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'next');
+    });
+    registerSafe('prev', keys.prev, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'prev');
+    });
+    registerSafe('home', keys.home, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'home');
+    });
+    registerSafe('playPause', keys.playPause, () => {
+      sendMediaKey(0xB3);
+    });
+    registerSafe('navUp', keys.navUp || 'Ctrl+Alt+Up', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'up');
+    });
+    registerSafe('navDown', keys.navDown || 'Ctrl+Alt+Down', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'down');
+    });
+    registerSafe('navLeft', keys.navLeft || 'Ctrl+Alt+Left', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'left');
+    });
+    registerSafe('navRight', keys.navRight || 'Ctrl+Alt+Right', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'right');
+    });
+    registerSafe('navEnter', keys.navEnter || 'Ctrl+Alt+Enter', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'enter');
+    });
+    registerSafe('navBack', keys.navBack || 'Ctrl+Alt+Backspace', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'back');
+    });
+  }
+}
+
+function toggleCarPlayWindow() {
+  if (!carplayWin || carplayWin.isDestroyed()) {
+    overlaySettings.showCarPlay = true;
+    saveSettings();
+    safeSend(win, 'overlay-settings-updated', overlaySettings);
+    safeSend(overlayWin, 'overlay-settings-updated', overlaySettings);
+    safeSend(win, 'carplay-status-changed', true);
+    createCarPlayWindow();
+  } else {
+    safeSend(carplayWin, 'carplay-toggle-blackout');
+  }
+}
+
+// RAM optimization: create window in-process instead of spawning a duplicate electron.exe
+function spawnCarPlayProcess() {
+  createCarPlayWindow();
+}
+
+function createCarPlayWindow() {
+  if (carplayWin && !carplayWin.isDestroyed()) {
+    if (!carplayWin.isVisible()) {
+      carplayWin.showInactive();
+    }
+    safeSend(carplayWin, 'overlay-settings-updated', overlaySettings);
+    return;
+  }
+
+  carplayWin = new BrowserWindow({
+    width: 1024,
+    height: 576,
+    title: 'OPC CarPlay',
+    icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
+    frame: false,
+    transparent: false,
+    backgroundColor: '#000000',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(__dirname, 'preload.cjs'),
+      backgroundThrottling: false,
+      webSecurity: false,
+    },
+    minWidth: 640,
+    minHeight: 360,
+  });
+
+  carplayWin.center();
+  carplayWin.showInactive();
+
+  const ASPECT_RATIO = 16 / 9;
+  let isResizing = false;
+  const enforceAspectRatio = () => {
+    if (isResizing || !carplayWin || carplayWin.isDestroyed()) return;
+    isResizing = true;
+    const [width, height] = carplayWin.getSize();
+    const newHeight = Math.round(width / ASPECT_RATIO);
+    if (Math.abs(height - newHeight) > 1) {
+      carplayWin.setSize(width, newHeight);
+    }
+    setTimeout(() => { isResizing = false; }, 50);
+  };
+  carplayWin.on('resize', enforceAspectRatio);
+
+  if (process.platform === 'win32') {
+    carplayWin.setAppDetails({ appId: 'com.openpipeclub.app.carplay' });
+  }
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    carplayWin.loadURL(`${process.env.VITE_DEV_SERVER_URL}#overlay-carplay`);
+  } else {
+    carplayWin.loadFile(path.join(process.env.DIST, 'index.html'), { hash: 'overlay-carplay' });
+  }
+
+  carplayWin.webContents.on('did-finish-load', () => {
+    if (telemetryData) {
+      safeSend(carplayWin, 'telemetry-update', telemetryData);
+    }
+    safeSend(carplayWin, 'overlay-settings-updated', overlaySettings);
+    carplayWin.showInactive();
+    carplayWin.center();
+  });
+
+  carplayWin.once('ready-to-show', () => {
+    carplayWin.showInactive();
+    carplayWin.center();
+  });
+
+  carplayWin.on('closed', () => {
+    carplayWin = null;
+    if (overlaySettings.showCarPlay) {
+      overlaySettings.showCarPlay = false;
+      saveSettings();
+      safeSend(win, 'carplay-status-changed', false);
+    }
+    if (isCarPlayMode) {
+      app.quit();
+    }
+  });
+}
+
+function closeCarPlayWindow() {
+  if (carplayWin && !carplayWin.isDestroyed()) {
+    carplayWin.close();
+  }
+  carplayWin = null;
+}
+
+ipcMain.on('carplay-media-control', (_, action) => {
+  if (action === 'play-pause') {
+    sendMediaKey(0xB3);
+  } else if (action === 'next') {
+    sendMediaKey(0xB0);
+  } else if (action === 'prev') {
+    sendMediaKey(0xB1);
+  }
+});
+
 ipcMain.on('overlay-settings-changed', (_, settings) => {
+  const carPlayChanged = overlaySettings.showCarPlay !== settings.showCarPlay;
+  const hotkeysChanged = JSON.stringify(overlaySettings.carPlayHotkeys) !== JSON.stringify(settings.carPlayHotkeys);
   overlaySettings = settings;
   saveSettings();
-
   overlayWin?.webContents.send('overlay-settings-updated', settings);
-
+  if (carplayWin && !carplayWin.isDestroyed()) {
+    carplayWin.webContents.send('overlay-settings-updated', settings);
+  }
   if (isOverlayActive) {
     syncOverlayWindows();
+  }
+  if (carPlayChanged || hotkeysChanged) {
+    registerCarPlayHotkeys();
+  }
+  if (carPlayChanged) {
+    if (settings.showCarPlay) {
+      createCarPlayWindow();
+    } else {
+      closeCarPlayWindow();
+    }
+  } else if (settings.showCarPlay) {
+    if (!carplayWin || carplayWin.isDestroyed()) {
+      createCarPlayWindow();
+    }
   }
 });
 
@@ -1512,7 +1932,6 @@ ipcMain.on('overlay-resize', (_, type, w, h) => {
   else if (type === 'logo') targetWin = logoWin;
   else if (type === 'drivers') targetWin = driversWin;
   else if (type === 'event') targetWin = eventWin;
-
   if (targetWin) {
     targetWin.setSize(w, h);
     if (type === 'main') { overlayW = w; overlayH = h; }
@@ -1523,12 +1942,6 @@ ipcMain.on('overlay-resize', (_, type, w, h) => {
   }
 });
 
-// The overlay renderer registers its IPC listeners only after React has mounted,
-// while the initial state was previously pushed during `did-finish-load`
-// (which fires before the listeners exist). On a cold start (uncached bundle)
-// that push is missed, so the overlay started unconfigured until a restart.
-// Letting the renderer explicitly request the current state on mount closes
-// that race regardless of load/cache timing.
 ipcMain.handle('overlay-get-state', () => {
   const currentPositions = {
     logo: { x: logoX ?? 40, y: logoY ?? 40 },
@@ -1545,21 +1958,32 @@ ipcMain.handle('overlay-get-state', () => {
   };
 });
 
-
-
 // ─── SMTC (Windows Media Session) ────────────────────────────────────────────
 // Reads what is currently playing on Windows (Spotify, YouTube, etc.)
 // via the System Media Transport Controls (SMTC) using a C# WinRT helper.
 
+const SMTC_FRIENDLY_NAMES: Record<string, string> = {
+  'player.exe': 'Spotify',
+  'spotify.exe': 'Spotify',
+  'spotify': 'Spotify',
+  'msedge.exe': 'Browser',
+  'chrome.exe': 'Chrome',
+  'firefox.exe': 'Firefox',
+  'vlc.exe': 'VLC',
+  'music.exe': 'Musik',
+  'wmplayer.exe': 'WMP',
+};
+
+function getFriendlyAppName(sourceAppId: string, fallback: string): string {
+  if (!sourceAppId) return fallback;
+  const lower = sourceAppId.toLowerCase();
+  const withoutExt = lower.replace(/\.exe$/i, '');
+  const base = withoutExt.split(/[\\/]/).pop() || withoutExt;
+  return SMTC_FRIENDLY_NAMES[base] || SMTC_FRIENDLY_NAMES[lower] || fallback;
+}
+
 const smtcScript = `
-param(
-    [int]$ParentPid = 0
-)
-
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
-$source = @"
+$source = @'
 using System;
 using System.IO;
 using System.Reflection;
@@ -1622,7 +2046,7 @@ public class WinRtHelper {
         }
     }
 }
-"@
+'@
 
 try {
     Add-Type -TypeDefinition $source -ReferencedAssemblies "System.Core", "Microsoft.CSharp" -ErrorAction SilentlyContinue
@@ -1741,7 +2165,12 @@ function startSmtcBridge() {
       if (!line || !line.startsWith('{')) continue;
       try {
         lastSmtcData = JSON.parse(line);
+        if (lastSmtcData && lastSmtcData.source) {
+          lastSmtcData.source = getFriendlyAppName(lastSmtcData.source, lastSmtcData.source);
+        }
+        safeSend(win, 'smtc-update', lastSmtcData);
         safeSend(overlayWin, 'smtc-update', lastSmtcData);
+        safeSend(carplayWin, 'smtc-update', lastSmtcData);
       } catch (e) { }
     }
   });
@@ -1768,6 +2197,201 @@ startTelemetryBridge();
 
 
 ipcMain.handle('telemetry-status', () => telemetryData);
+
+ipcMain.handle('read-live-streams', async () => {
+  const userDocs = app.getPath('documents');
+  const possiblePaths = [
+    path.join(userDocs, 'Euro Truck Simulator 2', 'live_streams.sii'),
+    path.join(userDocs, 'American Truck Simulator', 'live_streams.sii'),
+    ...(process.env.USERPROFILE ? [
+      path.join(process.env.USERPROFILE, 'Documents', 'Euro Truck Simulator 2', 'live_streams.sii'),
+      path.join(process.env.USERPROFILE, 'Documents', 'American Truck Simulator', 'live_streams.sii'),
+      path.join(process.env.USERPROFILE, 'OneDrive', 'Dokumente', 'Euro Truck Simulator 2', 'live_streams.sii'),
+      path.join(process.env.USERPROFILE, 'OneDrive', 'Dokumente', 'American Truck Simulator', 'live_streams.sii'),
+      path.join(process.env.USERPROFILE, 'OneDrive', 'Documents', 'Euro Truck Simulator 2', 'live_streams.sii'),
+      path.join(process.env.USERPROFILE, 'OneDrive', 'Documents', 'American Truck Simulator', 'live_streams.sii'),
+    ] : []),
+  ];
+
+  for (const siiPath of possiblePaths) {
+    try {
+      if (fs.existsSync(siiPath)) {
+        const content = fs.readFileSync(siiPath, 'utf-8');
+        if (content && content.includes('stream_data')) {
+          console.log(`[LiveStreams] Auto-detected live_streams.sii at: ${siiPath}`);
+          return { success: true, content, path: siiPath };
+        }
+      }
+    } catch (err) {
+      console.warn(`[LiveStreams] Could not read ${siiPath}:`, err);
+    }
+  }
+
+  return { success: false, error: 'Keine live_streams.sii Datei im Dokumente-Ordner von ETS2 oder ATS gefunden.' };
+});
+
+function fetchIcyMetadata(streamUrl: string): Promise<{ title: string | null; stationName?: string }> {
+  return new Promise((resolve) => {
+    try {
+      const urlObj = new URL(streamUrl);
+      const reqLib = urlObj.protocol === 'https:' ? https : http;
+
+      const req = reqLib.get(
+        streamUrl,
+        {
+          headers: {
+            'Icy-MetaData': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) VLC/3.0.18',
+          },
+          timeout: 4000,
+        },
+        (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            req.destroy();
+            fetchIcyMetadata(res.headers.location).then(resolve);
+            return;
+          }
+
+          const icyMetaInt = parseInt(res.headers['icy-metaint'] as string, 10);
+          const icyName = (res.headers['icy-name'] as string) || undefined;
+
+          if (!icyMetaInt || isNaN(icyMetaInt)) {
+            req.destroy();
+            resolve({ title: null, stationName: icyName });
+            return;
+          }
+
+          let bytesRead = 0;
+          let metaLength = 0;
+          let metaBuffer = Buffer.alloc(0);
+          let readingMeta = false;
+
+          res.on('data', (chunk: Buffer) => {
+            let offset = 0;
+
+            while (offset < chunk.length) {
+              if (!readingMeta) {
+                const remainingAudio = icyMetaInt - bytesRead;
+                const chunkAudio = Math.min(remainingAudio, chunk.length - offset);
+
+                bytesRead += chunkAudio;
+                offset += chunkAudio;
+
+                if (bytesRead >= icyMetaInt) {
+                  if (offset < chunk.length) {
+                    metaLength = chunk[offset] * 16;
+                    offset += 1;
+                    bytesRead = 0;
+                    if (metaLength > 0) {
+                      readingMeta = true;
+                      metaBuffer = Buffer.alloc(0);
+                    }
+                  }
+                }
+              } else {
+                const remainingMeta = metaLength - metaBuffer.length;
+                const chunkMeta = Math.min(remainingMeta, chunk.length - offset);
+
+                metaBuffer = Buffer.concat([metaBuffer, chunk.slice(offset, offset + chunkMeta)]);
+                offset += chunkMeta;
+
+                if (metaBuffer.length >= metaLength) {
+                  req.destroy();
+                  const rawMeta = metaBuffer.toString('utf-8');
+                  const match = rawMeta.match(/StreamTitle='([^']*)';/);
+                  const title = match && match[1] ? match[1].trim() : null;
+                  resolve({ title, stationName: icyName });
+                  return;
+                }
+              }
+            }
+          });
+
+          res.on('error', () => {
+            req.destroy();
+            resolve({ title: null, stationName: icyName });
+          });
+        }
+      );
+
+      req.on('error', () => {
+        req.destroy();
+        resolve({ title: null });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ title: null });
+      });
+    } catch (err) {
+      resolve({ title: null });
+    }
+  });
+}
+
+const COVER_CACHE = new Map<string, string | null>();
+
+async function fetchAlbumCover(term: string): Promise<string | null> {
+  if (!term || term.trim().length < 3) return null;
+  const cleanTerm = term.replace(/\(.*\)/g, '').replace(/\[.*\]/g, '').trim();
+  if (COVER_CACHE.has(cleanTerm)) return COVER_CACHE.get(cleanTerm)!;
+
+  return new Promise((resolve) => {
+    try {
+      const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanTerm)}&entity=song&limit=1`;
+      https.get(searchUrl, { timeout: 3500 }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data && data.results && data.results.length > 0 && data.results[0].artworkUrl100) {
+              const highRes = data.results[0].artworkUrl100.replace('100x100bb', '600x600bb');
+              COVER_CACHE.set(cleanTerm, highRes);
+              resolve(highRes);
+              return;
+            }
+          } catch (e) {}
+          COVER_CACHE.set(cleanTerm, null);
+          resolve(null);
+        });
+      }).on('error', () => {
+        COVER_CACHE.set(cleanTerm, null);
+        resolve(null);
+      });
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+ipcMain.handle('fetch-radio-metadata', async (_, streamUrl: string) => {
+  if (!streamUrl) return { title: null, cover: null };
+  const metadata = await fetchIcyMetadata(streamUrl);
+  let cover: string | null = null;
+  if (metadata.title) {
+    cover = await fetchAlbumCover(metadata.title);
+  }
+  return { ...metadata, cover };
+});
+
+ipcMain.handle('get-route', async (_, sourceX: number, sourceZ: number, destX: number, destZ: number, heading?: number) => {
+  if (!mapDataDir) {
+    return { success: false as const, error: 'No map data directory configured' };
+  }
+  const result = getRoute(sourceX, sourceZ, destX, destZ, mapDataDir, heading);
+  if (!result) {
+    return { success: false as const, error: 'No route found' };
+  }
+  return {
+    success: true as const,
+    coordinates: result.coordinates,
+    distanceMeters: result.distanceMeters,
+    durationSeconds: result.durationSeconds,
+    turnPoints: result.turnPoints,
+    segmentLanes: result.segmentLanes,
+  };
+});
 
 // Anti AFK Bot
 let afkIntervalId: NodeJS.Timeout | null = null;
@@ -2029,59 +2653,57 @@ ipcMain.on('install-plugin', async (event, gameId) => {
 });
 
 ipcMain.handle('check-app-update', async () => {
-  return new Promise((resolve) => {
-    const currentVersion = app.getVersion();
-    const repo = 'Niconoop/Open-Pipe-Club';
-    const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
-    const options = {
-      headers: {
-        'User-Agent': 'Open-Pipe-Club-App'
-      }
-    };
+  const currentVersion = app.getVersion();
 
-    https.get(apiUrl, options, (res) => {
-      let data = '';
-      if (res.statusCode !== 200) {
-        return resolve({ updateAvailable: false, error: `HTTP ${res.statusCode}` });
-      }
+  const compareVersions = (v1: string, v2: string) => {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const p1 = parts1[i] || 0;
+      const p2 = parts2[i] || 0;
+      if (p1 < p2) return -1;
+      if (p1 > p2) return 1;
+    }
+    return 0;
+  };
 
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const release = JSON.parse(data);
-          const latestVersion = release.tag_name.replace(/^v/, '');
-          const releaseNotes = release.body || '';
-
-          const compareVersions = (v1: string, v2: string) => {
-            const parts1 = v1.split('.').map(Number);
-            const parts2 = v2.split('.').map(Number);
-            for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-              const p1 = parts1[i] || 0;
-              const p2 = parts2[i] || 0;
-              if (p1 < p2) return -1;
-              if (p1 > p2) return 1;
-            }
-            return 0;
-          };
-
-          if (compareVersions(currentVersion, latestVersion) < 0) {
-            resolve({
-              updateAvailable: true,
-              currentVersion,
-              latestVersion,
-              releaseNotes
-            });
-          } else {
-            resolve({ updateAvailable: false, currentVersion, latestVersion });
-          }
-        } catch (e: any) {
-          resolve({ updateAvailable: false, error: e.message });
-        }
+  // Check Cloudflare R2 Update Endpoint (No GitHub fallback)
+  try {
+    const r2Res = await new Promise<any>((resolve) => {
+      const req = https.get('https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/latest', { headers: { 'User-Agent': 'Open-Pipe-Club-App' } }, (res) => {
+        let body = '';
+        if (res.statusCode !== 200) return resolve(null);
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch { resolve(null); }
+        });
       });
-    }).on('error', (e) => {
-      resolve({ updateAvailable: false, error: e.message });
+      req.on('error', () => resolve(null));
+      req.setTimeout(4000, () => { req.destroy(); resolve(null); });
     });
-  });
+
+    if (r2Res && (r2Res.latestVersion || r2Res.version)) {
+      const latestVersion = (r2Res.latestVersion || r2Res.version || '').replace(/^v/, '');
+      const releaseNotes = r2Res.releaseNotes || '';
+      const downloadUrl = r2Res.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
+
+      if (latestVersion && compareVersions(currentVersion, latestVersion) < 0) {
+        return {
+          updateAvailable: true,
+          currentVersion,
+          latestVersion,
+          releaseNotes,
+          downloadUrl
+        };
+      } else {
+        return { updateAvailable: false, currentVersion, latestVersion };
+      }
+    }
+    return { updateAvailable: false, currentVersion };
+  } catch (err) {
+    console.warn("Cloudflare R2 Update check failed:", err);
+    return { updateAvailable: false, currentVersion, error: String(err) };
+  }
 });
 
 function downloadAndApplyUpdate(url: string, event: any) {
@@ -2199,36 +2821,37 @@ function downloadAndApplyUpdate(url: string, event: any) {
 }
 
 ipcMain.on('install-app-update', async (event) => {
-  const repo = 'Niconoop/Open-Pipe-Club';
-  const apiUrl = `https://api.github.com/repos/${repo}/releases/latest`;
+  const apiUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/latest';
   const options = {
     headers: {
       'User-Agent': 'Open-Pipe-Club-App'
     }
   };
 
-  event.sender.send('install-update-progress', { progress: 10, status: 'Suche neueste Version...' });
+  event.sender.send('install-update-progress', { progress: 10, status: 'Suche neueste Version auf Cloudflare R2...' });
 
   https.get(apiUrl, options, (res) => {
     let data = '';
     if (res.statusCode !== 200) {
-      event.sender.send('install-update-progress', { progress: 0, status: `HTTP Fehler: ${res.statusCode}`, error: true });
+      event.sender.send('install-update-progress', { progress: 0, status: `HTTP Fehler beim R2-Abruf: ${res.statusCode}`, error: true });
       return;
     }
 
     res.on('data', chunk => data += chunk);
     res.on('end', () => {
       try {
-        const release = JSON.parse(data);
-        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe') && !a.name.includes('Setup'));
+        const manifest = JSON.parse(data);
+        const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+        let downloadUrl = isPortable ? manifest.portableUrl : manifest.downloadUrl;
 
-        if (!asset) {
-          event.sender.send('install-update-progress', { progress: 0, status: 'Keine .exe Datei im neuesten Release gefunden.', error: true });
-          return;
+        if (!downloadUrl) {
+          downloadUrl = isPortable
+            ? 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/portable.exe'
+            : 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
         }
 
-        event.sender.send('install-update-progress', { progress: 20, status: 'Starte Download...' });
-        downloadAndApplyUpdate(asset.browser_download_url, event);
+        event.sender.send('install-update-progress', { progress: 20, status: 'Starte Download von Cloudflare R2...' });
+        downloadAndApplyUpdate(downloadUrl, event);
 
       } catch (e: any) {
         event.sender.send('install-update-progress', { progress: 0, status: `Fehler: ${e.message}`, error: true });
@@ -2239,11 +2862,38 @@ ipcMain.on('install-app-update', async (event) => {
   });
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.openpipeclub.app.main');
+  }
+
+  await loadSettings(true);
+  watchSettingsFile();
+
+  const mapDataValidation = validateMapDataDir(mapDataDir);
+  if (!mapDataValidation.valid) {
+    writeToLog(`Map data directory validation failed: ${mapDataValidation.error || 'Missing files: ' + mapDataValidation.missingFiles.join(', ')}`);
+  }
+
+  if (isCarPlayMode) {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.openpipeclub.app.carplay');
+    }
+    createCarPlayWindow();
+    registerCarPlayHotkeys();
+    return;
+  }
+
   createSplashScreen();
   createWindow();
   if (isOverlayActive) {
     syncOverlayWindows();
+  }
+  if (overlaySettings && overlaySettings.showCarPlay) {
+    spawnCarPlayProcess();
+  }
+  if (!isCarPlayMode) {
+    registerCarPlayHotkeys();
   }
 })
 app.on('before-quit', async (e) => {
@@ -2284,6 +2934,19 @@ app.on('before-quit', async (e) => {
       try { smtcProcess.kill('SIGKILL'); } catch (e2) { }
     }
     smtcProcess = null;
+  }
+
+  // 3.5 Kill standalone CarPlay process if running
+  if (carplayChild) {
+    try {
+      const pid = carplayChild.pid;
+      if (pid) {
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+      }
+    } catch (err) {
+      try { carplayChild.kill('SIGKILL'); } catch (e2) { }
+    }
+    carplayChild = null;
   }
 
   // 4. Stop Discord RPC gracefully

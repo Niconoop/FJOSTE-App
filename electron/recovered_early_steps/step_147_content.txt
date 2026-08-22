@@ -1,0 +1,89 @@
+Created At: 2026-07-30T15:09:29Z
+Completed At: 2026-07-30T15:09:29Z
+File Path: `file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts`
+Total Lines: 2788
+Total Bytes: 95311
+Showing lines 2200 to 2280
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+2200: 
+2201: 
+2202: ipcMain.handle('telemetry-status', () => telemetryData);
+2203: 
+2204: ipcMain.handle('get-route', async (_, sourceX: number, sourceZ: number, destX: number, destZ: number) => {
+2205:   if (!mapDataDir) {
+2206:     return { success: false as const, error: 'No map data directory configured' };
+2207:   }
+2208:   const result = getRoute(sourceX, sourceZ, destX, destZ, mapDataDir);
+2209:   if (!result) {
+2210:     return { success: false as const, error: 'No route found' };
+2211:   }
+2212:   return {
+2213:     success: true as const,
+2214:     coordinates: result.coordinates,
+2215:     distanceMeters: result.distanceMeters,
+2216:     durationSeconds: result.durationSeconds,
+2217:   };
+2218: });
+2219: 
+2220: // Anti AFK Bot
+2221: let afkIntervalId: NodeJS.Timeout | null = null;
+2222: let afkStartTimeout: NodeJS.Timeout | null = null;
+2223: let afkConfig: {
+2224:   interval: number;
+2225:   drivingTexts: string[];
+2226:   pausedTexts: string[];
+2227:   hotkey?: string;
+2228: } = {
+2229:   interval: 60000,
+2230:   drivingTexts: [],
+2231:   pausedTexts: [],
+2232:   hotkey: "F9"
+2233: };
+2234: let isAfkRunning = false;
+2235: let lastMovementTime = Date.now();
+2236: 
+2237: function playBotSound(type: 'start' | 'stop') {
+2238:   const fileName = type === 'start' ? 'start.mp3' : 'stop.mp3';
+2239:   win?.webContents.send('play-sound', fileName);
+2240: }
+2241: 
+2242: function runAfkTask() {
+2243:   if (telemetryData && telemetryData.paused) {
+2244:     console.log("🤖 AFK-Bot: Übersprungen, da das Spiel pausiert ist.");
+2245:     return;
+2246:   }
+2247: 
+2248:   const isDriving = telemetryData &&
+2249:     telemetryData.gameVersion > 0 &&
+2250:     Math.round(telemetryData.speed || 0) > 1;
+2251: 
+2252:   if (isDriving) {
+2253:     lastMovementTime = Date.now();
+2254:   }
+2255: 
+2256:   const stationaryTimeMs = Date.now() - lastMovementTime;
+2257:   const isStationaryOver2Min = stationaryTimeMs >= 120000;
+2258: 
+2259:   let pool = isStationaryOver2Min ? afkConfig.pausedTexts : afkConfig.drivingTexts;
+2260:   if (!pool || pool.length === 0) {
+2261:     pool = isStationaryOver2Min ? afkConfig.drivingTexts : afkConfig.pausedTexts;
+2262:   }
+2263:   if (!pool || pool.length === 0) return;
+2264: 
+2265:   const text = pool[Math.floor(Math.random() * pool.length)];
+2266: 
+2267:   if (isStationaryOver2Min) {
+2268:     console.log(`🤖 AFK-Bot: Sende Inaktivitäts-Nachricht... "${text}" (Stillstand: ${Math.round(stationaryTimeMs / 1000)}s)`);
+2269:   } else {
+2270:     console.log(`🤖 AFK-Bot: Sende Aktiv-Nachricht... "${text}" (Letzte Bewegung vor ${Math.round(stationaryTimeMs / 1000)}s)`);
+2271:   }
+2272: 
+2273:   const psScript = `
+2274:  Add-Type @"
+2275:   using System;
+2276:   using System.Runtime.InteropServices;
+2277:   public class WindowHelper {
+2278:     [DllImport("user32.dll")]
+2279:     public static extern IntPtr GetForegroundWindow();
+2280:     [DllImport("user32.dll")]
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

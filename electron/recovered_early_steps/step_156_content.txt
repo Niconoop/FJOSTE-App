@@ -1,0 +1,1 @@
+I will search for `mapDataDir` in `main.ts` to see what path the application is using to find these files.

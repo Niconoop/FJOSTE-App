@@ -61,11 +61,21 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
     const usersData = await safeGet(`${API}/management/users`);
     if (usersData) setUsers(usersData);
 
-    const membersData = await safeGet(`${API}/trucky/members`);
+    const membersData = await safeGet(`${API}/members`);
     if (membersData) setDrivers(membersData?.data || membersData || []);
 
-    const rolesData = await safeGet(`${API}/trucky/roles`);
-    if (rolesData) setTruckyRoles(rolesData);
+    const defaultRoles = [
+      { id: 1, name: 'Inhaber' },
+      { id: 2, name: 'Stv. Inhaber' },
+      { id: 3, name: 'Admin' },
+      { id: 4, name: 'Management' },
+      { id: 5, name: 'Personal-Team' },
+      { id: 6, name: 'Event-Team' },
+      { id: 7, name: 'Modding-Team' },
+      { id: 8, name: 'Fahrer' },
+      { id: 9, name: 'Probefahrer' }
+    ];
+    setTruckyRoles(defaultRoles);
 
     setLoading(false);
   }, [token]);
@@ -76,9 +86,8 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
   const syncRoles = async () => {
     setSyncing(true);
     try {
-      const r = await axios.post(`${API}/management/users/sync-roles`, {}, { headers: h });
-      toast.success(`${r.data.synced} User synchronisiert`);
-      loadAll();
+      await loadAll();
+      toast.success("Rollen erfolgreich geladen");
     } catch { toast.error("Sync fehlgeschlagen"); }
     finally { setSyncing(false); }
   };
@@ -118,30 +127,30 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
     }
     setResettingPassword(true);
     try {
-      await axios.put(`${API}/management/users/${userId}/reset-password`, { new_password: newPassword }, { headers: h });
+      await axios.put(`${API}/management/users/${userId}/password`, { new_password: newPassword }, { headers: h });
       toast.success("Passwort erfolgreich zurückgesetzt");
       setResetPasswordModal(null);
       setNewPassword("");
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Fehler beim Zurücksetzen");
+      toast.error(err.response?.data?.detail || err.response?.data?.error || "Fehler beim Zurücksetzen");
     } finally {
       setResettingPassword(false);
     }
   };
 
   const toggleAdminRole = async (userId: string, currentIsAdmin: boolean) => {
-    const newRole = currentIsAdmin ? "driver" : "admin";
+    const newRole = currentIsAdmin ? "Fahrer" : "Admin";
     try {
-      await axios.put(`${API}/management/users/${userId}/role?role=${newRole}`, {}, { headers: h });
-      toast.success(`Admin-Rechte ${newRole === 'admin' ? 'erteilt' : 'entzogen'}`);
-      setRoleModal((prev: any) => ({ ...prev, is_admin: newRole === 'admin' }));
+      await axios.put(`${API}/management/users/${userId}/role?role=${encodeURIComponent(newRole)}`, {}, { headers: h });
+      toast.success(`Admin-Rechte ${newRole === 'Admin' ? 'erteilt' : 'entzogen'}`);
+      setRoleModal((prev: any) => ({ ...prev, is_admin: newRole === 'Admin', role: newRole }));
       loadAll();
     } catch { toast.error("Fehler beim Rollenwechsel"); }
   };
 
   const setTruckyRole = async (userId: string, roleName: string) => {
     try {
-      await axios.put(`${API}/management/users/${userId}/trucky-role?role=${encodeURIComponent(roleName)}`, {}, { headers: h });
+      await axios.put(`${API}/management/users/${userId}/role?role=${encodeURIComponent(roleName)}`, {}, { headers: h });
       toast.success(`Rolle zu ${roleName} geändert`);
       setRoleModal(null);
       loadAll();

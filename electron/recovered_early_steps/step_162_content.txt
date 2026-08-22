@@ -1,0 +1,1 @@
+I will view the first 100 lines of `c:\Users\Ally\Documents\Open Pipe Club\opc-app\electron\main.ts` to see the global variables and imports.

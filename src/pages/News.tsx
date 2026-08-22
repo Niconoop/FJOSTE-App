@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Newspaper, Clock, ExternalLink, Plus, X, Trash2, ImagePlus, Eye, Lock, ChevronDown, Loader2, Upload } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Newspaper, Plus, X, Trash2, Eye, Lock, ChevronDown, Loader2, Upload, Pencil } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -28,7 +29,7 @@ const formatDate = (dateStr: string) => {
   };
 };
 
-const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
+const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
   const [expanded, setExpanded] = useState(false);
   const hasFullContent = item.content && item.excerpt && item.content !== item.excerpt;
   const preview = item.excerpt || item.content;
@@ -103,9 +104,14 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
               <p className="text-xs font-bold text-white mt-1 truncate">{item.author || "Open Pipe Club"}</p>
             </div>
             {canDelete && (
-              <button onClick={() => onDelete(item.id)} className="p-2 text-zinc-700 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all shrink-0">
-                <Trash2 size={16} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => onEdit?.(item)} title="Bearbeiten" className="p-2 text-zinc-700 hover:text-amber-400 hover:bg-amber-400/10 rounded-xl transition-all shrink-0">
+                  <Pencil size={16} />
+                </button>
+                <button onClick={() => onDelete(item.id)} className="p-2 text-zinc-700 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all shrink-0">
+                  <Trash2 size={16} />
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -117,13 +123,18 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete }: any) => {
 const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: any) => {
   const { token, user, isAdmin, hasRole } = useAuth();
   const { confirm, ConfirmDialog } = useConfirmDialog();
-  const NEWS_ROLES = ["event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", "personal team", "personal-team"];
+  const NEWS_ROLES = [
+    "admin", "management", "inhaber", "projektleitung", "leitung", "leader", "co-leader",
+    "event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", 
+    "personal team", "personal-team", "media team", "media-team", "presse"
+  ];
   const canManageNews = isAdmin || hasRole(NEWS_ROLES);
   const [news, setNews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [imageUrls, setImageUrls] = useState<any>({});
   
   const [showForm, setShowForm] = useState(false);
+  const [editingNews, setEditingNews] = useState<any>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -197,6 +208,40 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
     finally { setSubmitting(false); }
   };
 
+  const openEdit = (item: any) => {
+    setEditingNews(item);
+    setTitle(item.title || "");
+    setContent(item.content || "");
+    setExcerpt(item.excerpt || "");
+    setVisibility(item.visibility || "public");
+    setImageFile(null);
+    setShowForm(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNews || !title.trim() || !content.trim()) return toast.error("Titel und Inhalt sind Pflicht");
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("title", title);
+      fd.append("content", content);
+      if (excerpt) fd.append("excerpt", excerpt);
+      fd.append("visibility", visibility);
+      if (imageFile) fd.append("image", imageFile);
+
+      await axios.put(`${API_URL}/news/${editingNews.id}`, fd, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
+      });
+      toast.success("News aktualisiert!");
+      setTitle(""); setContent(""); setExcerpt(""); setVisibility("public"); setImageFile(null);
+      setEditingNews(null);
+      setShowForm(false);
+      fetchNews();
+    } catch { toast.error("Fehler beim Aktualisieren der News"); }
+    finally { setSubmitting(false); }
+  };
+
   const handleDelete = async (id: string | number) => {
     if (!(await confirm("News wirklich löschen?"))) return;
     try {
@@ -220,88 +265,100 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
 
       {canManageNews && (
         <div className="flex items-center justify-end mb-12">
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-amber-400 text-black"}`}
-          >
-            {showForm ? <X size={16} /> : <Plus size={16} />}
-            {showForm ? "Abbrechen" : "News verfassen"}
-          </button>
+            <button
+              onClick={() => { setShowForm(!showForm); if (showForm) { setEditingNews(null); setImageFile(null); } }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-amber-400 text-black"}`}
+            >
+              {showForm ? <X size={16} /> : <Plus size={16} />}
+              {showForm ? "Abbrechen" : "News verfassen"}
+            </button>
         </div>
       )}
 
-      <AnimatePresence>
-        {showForm && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-[110] flex items-start justify-center p-6 pt-28 bg-black/90 backdrop-blur-xl overflow-y-auto"
-            onClick={() => setShowForm(false)}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }} 
-              animate={{ scale: 1, y: 0 }} 
-              exit={{ scale: 0.9, y: 20 }} 
-              transition={{ type: "spring", stiffness: 380, damping: 28 }}
-              className="frosted-card bg-zinc-950/95 w-full max-w-3xl !p-0 overflow-hidden shadow-2xl border border-white/10"
-              onClick={e => e.stopPropagation()}
+      {createPortal(
+        <AnimatePresence>
+          {showForm && (
+            <motion.div
+              key="news-create-modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[110] flex items-start justify-center p-4 sm:p-6 pt-24 sm:pt-28 bg-black/80 backdrop-blur-xl overflow-y-auto"
+              onClick={() => setShowForm(false)}
             >
-               <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-                  <div>
-                    <h2 className="font-unbounded text-xs font-bold text-white uppercase italic tracking-widest">News verfassen</h2>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 italic">News Management</p>
+              <motion.div
+                initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 15, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                className="frosted-card w-full max-w-3xl flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="relative p-5 sm:p-6 md:p-8 pb-5 sm:pb-6 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
+                      <Newspaper size={20} className="text-amber-400" />
+                    </div>
+                    <div>
+                      <h2 className="font-unbounded text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{editingNews ? "News bearbeiten" : "News verfassen"}</h2>
+                      <p className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5">Erstelle einen Beitrag für dein Team.</p>
+                    </div>
                   </div>
-                  <button onClick={() => setShowForm(false)} className="p-2 text-slate-500 hover:text-white transition-colors"><X size={20} /></button>
-               </div>
+                </div>
 
-               <form onSubmit={handleCreate} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto no-scrollbar">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm font-medium text-slate-300 ml-1 mb-2 block">Titel *</label>
-                    <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="z.B. Neues Firmen-Event" required />
+                <form onSubmit={editingNews ? handleUpdate : handleCreate} className="p-5 sm:p-6 md:p-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Titel *</label>
+                    <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="z.B. Neues Firmen-Event" required />
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm font-medium text-slate-300 ml-1 mb-2 block">Inhalt *</label>
-                    <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 min-h-[150px]" placeholder="Schreibe hier die Details..." required />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inhalt *</label>
+                    <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 min-h-[120px] sm:min-h-[150px]" placeholder="Schreibe hier die Details..." required />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300 ml-1 mb-2 block">Kurzfassung (Optional)</label>
-                    <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="Wird in der Vorschau angezeigt" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300 ml-1 mb-2 block">Sichtbarkeit</label>
-                    <div className="flex gap-2">
-                       <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-amber-400/10 border-amber-400/35 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]" : "bg-white/[0.03] border-white/10 text-slate-400"}`}><Eye size={14} /> Public</button>
-                       <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-3 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-amber-400/10 border-amber-400/35 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)]" : "bg-zinc-900/50 border-zinc-700 text-slate-400"}`}><Lock size={14} /> Intern</button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kurzfassung</label>
+                      <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="Wird in der Vorschau angezeigt" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sichtbarkeit</label>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-amber-400/10 border-amber-400/35 text-amber-400" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Eye size={14} /> Public</button>
+                        <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-amber-400/10 border-amber-400/35 text-amber-400" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Lock size={14} /> Intern</button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-sm font-medium text-slate-300 ml-1 mb-2 block">Vorschaubild (Optional)</label>
-                    <div className="relative h-40 rounded-lg border-2 border-dashed border-white/10 flex items-center justify-center group hover:border-amber-400/50 transition-all cursor-pointer overflow-hidden bg-white/[0.02]">
-                       <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                       {imageFile ? <img src={URL.createObjectURL(imageFile)} className="w-full h-full object-cover" /> : <div className="text-center text-slate-500 font-bold text-[10px] uppercase tracking-widest"><Upload className="mx-auto mb-2 opacity-50 text-slate-400" /> Bild auswählen</div>}
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vorschaubild</label>
+                    <label className="group relative flex flex-col items-center justify-center gap-2 h-28 sm:h-32 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02] overflow-hidden">
+                      <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="hidden" />
+                      {imageFile ? <img src={URL.createObjectURL(imageFile)} className="absolute inset-0 w-full h-full object-cover" /> : (editingNews?.image_id ? <img src={`${API_URL}/news/${editingNews.image_id}/image`} className="absolute inset-0 w-full h-full object-cover" /> : <><Upload size={20} className="text-slate-500 group-hover:text-amber-400/70 transition-colors" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bild auswählen</span></>)}
+                      <div className="relative z-10 flex items-center justify-center">
+                      </div>
+                    </label>
                   </div>
 
-                  <div className="md:col-span-2 pt-4">
-                    <motion.button 
-                      whileHover={{ scale: 1.02 }}
+                  <div className="pt-2">
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
-                      disabled={submitting} 
-                      className="w-full bg-gradient-to-r from-amber-500 to-amber-400 text-black h-12 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                      disabled={submitting}
+                      className="w-full bg-gradient-to-r from-amber-500 to-amber-400 text-black h-12 rounded-xl font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
                     >
-                       {submitting ? <Loader2 className="animate-spin" size={18} /> : "News Veröffentlichen"}
+                      {submitting ? <><Loader2 className="animate-spin" size={18} /> {editingNews ? "Speichere..." : "Veröffentlichen..."}</> : (editingNews ? "Änderungen speichern" : "News Veröffentlichen")}
                     </motion.button>
                   </div>
-               </form>
+                </form>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+        , document.body
+       )}
 
       <div>
         <div className="flex items-center gap-3 mb-6">
@@ -311,8 +368,8 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
           </h2>
         </div>
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1,2,3].map(i => <div key={i} className="h-80 bg-[#0b0b0c] border border-zinc-900 rounded-2xl animate-pulse" />)}
+          <div className="flex justify-center py-20">
+            <Loader2 className="animate-spin text-amber-400" size={32} />
           </div>
         ) : news.length === 0 ? (
           <div className="text-center py-16 frosted-card border-dashed border-zinc-800">
@@ -333,6 +390,7 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
                 imageUrl={item.image_id ? imageUrls[item.image_id] : null}
                 canDelete={canManageNews}
                 onDelete={handleDelete}
+                onEdit={openEdit}
               />
             ))}
           </motion.div>
@@ -344,4 +402,3 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
 };
 
 export default News;
-

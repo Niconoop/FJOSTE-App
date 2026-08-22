@@ -1,0 +1,1 @@
+I will adjust the recovery script to search specifically in steps earlier than 170 (from the previous session) to retrieve the original CarPlay window setup code.

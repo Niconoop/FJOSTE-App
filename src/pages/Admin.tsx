@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Key, Inbox, BarChart3, Globe, Server } from 'lucide-react';
+import { Users, Key, Inbox, BarChart3, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import Applications from './Applications';
@@ -7,7 +7,6 @@ import Reports from './Reports';
 import UsersManagement from './UsersManagement';
 import InviteCodes from './InviteCodes';
 import VtcSettings from './VtcSettings';
-import SystemTools from './SystemTools';
 
 const containerVariants = {
   hidden: {},
@@ -32,7 +31,7 @@ const itemVariants = {
   }
 };
 
-const Admin = ({ onViewProfile, onNavigate }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void }) => {
+const Admin = ({ onViewProfile }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void }) => {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState("users");
 
@@ -42,7 +41,6 @@ const Admin = ({ onViewProfile, onNavigate }: { onViewProfile: (id: string | num
     { key: "applications", label: "Bewerbungen", icon: Inbox },
     ...(isAdmin ? [{ key: "reports", label: "Berichte", icon: BarChart3 }] : []),
     ...(isAdmin ? [{ key: "vtc", label: "VTC Einstellungen", icon: Globe }] : []),
-    ...(isAdmin ? [{ key: "system", label: "System-Tools", icon: Server }] : []),
   ];
 
   return (
@@ -85,7 +83,6 @@ const Admin = ({ onViewProfile, onNavigate }: { onViewProfile: (id: string | num
           {tab === "vtc" && <VtcSettings />}
           {tab === "applications" && <Applications />}
           {tab === "reports" && <Reports />}
-          {tab === "system" && <SystemTools onNavigate={onNavigate} />}
         </motion.div>
       </AnimatePresence>
     </motion.div>

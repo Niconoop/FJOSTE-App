@@ -1,0 +1,176 @@
+Created At: 2026-07-30T14:26:33Z
+Completed At: 2026-07-30T14:26:33Z
+
+				The command completed successfully.
+				Output:
+				<truncated 35 lines>
+	modified:   ../frontend/src/index.css
+	modified:   ../frontend/src/pages/ApplyPage.js
+	modified:   ../frontend/src/pages/DriverPage.js
+	modified:   ../frontend/src/pages/EventsPage.js
+	modified:   ../frontend/src/pages/GalleryPage.js
+	modified:   ../frontend/src/pages/LandingPage.js
+	modified:   ../frontend/src/pages/NewsPage.js
+	deleted:    ../frontend/src/pages/StatsPage.js
+	modified:   ../frontend/src/pages/TeamPage.js
+	modified:   ../frontend/tailwind.config.js
+
+Changes not staged for commit:
+  (use "git add/rm <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   ../CHANGELOG.md
+	modified:   ../app_github_upload.bat
+	deleted:    ../fjoste-app/.gitignore
+	deleted:    ../fjoste-app/README.md
+	deleted:    ../fjoste-app/app_run_stderr.txt
+	deleted:    ../fjoste-app/app_run_stdout.txt
+	deleted:    ../fjoste-app/electron/main.ts
+	deleted:    ../fjoste-app/electron/preload.ts
+	deleted:    ../fjoste-app/eslint.config.js
+	deleted:    ../fjoste-app/index.html
+	deleted:    ../fjoste-app/package-lock.json
+	deleted:    ../fjoste-app/package.json
+	deleted:    ../fjoste-app/public/ets2_cities.json
+	deleted:    ../fjoste-app/public/ets2_style.json
+	deleted:    ../fjoste-app/public/favicon.svg
+	deleted:    ../fjoste-app/public/icons.svg
+	deleted:    ../fjoste-app/public/logo.png
+	deleted:    ../fjoste-app/public/sounds/start.mp3
+	deleted:    ../fjoste-app/public/sounds/stop.mp3
+	deleted:    ../fjoste-app/scratch/index_css_backup.css
+	deleted:    ../fjoste-app/scratch/index_css_backup_utf8.css
+	deleted:    ../fjoste-app/scratch/overlay-debug.txt
+	deleted:    ../fjoste-app/scratch/replace_css.js
+	deleted:    ../fjoste-app/scratch/smtc_test.ps1
+	deleted:    ../fjoste-app/scratch/smtc_thumb_test.ps1
+	deleted:    ../fjoste-app/scratch/test_foreground.ps1
+	deleted:    ../fjoste-app/scratch/test_pipes.js
+	deleted:    ../fjoste-app/scratch/test_plugin.zip
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Demo/Newtonsoft.Json.dll
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Demo/Newtonsoft.Json.xml
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Demo/SCSSdkClient.Demo.exe
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Demo/SCSSdkClient.dll
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Win32/scs-telemetry.dll
+	deleted:    ../fjoste-app/scratch/test_plugin_ext/release_v_1_12_1/Win64/scs-telemetry.dll
+	deleted:    ../fjoste-app/scratch/test_rpc.js
+	deleted:    ../fjoste-app/scratch/test_telemetry.ps1
+	deleted:    ../fjoste-app/src/App.tsx
+	deleted:    ../fjoste-app/src/components/AnimatedBackground.tsx
+	deleted:    ../fjoste-app/src/components/GameMapWidget.tsx
+	deleted:    ../fjoste-app/src/components/SpotifyWidget.tsx
+	deleted:    ../fjoste-app/src/config.ts
+	deleted:    ../fjoste-app/src/context/AuthContext.tsx
+	deleted:    ../fjoste-app/src/data/ets2Cities.ts
+	deleted:    ../fjoste-app/src/hooks/useConfirmDialog.tsx
+	deleted:    ../fjoste-app/src/index.css
+	deleted:    ../fjoste-app/src/main.tsx
+	deleted:    ../fjoste-app/src/pages/Admin.tsx
+	deleted:    ../fjoste-app/src/pages/AfkBot.tsx
+	deleted:    ../fjoste-app/src/pages/Applications.tsx
+	deleted:    ../fjoste-app/src/pages/Chat.tsx
+	deleted:    ../fjoste-app/src/pages/Dashboard.tsx
+	deleted:    ../fjoste-app/src/pages/Database.tsx
+	deleted:    ../fjoste-app/src/pages/Events.tsx
+	deleted:    ../fjoste-app/src/pages/Gallery.tsx
+	deleted:    ../fjoste-app/src/pages/Login.tsx
+	deleted:    ../fjoste-app/src/pages/Map.tsx
+	deleted:    ../fjoste-app/src/pages/News.tsx
+	deleted:    ../fjoste-app/src/pages/Overlay.tsx
+	deleted:    ../fjoste-app/src/pages/OverlaySettings.tsx
+	deleted:    ../fjoste-app/src/pages/Profile.tsx
+	deleted:    ../fjoste-app/src/pages/Register.tsx
+	deleted:    ../fjoste-app/src/pages/Reports.tsx
+	deleted:    ../fjoste-app/src/pages/Stats.tsx
+	deleted:    ../fjoste-app/src/pages/Team.tsx
+	deleted:    ../fjoste-app/src/services/api.ts
+	deleted:    ../fjoste-app/tsconfig.app.json
+	deleted:    ../fjoste-app/tsconfig.json
+	deleted:    ../fjoste-app/tsconfig.node.json
+	deleted:    ../fjoste-app/upload_release.ps1
+	deleted:    ../fjoste-app/vite.config.ts
+	deleted:    ../frontend/public/favicon.png
+	deleted:    ../frontend/public/images/apply.png
+	deleted:    ../frontend/public/images/driver.png
+	deleted:    ../frontend/public/images/events.png
+	deleted:    ../frontend/public/images/gallery.png
+	deleted:    ../frontend/public/images/home.png
+	deleted:    ../frontend/public/images/news.png
+	deleted:    ../frontend/public/images/team.png
+	modified:   ../frontend/public/logo.png
+	modified:   ../frontend/src/App.css
+	modified:   ../frontend/src/App.js
+	modified:   ../frontend/src/assets/logo.png
+	modified:   ../frontend/src/components/AnimatedBackground.js
+	modified:   ../frontend/src/components/Footer.js
+	modified:   ../frontend/src/components/Navbar.js
+	modified:   ../frontend/src/components/ui/avatar.jsx
+	modified:   ../frontend/src/components/ui/card.jsx
+	modified:   ../frontend/src/drivershub/AuthContext.js
+	modified:   ../frontend/src/drivershub/cityCoords.js
+	modified:   ../frontend/src/drivershub/components/DriverLink.js
+	modified:   ../frontend/src/drivershub/components/ManagementLayout.js
+	modified:   ../frontend/src/drivershub/components/ManagementNav.js
+	modified:   ../frontend/src/drivershub/components/NotificationBell.js
+	modified:   ../frontend/src/drivershub/pages/MgmtAdminPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtApplicationsPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtChatPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtDatabasePage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtEventsPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtGalleryPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtHomePage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtLoginPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtMapPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtNewsPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtProfilePage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtRegisterPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtReportsPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtStatsPage.js
+	modified:   ../frontend/src/drivershub/pages/MgmtTeamPage.js
+	modified:   ../frontend/src/index.css
+	modified:   ../frontend/src/pages/ApplyPage.js
+	modified:   ../frontend/src/pages/DriverPage.js
+	modified:   ../frontend/src/pages/EventsPage.js
+	modified:   ../frontend/src/pages/GalleryPage.js
+	modified:   ../frontend/src/pages/LandingPage.js
+	modified:   ../frontend/src/pages/NewsPage.js
+	modified:   ../frontend/src/pages/TeamPage.js
+	modified:   ../frontend/tailwind.config.js
+	modified:   ../package-lock.json
+	modified:   ../server.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	../.kilo/
+	../frontend/public/ets2_cities.json
+	../frontend/public/images/apply.webp
+	../frontend/public/images/driver.webp
+	../frontend/public/images/events.webp
+	../frontend/public/images/gallery.webp
+	../frontend/public/images/home.webp
+	../frontend/public/images/news.webp
+	../frontend/public/images/team.webp
+	../frontend/src/data/
+	../frontend/src/drivershub/components/AnimatedBackground.js
+	../frontend/src/drivershub/pages/MgmtInviteCodesPage.js
+	../frontend/src/drivershub/pages/MgmtSystemToolsPage.js
+	../frontend/src/drivershub/pages/MgmtUsersPage.js
+	../frontend/src/drivershub/pages/MgmtVtcSettingsPage.js
+	../frontend/src/pages/EventDetailPage.js
+	../frontend/src/pages/JobDetailPage.js
+	../implementation_plan.md
+	../opc-app/
+	../scratch/check_backend_traffic.py
+	../scratch/clean_map.py
+	../scratch/copy_cities.py
+	../scratch/inspect_cities.py
+	../scratch/inspect_traffic.py
+	../scratch/inspect_traffic_fields.py
+	../scratch/inspect_traffic_speed.py
+	../scratch/inspect_trucky_jobs.py
+	../scratch/inspect_trucky_member.py
+	../scratch/seed_channels.py
+	../scratch/test_permissions.py
+	../scratch/test_traffic.py
+	../tools/optimize_images.py
+
+

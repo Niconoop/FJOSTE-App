@@ -159,21 +159,39 @@ function App() {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const checkServer = async () => {
+      const endpoints = [
+        `${API_URL}/health`,
+        `${API_BASE_URL}/api/health`,
+        `https://open-pipe-club-backend.nicohertling09.workers.dev/api/health`
+      ];
+
       try {
-        // Check the actual API base URL instead of hardcoded localhost
-        await fetch(API_BASE_URL, { mode: 'no-cors', cache: 'no-cache' });
-        setServerOnline(true);
+        await Promise.any(
+          endpoints.map(url =>
+            axios.get(url, { timeout: 3500 }).then(res => {
+              if (res.status >= 200 && res.status < 400) return true;
+              throw new Error("Health status non-2xx");
+            })
+          )
+        );
+        if (isMounted) setServerOnline(true);
       } catch (err) {
-        setServerOnline(false);
+        if (isMounted) setServerOnline(false);
       }
     };
+
     checkServer();
     const interval = setInterval(checkServer, 20000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  useEffect(() => {
+   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
     try {
       const { ipcRenderer } = window.require('electron');
       if (ipcRenderer) {
@@ -209,7 +227,64 @@ function App() {
         const overlayListener = (_: any, status: boolean) => setIsOverlayOpen(status);
         ipcRenderer.on('overlay-status-changed', overlayListener);
 
-        // Real-time Job Notifications
+        timers.push(setTimeout(() => {
+          try {
+            const savedHotkey = localStorage.getItem('afk_hotkey') || 'F9';
+            const savedInterval = localStorage.getItem('afk_interval') || '60';
+            let drivingTextsList = ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
+            const savedDriving = localStorage.getItem('afk_driving_texts');
+            if (savedDriving) {
+              try { drivingTextsList = JSON.parse(savedDriving); } catch (e) { }
+            } else {
+              const single = localStorage.getItem('afk_driving_text');
+              if (single) drivingTextsList = [single];
+            }
+            let pausedTextsList = ['Bin kurz AFK', 'Pause...', '/fix'];
+            const savedPaused = localStorage.getItem('afk_paused_texts');
+            if (savedPaused) {
+              try { pausedTextsList = JSON.parse(savedPaused); } catch (e) { }
+            } else {
+              const single = localStorage.getItem('afk_paused_text');
+              if (single) pausedTextsList = [single];
+            }
+            ipcRenderer.send('afk-configure', {
+              interval: Number(savedInterval) * 1000,
+              drivingTexts: drivingTextsList,
+              pausedTexts: pausedTextsList,
+              hotkey: savedHotkey
+            });
+          } catch (e) { }
+        }, 0));
+
+        timers.push(setTimeout(() => {
+          const checkPlugins = async () => {
+            try {
+              const status = await ipcRenderer.invoke('check-plugin-status');
+              setPluginStatus(status);
+              const missing = status.some((s: any) => !s.installed);
+              const ignored = localStorage.getItem('ignore_plugin_warning') === 'true';
+              if (missing && !ignored) {
+                setShowPluginPopup(true);
+              }
+            } catch (e) { }
+          };
+          checkPlugins();
+        }, 300));
+
+        timers.push(setTimeout(() => {
+          const checkAppUpdate = async () => {
+            try {
+              const updateInfo = await ipcRenderer.invoke('check-app-update');
+              if (updateInfo && updateInfo.updateAvailable) {
+                setUpdateVersion(updateInfo.latestVersion);
+                setUpdateNotes(updateInfo.releaseNotes);
+                setShowUpdatePopup(true);
+              }
+            } catch (e) { }
+          };
+          checkAppUpdate();
+        }, 500));
+
         const jobEventListener = (_: any, event: any) => {
           console.log("App: Notification erhalten", event);
           let title = '';
@@ -233,7 +308,6 @@ function App() {
             read: false
           };
 
-          // Trigger visual toast notifications
           if (event.type === 'system') {
             toast(event.title || 'System-Meldung', {
               description: event.content || '',
@@ -263,7 +337,6 @@ function App() {
 
           if (event.type !== 'system' && event.type !== 'chat' && event.type !== 'chat_group') {
             setNotifications(prev => [newNotif, ...prev]);
-            // Play sound for real-time notifications
             const audio = new Audio('sounds/start.mp3');
             audio.volume = 0.15;
             audio.play().catch(() => { });
@@ -274,9 +347,8 @@ function App() {
         const soundListener = (_: any, soundFile: string) => {
           const soundEnabled = localStorage.getItem('afk_sound_enabled') !== 'false';
           if (!soundEnabled) return;
-
           const audio = new Audio(`sounds/${soundFile}`);
-          audio.volume = 0.3; // Leiser machen
+          audio.volume = 0.3;
           audio.play().catch(err => console.error('Audio play error:', err));
         };
         ipcRenderer.on('play-sound', soundListener);
@@ -287,66 +359,8 @@ function App() {
           audio.play().catch(() => { });
         };
 
-        // Initial AFK Bot Config Sync
-        const savedHotkey = localStorage.getItem('afk_hotkey') || 'F9';
-        const savedInterval = localStorage.getItem('afk_interval') || '60';
-
-        let drivingTextsList = ['Fahre...', 'Auf Achse!', 'Immer weiter...'];
-        const savedDriving = localStorage.getItem('afk_driving_texts');
-        if (savedDriving) {
-          try { drivingTextsList = JSON.parse(savedDriving); } catch (e) { }
-        } else {
-          const single = localStorage.getItem('afk_driving_text');
-          if (single) drivingTextsList = [single];
-        }
-
-        let pausedTextsList = ['Bin kurz AFK', 'Pause...', '/fix'];
-        const savedPaused = localStorage.getItem('afk_paused_texts');
-        if (savedPaused) {
-          try { pausedTextsList = JSON.parse(savedPaused); } catch (e) { }
-        } else {
-          const single = localStorage.getItem('afk_paused_text');
-          if (single) pausedTextsList = [single];
-        }
-
-        try {
-          ipcRenderer.send('afk-configure', {
-            interval: Number(savedInterval) * 1000,
-            drivingTexts: drivingTextsList,
-            pausedTexts: pausedTextsList,
-            hotkey: savedHotkey
-          });
-        } catch (e) { }
-
-        // Check Plugin Status
-        const checkPlugins = async () => {
-          try {
-            const status = await ipcRenderer.invoke('check-plugin-status');
-            setPluginStatus(status);
-
-            const missing = status.some((s: any) => !s.installed);
-            const ignored = localStorage.getItem('ignore_plugin_warning') === 'true';
-
-            if (missing && !ignored) {
-              setShowPluginPopup(true);
-            }
-          } catch (e) { }
-        };
-        checkPlugins();
-
-        const checkAppUpdate = async () => {
-          try {
-            const updateInfo = await ipcRenderer.invoke('check-app-update');
-            if (updateInfo && updateInfo.updateAvailable) {
-              setUpdateVersion(updateInfo.latestVersion);
-              setUpdateNotes(updateInfo.releaseNotes);
-              setShowUpdatePopup(true);
-            }
-          } catch (e) { }
-        };
-        checkAppUpdate();
-
         return () => {
+          timers.forEach(clearTimeout);
           ipcRenderer.removeListener('rpc-status-changed', listener);
           ipcRenderer.removeListener('rpc-error', rpcErrorListener);
           ipcRenderer.removeListener('telemetry-update', teleListener);
@@ -682,10 +696,6 @@ function App() {
           {/* Combined Status Pill */}
           <div className="hidden sm:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
             <div className="flex flex-row gap-2 border-r border-white/10 pr-3">
-              <div className="flex items-center gap-1.5" title={serverOnline ? "Server Online" : "Server Offline"}>
-                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${serverOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
-                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">API</span>
-              </div>
               <div className="flex items-center gap-1.5" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
                 <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">RPC</span>
@@ -725,7 +735,7 @@ function App() {
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 380, damping: 28 }}
                   className="fixed w-80 frosted-card !rounded-2xl !p-0 shadow-[0_40px_100px_rgba(0,0,0,0.9)] z-[100] overflow-hidden"
-                  style={{ top: notifPos.top, right: notifPos.right, border: "2px solid rgba(245,158,11,0.2) !important" }}
+                  style={{ top: notifPos.top, right: notifPos.right, border: "2px solid rgba(245,158,11,0.2) !important", background: "rgba(13,15,23,0.48) !important", backdropFilter: "blur(30px) saturate(210%) contrast(105%) !important", WebkitBackdropFilter: "blur(30px) saturate(210%) contrast(105%) !important" }}
                 >
                   <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                     <div className="flex items-center gap-2">
@@ -748,11 +758,11 @@ function App() {
                           onClick={() => handleNotificationClick(n)}
                           className={`p-4 transition-all hover:bg-white/[0.04] cursor-pointer group/notif ${!n.read ? 'bg-primary/[0.03]' : 'opacity-60'}`}
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <p className={`text-[11px] font-black uppercase tracking-tight group-hover/notif:text-primary transition-colors ${!n.read ? 'text-primary' : 'text-slate-300'}`}>{n.title}</p>
-                            <span className="text-[9px] font-bold text-slate-400">{n.time}</span>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <p className={`text-[11px] font-black uppercase tracking-tight break-words leading-snug group-hover/notif:text-primary transition-colors ${!n.read ? 'text-primary' : 'text-slate-300'}`}>{n.title}</p>
+                            <span className="text-[9px] font-bold text-slate-400 shrink-0 whitespace-nowrap mt-0.5">{n.time}</span>
                           </div>
-                          <p className={`text-[11px] font-medium leading-relaxed ${!n.read ? 'text-slate-300' : 'text-slate-400'}`}>{n.content}</p>
+                          <p className={`text-[11px] font-medium leading-relaxed break-words ${!n.read ? 'text-slate-300' : 'text-slate-400'}`}>{n.content}</p>
                         </div>
                       ))
                     )}

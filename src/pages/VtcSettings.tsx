@@ -41,17 +41,20 @@ const VtcSettings = () => {
       catch { return null; }
     };
     (async () => {
-      const appData = await safeGet(`${API}/settings/applications`);
-      if (appData) setApplicationsOpen(appData.open);
-      const vtcData = await safeGet(`${API}/management/vtc-settings`);
-      if (vtcData) setVtcSettings((prev: any) => ({ ...prev, ...vtcData }));
+      const vtcData = await safeGet(`${API}/settings`);
+      if (vtcData) {
+        setVtcSettings((prev: any) => ({ ...prev, ...vtcData }));
+        if (typeof vtcData.applications_open === 'boolean') {
+          setApplicationsOpen(vtcData.applications_open);
+        }
+      }
     })();
   }, [token]);
 
   const saveVtcSettings = async () => {
     setSavingVtc(true);
     try {
-      await axios.put(`${API}/management/vtc-settings`, vtcSettings, { headers: h });
+      await axios.put(`${API}/settings`, vtcSettings, { headers: h });
       toast.success("VTC Einstellungen gespeichert");
     } catch { toast.error("Fehler beim Speichern"); }
     finally { setSavingVtc(false); }
@@ -60,10 +63,10 @@ const VtcSettings = () => {
   const syncFromTrucky = async () => {
     setSyncingTrucky(true);
     try {
-      const r = await axios.post(`${API}/management/vtc-settings/sync-trucky`, {}, { headers: h });
-      setVtcSettings((prev: any) => ({ ...prev, ...r.data }));
-      toast.success("Daten erfolgreich von Trucky geladen!");
-    } catch { toast.error("Fehler beim Laden der Trucky-Daten"); }
+      const r = await axios.get(`${API}/settings`, { headers: h });
+      if (r.data) setVtcSettings((prev: any) => ({ ...prev, ...r.data }));
+      toast.success("Einstellungen neu geladen!");
+    } catch { toast.error("Fehler beim Laden der Einstellungen"); }
     finally { setSyncingTrucky(false); }
   };
 
@@ -101,7 +104,7 @@ const VtcSettings = () => {
               const next = !vtcSettings.use_trucky_stats;
               setVtcSettings({ ...vtcSettings, use_trucky_stats: next });
               try {
-                await axios.put(`${API}/management/vtc-settings`, { ...vtcSettings, use_trucky_stats: next }, { headers: h });
+                await axios.put(`${API}/settings`, { ...vtcSettings, use_trucky_stats: next }, { headers: h });
                 toast.success("Statistik-Modus geändert");
               } catch { toast.error("Fehler beim Speichern"); }
             }}

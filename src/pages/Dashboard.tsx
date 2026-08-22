@@ -6,6 +6,7 @@ import {
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
+import { getCachedData, setCachedData } from '../utils/cache';
 
 interface KpiProps {
   icon: any;
@@ -49,14 +50,14 @@ const staggerChild = {
 
 const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void; onNewsCreate?: () => void; telemetry?: any }) => {
   const { user, isAdmin, hasRole } = useAuth();
-  const [stats, setStats] = useState<any>(null);
-  const [dashboard, setDashboard] = useState<any>(null);
-  const [events, setEvents] = useState<any[]>([]);
-  const [news, setNews] = useState<any[]>([]);
-  const [recentJobs, setRecentJobs] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(() => getCachedData('dashboard_stats'));
+  const [dashboard, setDashboard] = useState<any>(() => getCachedData('dashboard_main'));
+  const [events, setEvents] = useState<any[]>(() => getCachedData('dashboard_events') || []);
+  const [news, setNews] = useState<any[]>(() => getCachedData('dashboard_news') || []);
+  const [recentJobs, setRecentJobs] = useState<any[]>(() => getCachedData('dashboard_jobs') || []);
   const [personalDriver, setPersonalDriver] = useState<any>(null);
   const [applications, setApplications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getCachedData('dashboard_stats'));
   const [truckersmpSession, setTruckersmpSession] = useState<any>(null);
 
   useEffect(() => {
@@ -78,44 +79,75 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
     setLoading(true);
     const isHR = isAdmin || (hasRole && hasRole(["hr team", "hr-team", "personal team", "personal-team"]));
     const targetId = user?.user_id || user?.id;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-    Promise.allSettled([
-      apiService.getStats().then(r => setStats(r.data)),
-      apiService.getDashboard().then(r => {
-        const data = r.data;
-        const members = data?.member_chart || [];
-        const totalRevenue = members.reduce((s: number, m: any) => s + (m.revenue || 0), 0);
-        const totalKm = members.reduce((s: number, m: any) => s + (m.distance_km || 0), 0);
-        const totalJobs = members.reduce((s: number, m: any) => s + (m.jobs_count || 0), 0);
-        setDashboard({ ...data, totalRevenue, totalKm, totalJobs });
-      }),
-      Promise.all([
-        apiService.getEvents().catch(() => ({ data: [] })),
-        apiService.getCustomEvents().catch(() => ({ data: [] }))
-      ]).then(([res1, res2]) => {
-        const all = [
-          ...(Array.isArray(res1.data) ? res1.data : []),
-          ...(Array.isArray(res2.data) ? res2.data : [])
-        ];
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const sorted = all
-          .filter(e => e.start_date && new Date(e.start_date) >= startOfToday)
-          .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-        setEvents(sorted.slice(0, 4));
-      }),
-      apiService.getRecentJobs().then(r => {
-        setRecentJobs(Array.isArray(r.data) ? r.data : []);
-      }),
-      apiService.getNews().then(r => {
-        const data = Array.isArray(r.data) ? r.data : [];
-        setNews(data.slice(0, 1));
-      }),
-      targetId ? apiService.getMember(targetId).then(r => setPersonalDriver(r.data)) : Promise.resolve(),
-      isHR ? apiService.getApplications().then(r => setApplications(r.data)) : Promise.resolve()
-    ]).finally(() => {
-      setLoading(false);
-    });
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const runCritical = () => {
+      return Promise.allSettled([
+        apiService.getStats().then(r => {
+          setStats(r.data);
+          setCachedData('dashboard_stats', r.data);
+        }),
+        apiService.getDashboard().then(r => {
+          const data = r.data;
+          const members = data?.member_chart || [];
+          const totalRevenue = members.reduce((s: number, m: any) => s + (m.revenue || 0), 0);
+          const totalKm = members.reduce((s: number, m: any) => s + (m.distance_km || 0), 0);
+          const totalJobs = members.reduce((s: number, m: any) => s + (m.jobs_count || 0), 0);
+          const dashObj = { ...data, totalRevenue, totalKm, totalJobs };
+          setDashboard(dashObj);
+          setCachedData('dashboard_main', dashObj);
+        }),
+      ]);
+    };
+
+    const runSecondary = () => {
+      return Promise.all([
+        Promise.all([
+          apiService.getEvents().catch(() => ({ data: [] })),
+          apiService.getCustomEvents().catch(() => ({ data: [] }))
+        ]).then(([res1, res2]) => {
+          const all = [
+            ...(Array.isArray(res1.data) ? res1.data : []),
+            ...(Array.isArray(res2.data) ? res2.data : [])
+          ];
+          const sorted = all
+            .filter((e: any) => e.start_date && new Date(e.start_date).getTime() >= startOfToday.getTime())
+            .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+          const sliceEvents = sorted.slice(0, 4);
+          setEvents(sliceEvents);
+          setCachedData('dashboard_events', sliceEvents);
+        }),
+        apiService.getRecentJobs().then(r => {
+          const jobsData = Array.isArray(r.data) ? r.data : [];
+          setRecentJobs(jobsData);
+          setCachedData('dashboard_jobs', jobsData);
+        }),
+        apiService.getNews().then(r => {
+          const data = Array.isArray(r.data) ? r.data : [];
+          const sliceNews = data.slice(0, 1);
+          setNews(sliceNews);
+          setCachedData('dashboard_news', sliceNews);
+        }),
+        targetId ? apiService.getMember(targetId).then(r => setPersonalDriver(r.data)) : Promise.resolve(),
+        isHR ? apiService.getApplications().then(r => setApplications(r.data)) : Promise.resolve()
+      ]);
+    };
+
+    Promise.allSettled([runCritical()])
+      .then(() => {
+        return new Promise<void>(resolve => {
+          const timer = setTimeout(() => {
+            runSecondary().then(resolve);
+          }, 200);
+          timers.push(timer);
+        });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [user, isAdmin, hasRole]);
 
   const getGreeting = () => {
@@ -166,7 +198,7 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
 
   const isHR = isAdmin || (hasRole && hasRole(["hr team", "hr-team", "personal team", "personal-team"]));
   const isEvent = isAdmin || (hasRole && hasRole(["event team", "event-team"]));
-  const NEWS_ROLES = ["event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", "personal team", "personal-team"];
+  const NEWS_ROLES = ["admin", "management", "inhaber", "projektleitung", "leitung", "leader", "co-leader", "event team", "event-team", "modding team", "modding-team", "hr team", "hr-team", "personal team", "personal-team", "media team", "media-team", "presse"];
   const canManageNews = isAdmin || (hasRole && hasRole(NEWS_ROLES));
 
   return (
@@ -408,14 +440,14 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                               <div className="w-2 h-2 rounded-full bg-slate-500 mr-3"></div>
                               <div>
                                 <p className="text-slate-500 uppercase font-semibold text-[10px]">Abfahrt</p>
-                                <p className="text-white font-bold">{e.start_location || 'TBA'}</p>
+                                <p className="text-white font-bold">{e.start_city || 'TBA'}</p>
                               </div>
                             </div>
                             <div className="flex items-center">
                               <div className="w-2 h-2 rounded-full bg-amber-400 mr-3"></div>
                               <div>
                                 <p className="text-slate-500 uppercase font-semibold text-[10px]">Ziel</p>
-                                <p className="text-white font-bold">{e.end_location || 'TBA'}</p>
+                                <p className="text-white font-bold">{e.end_city || 'TBA'}</p>
                               </div>
                             </div>
                           </div>

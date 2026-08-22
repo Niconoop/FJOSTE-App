@@ -71,10 +71,10 @@ export function useConfirmDialog() {
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
               transition={{ type: "spring", stiffness: 400, damping: 28 }}
-              className={`frosted-card w-full max-w-sm !p-0 overflow-hidden shadow-2xl ${
+              className={`bg-[#0a0c16]/95 backdrop-blur-2xl rounded-[32px] w-full max-w-sm !p-0 overflow-hidden shadow-2xl border-2 ${
                 mode === "confirm"
-                  ? "!border-red-500/20"
-                  : "!border-primary/20"
+                  ? "border-red-500/30"
+                  : "border-amber-500/30"
               }`}
               onClick={(e) => e.stopPropagation()}
             >

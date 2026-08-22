@@ -17,24 +17,24 @@ api.interceptors.request.use(config => {
 
 export const apiService = {
   // Stats & Dashboard
-  getStats: () => api.get('/trucky/stats'),
-  getDashboard: () => api.get('/trucky/dashboard'),
-  getRecentJobs: () => api.get('/trucky/recent-jobs'),
-  getLiveMap: () => api.get('/trucky/live-map'),
+  getStats: () => api.get('/stats/global'),
+  getDashboard: () => api.get('/stats/global'),
+  getRecentJobs: () => api.get('/desktop/jobs'),
+  getLiveMap: () => api.get('/live-map'),
 
   // Team & Members
-  getTeam: () => api.get('/trucky/members'),
-  getMember: (id: string) => api.get(`/trucky/member/${id}`),
+  getTeam: () => api.get('/members'),
+  getMember: (id: string) => api.get(`/members/${id}`),
 
   // Events
-  getEvents: () => api.get('/trucky/events'),
-  getCustomEvents: (headers?: any) => api.get('/events/custom', { headers }),
+  getEvents: () => api.get('/events'),
+  getCustomEvents: (headers?: any) => api.get('/events', { headers }),
   getEventRsvps: (headers?: any) => api.get('/events/rsvps', { headers }),
   joinEvent: (eventKey: string, headers?: any) => api.post(`/events/${eventKey}/rsvp`, {}, { headers }),
   leaveEvent: (eventKey: string, headers?: any) => api.delete(`/events/${eventKey}/rsvp`, { headers }),
-  createEvent: (data: any, headers?: any) => api.post('/events/custom', data, { headers }),
-  updateEvent: (id: string, data: any, headers?: any) => api.put(`/events/custom/${id}`, data, { headers }),
-  deleteEvent: (id: string, headers?: any) => api.delete(`/events/custom/${id}`, { headers }),
+  createEvent: (data: any, headers?: any) => api.post('/events', data, { headers }),
+  updateEvent: (id: string, data: any, headers?: any) => api.put(`/events/${id}`, data, { headers }),
+  deleteEvent: (id: string, headers?: any) => api.delete(`/events/${id}`, { headers }),
   uploadEventImage: (id: string, file: File, type: string, headers?: any) => {
     const formData = new FormData();
     formData.append('file', file);

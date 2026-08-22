@@ -51,17 +51,22 @@ const Stats = () => {
       const dash = dRes.data;
       const teamData = tRes.data?.data || tRes.data || [];
 
-      // Use mergedStats for consistent data parity with the server source of truth
-      const enriched = (dash?.member_chart || []).map((m: any) => {
+      const rawMemberList = (dash?.member_chart && dash.member_chart.length > 0)
+        ? dash.member_chart
+        : (Array.isArray(teamData) ? teamData : []);
+
+      // Use mergedStats or direct member total fields for consistent data parity
+      const enriched = rawMemberList.map((m: any) => {
         const ms = m.mergedStats || {};
         return {
           ...m,
-          jobs_count: ms.jobs || m.total_jobs || m.jobs_count || 0,
-          revenue: ms.revenue || m.revenue || 0,
-          distance_km: ms.distance || m.distance_km || 0,
-          cargo_mass_t: ms.cargo || m.cargo_mass_t || 0,
-          level: ms.level || m.level || 0,
-          points: ms.points || m.points || 0
+          name: m.name || m.username || "Fahrer",
+          jobs_count: ms.jobs ?? m.total_jobs ?? m.jobs_count ?? m.jobs ?? 0,
+          revenue: ms.revenue ?? m.total_revenue ?? m.revenue ?? 0,
+          distance_km: ms.distance ?? m.total_driven_distance_km ?? m.distance_km ?? 0,
+          cargo_mass_t: ms.cargo ?? m.total_cargo_mass_t ?? m.cargo_mass_t ?? 0,
+          level: ms.level ?? m.level ?? 1,
+          points: ms.points ?? m.points ?? 0
         };
       });
 

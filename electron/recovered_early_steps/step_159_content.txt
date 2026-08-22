@@ -1,0 +1,62 @@
+Created At: 2026-07-30T15:09:49Z
+Completed At: 2026-07-30T15:09:49Z
+File Path: `file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts`
+Total Lines: 2788
+Total Bytes: 95311
+Showing lines 2150 to 2203
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+2150: 
+2151:   smtcProcess = spawn('powershell', [
+2152:     '-NoProfile',
+2153:     '-ExecutionPolicy', 'Bypass',
+2154:     '-File', smtcTempPath,
+2155:     '-ParentPid', process.pid.toString()
+2156:   ]);
+2157: 
+2158:   smtcProcess.stdout.setEncoding('utf8');
+2159: 
+2160:   let smtcBuffer = '';
+2161:   smtcProcess.stdout.on('data', (data: any) => {
+2162:     smtcBuffer += data.toString();
+2163:     let boundary = smtcBuffer.indexOf('\n');
+2164:     while (boundary !== -1) {
+2165:       const line = smtcBuffer.substring(0, boundary).trim();
+2166:       smtcBuffer = smtcBuffer.substring(boundary + 1);
+2167:       boundary = smtcBuffer.indexOf('\n');
+2168:       if (!line || !line.startsWith('{')) continue;
+2169:       try {
+2170:         lastSmtcData = JSON.parse(line);
+2171:         if (lastSmtcData && lastSmtcData.source) {
+2172:           lastSmtcData.source = getFriendlyAppName(lastSmtcData.source, lastSmtcData.source);
+2173:         }
+2174:         safeSend(win, 'smtc-update', lastSmtcData);
+2175:         safeSend(overlayWin, 'smtc-update', lastSmtcData);
+2176:         safeSend(carplayWin, 'smtc-update', lastSmtcData);
+2177:       } catch (e) { }
+2178:     }
+2179:   });
+2180: 
+2181:   smtcProcess.stderr.on('data', (data: any) => {
+2182:     console.warn('⚠️ SMTC:', data.toString().substring(0, 200));
+2183:   });
+2184: 
+2185:   smtcProcess.on('exit', () => {
+2186:     smtcProcess = null;
+2187:     if (!isQuitting) {
+2188:       setTimeout(startSmtcBridge, 5000);
+2189:     }
+2190:   });
+2191: }
+2192: 
+2193: startSmtcBridge();
+2194: 
+2195: ipcMain.handle('get-smtc-media', () => lastSmtcData);
+2196: // ─────────────────────────────────────────────────────────────────────────────
+2197: 
+2198: // Start bridge once
+2199: startTelemetryBridge();
+2200: 
+2201: 
+2202: ipcMain.handle('telemetry-status', () => telemetryData);
+2203: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

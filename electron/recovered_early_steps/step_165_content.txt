@@ -1,0 +1,21 @@
+Created At: 2026-07-30T15:09:59Z
+Completed At: 2026-07-30T15:09:59Z
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\overlay-settings.json","LineNumber":17,"LineContent":"  \"mapDataDir\": \"C:\\\\Users\\\\Ally\\\\Documents\\\\Open Pipe Club\\\\maps-data\""}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":184,"LineContent":"function loadGraph(mapDataDir: string, map: 'europe' | 'usa' = 'europe'): { data: GraphData; nodes: NodeInfo[]; spatialIndex: SpatialIndex } {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":187,"LineContent":"  const graphPath = path.join(mapDataDir, `${map}-graph.json`);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":188,"LineContent":"  const nodesPath = path.join(mapDataDir, `${map}-nodes.json`);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":331,"LineContent":"export function getRouteServiceStatus(mapDataDir: string | null): { available: boolean; error?: string } {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":332,"LineContent":"  if (!mapDataDir) {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":337,"LineContent":"    loadGraph(mapDataDir);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":349,"LineContent":"  mapDataDir: string,"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\route-service.ts","LineNumber":352,"LineContent":"    const { data: graphData, spatialIndex, nodes } = loadGraph(mapDataDir);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\map-data-validator.ts","LineNumber":13,"LineContent":"export function validateMapDataDir(dataDir: string | null | undefined): MapDataValidationResult {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\map-data-validator.ts","LineNumber":44,"LineContent":"export function getMapDataDirFromSettings(settings: Record\u003cstring, unknown\u003e): string | null {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\map-data-validator.ts","LineNumber":45,"LineContent":"  return settings?.mapDataDir || null;"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":11,"LineContent":"import { validateMapDataDir } from './map-data-validator';"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":161,"LineContent":"let mapDataDir: string | null = null;"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":232,"LineContent":"      mapDataDir = saved.mapDataDir || null;"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":272,"LineContent":"      mapDataDir"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":2205,"LineContent":"  if (!mapDataDir) {"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":2208,"LineContent":"  const result = getRoute(sourceX, sourceZ, destX, destZ, mapDataDir);"}
+{"File":"c:\\Users\\Ally\\Documents\\Open Pipe Club\\opc-app\\electron\\main.ts","LineNumber":2697,"LineContent":"  const mapDataValidation = validateMapDataDir(mapDataDir);"}

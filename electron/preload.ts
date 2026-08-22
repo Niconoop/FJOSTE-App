@@ -25,6 +25,8 @@ const apiObject = {
     return () => ipcRenderer.removeListener('telemetry-update', listener);
   },
   getTelemetryStatus: () => ipcRenderer.invoke('telemetry-status'),
+  getRoute: (sourceX: number, sourceZ: number, destX: number, destZ: number, heading?: number) =>
+    ipcRenderer.invoke('get-route', sourceX, sourceZ, destX, destZ, heading),
   // Generic IPC bridge so the renderer never has to rely on `window.require`
   // (which is unavailable when the page's own nodeIntegration is off, e.g. in
   // some packaged builds). The preload always runs in a Node-enabled context.

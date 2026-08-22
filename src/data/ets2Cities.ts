@@ -1,8 +1,5 @@
-/**
- * Compact ETS2 city lookup table.
- * Used by GameMapWidget to resolve source/destination city names to coordinates.
- * Subset of the full ets2_cities.json with the most common cities.
- */
+import fullCitiesData from './ets2_cities.json';
+import europeCompaniesData from './europe-companies.json';
 
 export interface Ets2City {
   gameName: string;
@@ -14,8 +11,9 @@ export interface Ets2City {
   lng: number;
 }
 
-// Loaded lazily from the full JSON when needed
-let _allCities: Ets2City[] | null = null;
+// Loaded synchronously from JSON
+let _allCities: Ets2City[] = Array.isArray(fullCitiesData) ? (fullCitiesData as Ets2City[]) : [];
+let _companies: any[] = Array.isArray(europeCompaniesData) ? (europeCompaniesData as any[]) : [];
 
 const COMMON_CITIES: Ets2City[] = [
   { gameName: "berlin", realName: "Berlin", country: "germany", x: 10070.25, z: -9774.412, lat: 52.517389, lng: 13.395131 },
@@ -90,27 +88,216 @@ const COMMON_CITIES: Ets2City[] = [
 ];
 
 /**
- * Find a city by name (case-insensitive, matches gameName OR realName).
+ * Load all cities from ets2_cities.json (370+ cities).
+ */
+export async function loadAllCities(): Promise<Ets2City[]> {
+  if (_allCities && _allCities.length > 0) return _allCities;
+  try {
+    const res = await fetch('/ets2_cities.json');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        _allCities = data;
+        return _allCities;
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load full ets2_cities.json, fallback to COMMON_CITIES:", e);
+  }
+  _allCities = COMMON_CITIES;
+  return _allCities;
+}
+
+/**
+ * Find a city by name (case-insensitive, matches gameName OR realName, strips '(City)', '(Road)').
  */
 export function findCity(name: string): Ets2City | undefined {
   if (!name) return undefined;
-  const lower = name.toLowerCase().trim();
+  const cleanName = name.replace(/\s*\((City|Road)\)/i, '').trim().toLowerCase();
   
-  // Try common cities first (fast path)
-  const found = COMMON_CITIES.find(
-    c => c.gameName === lower || c.realName.toLowerCase() === lower
+  const pool = (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
+  
+  // 1. Exact match
+  const found = pool.find(
+    c => c.gameName.toLowerCase() === cleanName || c.realName.toLowerCase() === cleanName
   );
   if (found) return found;
-  
-  // Fuzzy match: check if any city name starts with or contains the search
-  return COMMON_CITIES.find(
-    c => c.realName.toLowerCase().startsWith(lower) || c.gameName.startsWith(lower)
+
+  // 2. Starts with match
+  const starts = pool.find(
+    c => c.realName.toLowerCase().startsWith(cleanName) || c.gameName.toLowerCase().startsWith(cleanName)
+  );
+  if (starts) return starts;
+
+  // 3. Includes match
+  return pool.find(
+    c => cleanName.includes(c.realName.toLowerCase()) || cleanName.includes(c.gameName.toLowerCase())
   );
 }
 
 /**
- * Get all common cities.
+ * Find nearest city to game coordinates (x, z).
+ */
+export function findClosestCity(x: number, z: number, maxDist: number = 4000): { city: Ets2City; dist: number } | null {
+  const pool = (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
+  let closest: Ets2City | null = null;
+  let minDist = Infinity;
+
+  for (const c of pool) {
+    if (c.x == null || c.z == null) continue;
+    const dx = c.x - x;
+    const dz = c.z - z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = c;
+    }
+  }
+
+  if (closest && minDist <= maxDist) {
+    return { city: closest, dist: minDist };
+  }
+  return null;
+}
+
+/**
+ * Get all common cities or loaded cities.
  */
 export function getAllCities(): readonly Ets2City[] {
-  return COMMON_CITIES;
+  return (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
 }
+
+function normaliseCompanyName(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[äáàâ]/g, 'a')
+    .replace(/[öóòô]/g, 'o')
+    .replace(/[üúùû]/g, 'u')
+    .replace(/[ß]/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normaliseCityName(input: string): string {
+  return input
+    .replace(/\s*\((City|Road)\)/i, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[äáàâ]/g, 'a')
+    .replace(/[öóòô]/g, 'o')
+    .replace(/[üúùû]/g, 'u')
+    .replace(/[ß]/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function findCompany(name: string, cityName?: string): { name: string; x: number; z: number } | undefined {
+  const cleanName = normaliseCompanyName(name);
+  const cleanCity = cityName ? normaliseCityName(cityName) : '';
+
+  if (!cleanName) return undefined;
+
+  const companies = _companies;
+  if (!companies.length) return undefined;
+
+  const exact = companies.find((c: any) => {
+    const token = normaliseCompanyName(c.token || '');
+    const cityToken = normaliseCityName(c.cityToken || '');
+    return token === cleanName && (!cleanCity || cityToken === cleanCity);
+  });
+
+  if (exact) {
+    return {
+      name: exact.token,
+      x: exact.x,
+      z: exact.y,
+    };
+  }
+
+  const partial = companies.find((c: any) => {
+    const token = normaliseCompanyName(c.token || '');
+    const cityToken = normaliseCityName(c.cityToken || '');
+    const nameMatch = token.includes(cleanName) || cleanName.includes(token);
+    const cityMatch = !cleanCity || cityToken.includes(cleanCity) || cleanCity.includes(cityToken);
+    return nameMatch && cityMatch;
+  });
+
+  if (partial) {
+    return {
+      name: partial.token,
+      x: partial.x,
+      z: partial.y,
+    };
+  }
+
+  return undefined;
+}
+
+export interface DestinationSearchResult {
+  type: 'city' | 'company';
+  title: string;
+  subtitle: string;
+  cityName: string;
+  companyName?: string;
+  x: number;
+  z: number;
+}
+
+export function searchDestinations(query: string): DestinationSearchResult[] {
+  if (!query || query.trim().length < 1) return [];
+  const q = query.trim().toLowerCase();
+  const results: DestinationSearchResult[] = [];
+  const seen = new Set<string>();
+
+  // 1. Search Companies
+  const companies = _companies;
+  for (const comp of companies) {
+    const compToken = (comp.token || comp.name || '').toString();
+    const compCity = (comp.cityName || comp.cityToken || comp.city || '').toString();
+    const key = `company:${compToken}:${compCity}`;
+    if (seen.has(key)) continue;
+
+    const fullStr = `${compToken} ${compCity}`.toLowerCase();
+    if (compToken.toLowerCase().includes(q) || compCity.toLowerCase().includes(q) || fullStr.includes(q)) {
+      seen.add(key);
+      const displayCity = compCity ? compCity.charAt(0).toUpperCase() + compCity.slice(1) : '';
+      results.push({
+        type: 'company',
+        title: compToken.toUpperCase(),
+        subtitle: displayCity ? `Firma in ${displayCity}` : 'Betrieb / Firma',
+        cityName: compCity,
+        companyName: compToken,
+        x: comp.x,
+        z: comp.y ?? comp.z ?? 0,
+      });
+    }
+  }
+
+  // 2. Search Cities
+  const cities = getAllCities();
+  for (const c of cities) {
+    const key = `city:${c.gameName}`;
+    if (seen.has(key)) continue;
+
+    if (
+      c.realName.toLowerCase().includes(q) ||
+      c.gameName.toLowerCase().includes(q) ||
+      (c.country && c.country.toLowerCase().includes(q))
+    ) {
+      seen.add(key);
+      results.push({
+        type: 'city',
+        title: c.realName,
+        subtitle: `Stadt • ${(c.country || 'EU').toUpperCase()}`,
+        cityName: c.realName,
+        x: c.x,
+        z: c.z,
+      });
+    }
+  }
+
+  return results.slice(0, 20);
+}
+
+

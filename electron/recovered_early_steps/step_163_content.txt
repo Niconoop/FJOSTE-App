@@ -1,0 +1,108 @@
+Created At: 2026-07-30T15:09:54Z
+Completed At: 2026-07-30T15:09:55Z
+File Path: `file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts`
+Total Lines: 2788
+Total Bytes: 95311
+Showing lines 1 to 100
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell, net as electronNet } from 'electron'
+2: import { exec, execSync, spawn } from 'node:child_process'
+3: import net from 'node:net'
+4: import DiscordRPC from 'discord-rpc'
+5: import path from 'node:path'
+6: import { fileURLToPath } from 'node:url'
+7: import fs from 'node:fs'
+8: import crypto from 'node:crypto'
+9: import https from 'node:https'
+10: import os from 'node:os'
+11: import { validateMapDataDir } from './map-data-validator';
+12: import { getRoute } from './route-service';
+13: 
+14: // --- Sicherer Primitiv-Logger ---
+15: const LOG_FILE = path.join(os.homedir(), 'Documents', 'openpipeclub_debug.log');
+16: const writeToLog = (message: string) => {
+17:   try {
+18:     const timestamp = new Date().toISOString();
+19:     fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`);
+20:   } catch (e) { /* Wenn das Loggen fehlschlägt, ist alles verloren */ }
+21: };
+22: // Log-Datei bei jedem Start leeren
+23: try { fs.writeFileSync(LOG_FILE, '--- Open Pipe Club App Log ---\n'); } catch (e) { }
+24: writeToLog('Logger initialisiert.');
+25: // --- Ende Logger ---
+26: 
+27: // --- Globale Failsafes ---
+28: process.on('uncaughtException', (error, origin) => {
+29:   writeToLog(`FATAL: Uncaught Exception at: ${origin}\nERROR: ${error.message}\nSTACK: ${error.stack}`);
+30:   app.quit();
+31: });
+32: process.on('unhandledRejection', (reason, promise) => {
+33:   writeToLog(`FATAL: Unhandled Rejection. Reason: ${reason}`);
+34: });
+35: writeToLog('Globale Failsafes (uncaughtException, unhandledRejection) sind aktiv.');
+36: // --- Ende Failsafes ---
+37: 
+38: 
+39: const __dirname = path.dirname(fileURLToPath(import.meta.url))
+40: 
+41: // Optimize Electron RAM footprint
+42: // V8: lower heap ceiling + prefer smaller code over peak speed
+43: app.commandLine.appendSwitch('js-flags', '--max-old-space-size=96 --optimize-for-size');
+44: // One renderer process shared across same-origin pages
+45: app.commandLine.appendSwitch('process-per-site');
+46: // Disable APIs the app doesn't use
+47: app.commandLine.appendSwitch('disable-speech-api');
+48: app.commandLine.appendSwitch('disable-voice-input');
+49: app.commandLine.appendSwitch('disable-notifications');
+50: app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+51: app.commandLine.appendSwitch('disable-background-networking');
+52: app.commandLine.appendSwitch('disable-component-update');
+53: app.commandLine.appendSwitch('no-first-run');
+54: // Disable Chromium subsystems that carry invisible RAM overhead
+55: // BackForwardCache keeps full rendered pages in RAM for back/forward – useless in a SPA
+56: // AudioServiceOutOfProcess spins up a separate audio process – keep it in-process
+57: // MediaRouter / DialMediaRouteProvider / HardwareMediaKeyHandling – not needed
+58: // IntensiveWakeUpThrottling – Chrome feature that, after 5 min in background, throttles ALL
+59: //   timers to fire at most once per minute. Without this disabled, notification polling
+60: //   (every 30s) would be delayed up to 60s when the user is gaming.
+61: app.commandLine.appendSwitch('disable-features',
+62:   'BackForwardCache,TranslateUI,AudioServiceOutOfProcess,MediaRouter,DialMediaRouteProvider,HardwareMediaKeyHandling,IntensiveWakeUpThrottling'
+63: );
+64: 
+65: process.env.DIST = path.join(__dirname, '../dist')
+66: process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
+67: 
+68: let win: BrowserWindow | null;
+69: let splashWin: BrowserWindow | null = null;
+70: let overlayWin: BrowserWindow | null = null;
+71: let logoWin: BrowserWindow | null = null;
+72: let driversWin: BrowserWindow | null = null;
+73: let eventWin: BrowserWindow | null = null;
+74: let carplayWin: BrowserWindow | null = null;
+75: let carplayChild: any = null;
+76: const isCarPlayMode = process.argv.includes('--carplay-mode');
+77: 
+78: // Read parent PID for clean process exiting in standalone mode
+79: const parentPidArg = process.argv.find(arg => arg.startsWith('--parent-pid='));
+80: const parentPid = parentPidArg ? parseInt(parentPidArg.split('=')[1], 10) : null;
+81: 
+82: if (isCarPlayMode && parentPid) {
+83:   setInterval(() => {
+84:     try {
+85:       process.kill(parentPid, 0);
+86:     } catch (e) {
+87:       app.quit();
+88:       process.exit(0);
+89:     }
+90:   }, 1000);
+91: }
+92: 
+93: 
+94: function safeSend(winInstance: BrowserWindow | null, channel: string, ...args: any[]) {
+95:   if (winInstance && !winInstance.isDestroyed() && winInstance.webContents && !winInstance.webContents.isDestroyed()) {
+96:     try {
+97:       winInstance.webContents.send(channel, ...args);
+98:     } catch (e: any) {
+99:       writeToLog(`Failed to send to window: ${e.message}`);
+100:     }
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
