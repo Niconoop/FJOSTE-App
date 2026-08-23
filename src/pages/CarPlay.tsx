@@ -1155,7 +1155,11 @@ export default function CarPlayPage() {
       } else if (contentIndex === 1) {
         if (dir === 'left') setContentIndex(0);
         else if (dir === 'down') setContentIndex(2);
-        else if (dir === 'enter') { setActiveTab('music'); setSidebarIndex(1); }
+        else if (dir === 'enter') {
+          setActiveTab('music');
+          setMusicSubTab('windows');
+          setSidebarIndex(1);
+        }
       } else if (contentIndex === 2) {
         if (dir === 'left') setContentIndex(0);
         else if (dir === 'up') setContentIndex(1);
@@ -2206,6 +2210,7 @@ export default function CarPlayPage() {
                   <div
                     onClick={() => {
                       setActiveTab('music');
+                      setMusicSubTab('windows');
                       setSidebarIndex(1);
                     }}
                     className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 rounded-3xl overflow-hidden bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 group ${
