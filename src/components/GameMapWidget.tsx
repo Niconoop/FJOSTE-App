@@ -175,6 +175,9 @@ const createArrowImage = (map: maplibregl.Map) => {
 };
 
 function createEts2Style(): maplibregl.StyleSpecification {
+  const tileRoot = `${API_URL}/map/proxy`;
+
+
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
@@ -182,11 +185,15 @@ function createEts2Style(): maplibregl.StyleSpecification {
     sources: {
       ets2: {
         type: 'vector',
-        url: `pmtiles://${PROXY_BASE}/ets2.pmtiles`,
+        url: `pmtiles://${tileRoot}/ets2.pmtiles`,
       },
       world: {
         type: 'vector',
-        url: `pmtiles://${PROXY_BASE}/world.pmtiles`,
+        url: `pmtiles://${tileRoot}/world.pmtiles`,
+      },
+      footprints: {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
       },
     },
     layers: [
@@ -234,24 +241,39 @@ function createEts2Style(): maplibregl.StyleSpecification {
         paint: { 'fill-color': '#1e293b', 'fill-opacity': 0.95 },
       },
       {
-        id: 'ets2-models',
-        type: 'fill-extrusion',
-        source: 'ets2',
-        'source-layer': 'ets2',
-        minzoom: 7,
-        filter: [
-          'all',
-          ['==', ['geometry-type'], 'Polygon'],
-          ['in', ['get', 'type'], ['literal', ['model', 'building', 'company_building']]],
-          ['!=', ['get', 'hidden'], true]
-        ],
+        id: 'ets2-footprints',
+        type: 'fill',
+        source: 'footprints',
+        'source-layer': 'footprints',
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
         paint: {
-          'fill-extrusion-color': '#334155',
-          'fill-extrusion-height': 10,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.85,
+          'fill-color': '#1e293b',
+          'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
         },
       },
+      {
+        id: 'ets2-extrusions',
+        type: 'fill-extrusion',
+        source: 'footprints',
+        'source-layer': 'footprints',
+        minzoom: 8,
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+        paint: {
+          'fill-extrusion-color': '#2b3648',
+          'fill-extrusion-height': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            9,
+            ['*', 10, ['get', 'height']],
+            13,
+            ['*', 20, ['get', 'height']],
+          ],
+          'fill-extrusion-opacity': 0.8,
+          'fill-extrusion-vertical-gradient': true,
+        },
+      },
+
       {
         id: 'ets2-roads-casing',
         type: 'line',

@@ -1368,13 +1368,19 @@ export default function CarPlayPage() {
         return;
       }
 
-      if (e.key === 'ArrowUp') { handleNavRef.current('up'); e.preventDefault(); }
-      else if (e.key === 'ArrowDown') { handleNavRef.current('down'); e.preventDefault(); }
-      else if (e.key === 'ArrowLeft') { handleNavRef.current('left'); e.preventDefault(); }
-      else if (e.key === 'ArrowRight') { handleNavRef.current('right'); e.preventDefault(); }
+      const isArrowUp = e.key === 'ArrowUp';
+      const isArrowDown = e.key === 'ArrowDown';
+      const isArrowLeft = e.key === 'ArrowLeft';
+      const isArrowRight = e.key === 'ArrowRight';
+
+      if (isArrowUp) { handleNavRef.current('up'); e.preventDefault(); }
+      else if (isArrowDown) { handleNavRef.current('down'); e.preventDefault(); }
+      else if (isArrowLeft) { handleNavRef.current('left'); e.preventDefault(); }
+      else if (isArrowRight) { handleNavRef.current('right'); e.preventDefault(); }
       else if (e.key === 'Enter' || e.key === ' ') { handleNavRef.current('enter'); e.preventDefault(); }
-      else if (e.key === 'Backspace') { handleNavRef.current('back'); e.preventDefault(); }
+      else if (e.key === 'Backspace' || e.key === 'Escape') { handleNavRef.current('back'); e.preventDefault(); }
     };
+
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);

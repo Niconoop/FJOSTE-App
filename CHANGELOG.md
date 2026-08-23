@@ -2,6 +2,25 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.6.9] - 2026-08-23
+
+### Features & Design Updates
+  - **Entfernung der Ampeln & Blitzer Ebenen (`Map.tsx` / `GameMapWidget.tsx` / `MgmtMapPage.js`)**:
+    - **Bereinigung**: Die zusätzlichen Layer für Ampeln und Blitzer wurden vollständig entfernt.
+    - **Bugfix `setTrafficLoading`**: Der State `trafficLoading` wurde in `Map.tsx` wiederhergestellt. Die Abfrage von Live-Staudaten und Hotspots läuft wieder ohne Uncaught ReferenceError.
+  - **Interaktives 3D-Gebäude- & Perspektiven-Feature (`Map.tsx` / `GameMapWidget.tsx` / `MgmtMapPage.js`)**:
+    - **CarPlay Navigation Map 3D-Gebäude**: Das `ets2-footprints.pmtiles`-Vektorarchiv und die `ets2-extrusions`-3D-Layer wurden auch in das CarPlay Navigationskarten-Widget (`GameMapWidget.tsx`) eingebaut. Sämtliche Gebäude, Werkstätten, Depots und Stadtbereiche erscheinen nun während der Fahrt in 3D mit `60°` Kamera-Neigung.
+    - **Behebung des 500/400er Fehlers & Direkte Byte-Range-Anfragen**: Die PMTiles-Archive (`ets2-footprints.pmtiles`, `ets2.pmtiles`, `world.pmtiles`) wurden im Backend (`routes_desktop.py`) freigeschaltet und direkt an den CDN-Endpunkt angebunden. Dies erlaubt native HTTP 206 Partial-Content-Range-Requests.
+    - **3D View Toggle Button**: Ein interaktiver `3D`-Button in der Karten-Schaltleiste ermöglicht das fließende Umschalten zwischen flacher 2D-Draufsicht (`pitch: 0°`) und isometrischer 3D-Perspektive (`pitch: 58°`).
+    - **Freie 3D-Kamerasteuerung**: Unterstützung für freie Drehung & Neigung per Maustaste (`maxPitch: 80°`) inkl. visuellem Kompass.
+  - **CarPlay Darkmode Karten-Design für App & Website (`Map.tsx`)**:
+    - Das edle, kontrastreiche CarPlay Darkmode Kartendesign wurde für die interaktive Hauptkarte in der App und auf der Webseite übernommen.
+    - Beinhaltet neonblaue Autobahnen (`#3b82f6` / `#1d4ed8`), helle Slate-Schnellstraßen (`#cbd5e1`), tiefenblaue Gewässer (`#0f1c30`), edles Dunkelgrün für Terrain (`#0e261d`), Slate-Asphalt für Betriebshöfe (`#1e293b`), 3D-Gebäude-Extrusionen und einen Midnight-Hintergrund (`#050508`).
+
+### Bugfixes & Stabilität
+  - **Behebung von `ReferenceError: API_URL is not defined` (`App.tsx`)**:
+    - Der Import von `API_URL` aus `./config` in `App.tsx` gefehlt. Dadurch schlug der automatische Backend-Server Health Check beim Anwendungsstart mit einem unhandled promise error fehl. `API_URL` wurde zum Import hinzugefügt.
+
 ## [1.6.4] - 2026-08-22
 
 ### Umstellung auf Cloudflare R2 Speicher

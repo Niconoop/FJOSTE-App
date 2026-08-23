@@ -1,7 +1,10 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Flame, Car, ChevronDown, Check, Radio, Navigation, List } from 'lucide-react';
+import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Car, ChevronDown, Check, Radio, Navigation, List, Box, Camera, SlidersHorizontal } from 'lucide-react';
+
+
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, getAvatarUrl } from '../config';
@@ -28,18 +31,25 @@ function addPmTilesProtocol() {
 }
 
 function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
+  const tileRoot = `${API_URL}/map/proxy`;
+
+
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-    sprite: `${API_URL}/maps/sprites`,
+    sprite: 'https://truckermudgeon.github.io/sprites',
     sources: {
       ets2: {
         type: 'vector',
-        url: `pmtiles://${API_URL}/maps/ets2.pmtiles`,
+        url: `pmtiles://${tileRoot}/ets2.pmtiles`,
       },
       world: {
         type: 'vector',
-        url: `pmtiles://${API_URL}/maps/world.pmtiles`,
+        url: `pmtiles://${tileRoot}/world.pmtiles`,
+      },
+      footprints: {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
       },
     },
 
@@ -49,7 +59,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         id: 'background',
         type: 'background',
         paint: {
-          'background-color': isLight ? '#f1f3f5' : '#0a1622',
+          'background-color': isLight ? '#f1f3f5' : '#050508',
         },
       },
       {
@@ -58,7 +68,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'land',
         paint: {
-          'fill-color': isLight ? '#e9ecef' : '#12180f',
+          'fill-color': isLight ? '#e9ecef' : '#08101a',
         },
       },
       {
@@ -67,7 +77,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'water',
         paint: {
-          'fill-color': isLight ? '#c4d7ec' : '#123a5e',
+          'fill-color': isLight ? '#c4d7ec' : '#0f1c30',
         },
       },
       {
@@ -89,11 +99,11 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
             ]
             : [
               'match', ['get', 'color'],
-              0, '#123a5e',  // water – deep ocean blue
-              1, '#141b12',  // land – dark with subtle green tint
-              2, '#1b2130',  // road surface – bluish slate
-              3, '#10140d',  // building
-              '#141b12',
+              0, '#1e293b',  // Parkplätze & Raststätten (High-contrast Slate Asphalt)
+              1, '#0e261d',  // Rasen & Grünflächen (Edles Dunkelgrün)
+              2, '#283548',  // Betriebshöfe & Verladestationen
+              3, '#0a1d16',  // Sekundäre Grünflächen / Terrain
+              '#1e293b',
             ],
           'fill-opacity': 0.95,
         },
@@ -105,8 +115,75 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
         paint: {
-          'fill-color': isLight ? '#cbd5e1' : '#1b2130',
-          'fill-opacity': 0.9
+          'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+          'fill-opacity': 0.95
+        },
+      },
+      {
+        id: 'ets2-footprints',
+        type: 'fill',
+        source: 'footprints',
+        'source-layer': 'footprints',
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+        paint: {
+          'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+          'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
+        },
+      },
+      {
+        id: 'ets2-extrusions',
+        type: 'fill-extrusion',
+        source: 'footprints',
+        'source-layer': 'footprints',
+        minzoom: 8,
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+        paint: {
+          'fill-extrusion-color': isLight ? '#94a3b8' : '#2b3648',
+          'fill-extrusion-height': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            9,
+            ['*', 10, ['get', 'height']],
+            13,
+            ['*', 20, ['get', 'height']],
+          ],
+          'fill-extrusion-opacity': isLight ? 0.45 : 0.8,
+          'fill-extrusion-vertical-gradient': true,
+        },
+      },
+      {
+        id: 'ets2-roads-casing',
+        type: 'line',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': isLight
+            ? [
+              'match', ['get', 'roadType'],
+              'freeway', '#c2410c',
+              'divided', '#d97706',
+              'local', '#64748b',
+              'train', '#475569',
+              '#64748b',
+            ]
+            : [
+              'match', ['get', 'roadType'],
+              'freeway', '#1d4ed8',  // Deep blue casing for freeway
+              'divided', '#334155',  // Slate casing for divided roads
+              'local', '#1e293b',    // Dark casing for local roads
+              'train', '#0f172a',
+              '#1e293b',
+            ],
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            3, 3.5,
+            6, 7.5,
+            10, 13,
+          ],
+          'line-opacity': 0.95,
         },
       },
       {
@@ -128,20 +205,21 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
             ]
             : [
               'match', ['get', 'roadType'],
-              'freeway', '#ff8c00',  // Dark Orange
-              'divided', '#e5a93b',  // Gold / Muted Yellow
-              'local', '#384556',    // Dark grey-blue
-              'train', '#11161b',    // Black
-              '#384556',
+              'freeway', '#3b82f6',  // Neon Blue Highway (CarPlay Style)
+              'divided', '#cbd5e1',  // Bright Slate Major Roads
+              'local', '#475569',    // Slate Grey Local Roads
+              'train', '#1e293b',    // Dark Rail
+              '#475569',
             ],
           'line-width': [
             'interpolate', ['linear'], ['zoom'],
-            3, 0.5,
-            6, 1.5,
-            10, 3,
+            3, 2,
+            6, 5,
+            10, 9,
           ],
-          'line-opacity': 0.9,
+          'line-opacity': 0.95,
         },
+
       },
       {
         id: 'ets2-ferries',
@@ -162,7 +240,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'world',
         'source-layer': 'states',
         paint: {
-          'line-color': isLight ? '#cbd5e1' : '#2b3852',
+          'line-color': isLight ? '#cbd5e1' : '#10131a',
           'line-width': 1,
           'line-opacity': 0.8,
           'line-dasharray': [2, 2],
@@ -175,9 +253,9 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'countries',
         filter: ['!=', ['get', 'name'], 'Serbia-Kosovo'],
         paint: {
-          'line-color': isLight ? '#64748b' : '#c3ccd9',
-          'line-width': 1.8,
-          'line-opacity': 0.95,
+          'line-color': isLight ? '#64748b' : '#1a1f29',
+          'line-width': 1.5,
+          'line-opacity': 0.9,
         },
       },
       {
@@ -187,12 +265,13 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'countries',
         filter: ['==', ['get', 'name'], 'Serbia-Kosovo'],
         paint: {
-          'line-color': isLight ? '#64748b' : '#c3ccd9',
-          'line-width': 1.8,
-          'line-opacity': 0.95,
+          'line-color': isLight ? '#64748b' : '#1a1f29',
+          'line-width': 1.5,
+          'line-opacity': 0.9,
           'line-dasharray': [3, 2],
         },
       },
+
       // POI Icons (gas stations, services, dealers, recruitment, parking, garages, toll booths, viewpoints)
       {
         id: 'ets2-pois',
@@ -434,6 +513,22 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   const [trafficHotspotsOpen, setTrafficHotspotsOpen] = useState(false);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [mapZoom, setMapZoom] = useState<number>(4.5);
+  const [is3DMode, setIs3DMode] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+
+  const toggle3dMode = useCallback(() => {
+    if (!mapRef.current) return;
+    setIs3DMode(prev => {
+      const next = !prev;
+      if (next) {
+        mapRef.current.easeTo({ pitch: 58, bearing: -15, duration: 1200 });
+      } else {
+        mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 1200 });
+      }
+      return next;
+    });
+  }, []);
+
 
   // Live TruckersMP ID Tracking state
   const [trackedTmpPlayer, setTrackedTmpPlayer] = useState<any>(null);
@@ -456,6 +551,18 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     const sw = sidebarOpen ? SIDEBAR_WIDTH : 0;
     return { x: (w - sw) / 2, y: h / 2 };
   }, [sidebarOpen]);
+
+  const filteredDrivers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return mapData;
+    return mapData.filter((m: any) => {
+      const nameMatch = (m.username || '').toLowerCase().includes(query);
+      const tmpIdMatch = (m.tmp_id || '').toString().includes(query);
+      const cityMatch = (m.live_location?.city || m.last_position?.city || '').toLowerCase().includes(query);
+      return nameMatch || tmpIdMatch || cityMatch;
+    });
+  }, [mapData, search]);
+
 
   const trackTmpPlayer = useCallback(async (tmpId: string | number) => {
     const cleanId = String(tmpId).trim();
@@ -742,32 +849,39 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       zoom: 4.5,
       minZoom: 4.5,
       maxZoom: 14,
+      pitch: is3DMode ? 58 : 0,
+      maxPitch: 80,
+      dragRotate: true,
+      pitchWithRotate: true,
       attributionControl: false,
+      fadeDuration: 0,
+      trackResize: true,
     });
     map.setMinZoom(4.5);
     map.setMaxZoom(14);
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "bottom-left");
 
     const handleZoom = () => setMapZoom(map.getZoom());
-    map.on('zoom', handleZoom);
+    map.on('zoomend', handleZoom);
     setMapZoom(map.getZoom());
 
     mapRef.current = map;
     return () => {
-      map.off('zoom', handleZoom);
+      map.off('zoomend', handleZoom);
       map.remove();
     };
+
   }, []);
 
   useEffect(() => {
+    if (!mapRef.current) return;
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+
     const updateMapStyle = () => {
-      if (mapRef.current) {
-        const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+      if (mapRef.current && mapRef.current.isStyleLoaded()) {
         mapRef.current.setStyle(createEts2Style(isLight));
       }
     };
-
-    updateMapStyle();
 
     if (theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
@@ -816,14 +930,14 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     }
   }, [initialSelectedId, mapData, onClearInitialId]);
 
+  const driverMarkersMapRef = useRef<Map<string, { marker: any; el: HTMLDivElement }>>(new Map());
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    markersRef.current.forEach(m => m.remove());
-    markersRef.current = [];
-
     const seenPositions: { [key: string]: number } = {};
+    const activeDriverIds = new Set<string>();
 
     mapData.forEach(member => {
       const loc = member.online ? member.live_location : member.last_position;
@@ -854,28 +968,52 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         seenPositions[posKey] = 1;
       }
 
-      const borderColor = member.online ? "#10b981" : "#f59e0b";
+      const driverId = String(member.id);
+      activeDriverIds.add(driverId);
 
-      const el = document.createElement("div");
-      el.className = "map-marker";
+      const borderColor = member.online ? "#10b981" : "#f59e0b";
       const isSelected = selectedDriver?.id === member.id;
       const avatarUrl = getAvatarUrl(member.avatar_url);
-      el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background:${avatarUrl ? `url(${avatarUrl}) center/cover` : "#1a1a2e"};box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:${isSelected ? 10 : 1};${member.online ? "animation:map-marker-pulse 2s infinite;" : ""}`;
 
-      if (!avatarUrl) {
-        el.innerHTML = '<svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>';
+      const existing = driverMarkersMapRef.current.get(driverId);
+
+      if (existing) {
+        // High-performance GPU position update (0ms DOM reflow)
+        existing.marker.setLngLat([lng, lat]);
+        existing.el.style.borderColor = borderColor;
+        existing.el.style.zIndex = isSelected ? "10" : "1";
+        existing.el.style.boxShadow = `0 0 20px ${borderColor}40`;
+        existing.el.style.animation = member.online ? "map-marker-pulse 2s infinite" : "none";
+      } else {
+        // Create marker once
+        const el = document.createElement("div");
+        el.className = "map-marker";
+        el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background:${avatarUrl ? `url(${avatarUrl}) center/cover` : "#1a1a2e"};box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:${isSelected ? 10 : 1};${member.online ? "animation:map-marker-pulse 2s infinite;" : ""}`;
+
+        if (!avatarUrl) {
+          el.innerHTML = '<svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>';
+        }
+
+        el.addEventListener("click", () => {
+          setSelectedDriver(member);
+          setTrackedTmpPlayer(null);
+          map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500, anchor: getMapAnchor() });
+        });
+
+        const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+        driverMarkersMapRef.current.set(driverId, { marker, el });
       }
-
-      el.addEventListener("click", () => {
-        setSelectedDriver(member);
-        setTrackedTmpPlayer(null);
-        map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500, anchor: getMapAnchor() });
-      });
-
-      const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
-      markersRef.current.push(marker);
     });
-  }, [mapData, selectedDriver]);
+
+    // Remove obsolete markers
+    driverMarkersMapRef.current.forEach((val, id) => {
+      if (!activeDriverIds.has(id)) {
+        val.marker.remove();
+        driverMarkersMapRef.current.delete(id);
+      }
+    });
+  }, [mapData, selectedDriver, getMapAnchor]);
+
 
   // GPU-Accelerated WebGL Traffic Layer (Zero Lag / 60 FPS)
   useEffect(() => {
@@ -1137,70 +1275,108 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   };
 
   const onlineCount = mapData.filter(m => m.online).length;
-  const filteredDrivers = mapData.filter(m => (m.name || "").toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
+
     <div className="flex h-full w-full !p-0 overflow-hidden relative">
       <div className="flex-1 relative">
         <div ref={mapContainer} className="w-full h-full" />
 
         {/* Map Overlays */}
         <div className="absolute top-24 left-6 z-30 flex flex-col gap-2">
-          <div className="frosted-card !p-4 backdrop-blur-xl shadow-2xl border border-white/5">
-            <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest mb-1">Live Karte</h3>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-tighter">{onlineCount} Fahrer aktiv</span>
+          <div className="frosted-card !p-3.5 backdrop-blur-xl shadow-2xl border border-white/5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest mb-1">Live Karte</h3>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-tighter">{onlineCount} Fahrer aktiv</span>
+              </div>
             </div>
+            <button
+              onClick={() => { setLoading(true); fetchData(); if (showTraffic) fetchTraffic(); }}
+              className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all border border-white/5 cursor-pointer shrink-0"
+              title="Karte & Daten aktualisieren"
+            >
+              <RefreshCw size={14} className={loading || trafficLoading ? "animate-spin text-amber-400" : ""} />
+            </button>
           </div>
 
-          {/* Traffic Toggle Card */}
-          <div className="frosted-card !p-3 backdrop-blur-xl shadow-2xl border border-white/5 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between gap-3">
-                <button
-                  onClick={() => setShowTraffic(!showTraffic)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
-                  showTraffic
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-                    : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
-                }`}
-              >
-                <AlertTriangle size={14} className={showTraffic ? "text-amber-400" : ""} />
-                <span>Staus {totalTrafficJams > 0 ? `(${totalTrafficJams})` : ""}</span>
-              </button>
+          {/* Traffic & Map Layer Control Card */}
+          <div className="frosted-card !p-2.5 backdrop-blur-xl shadow-2xl border border-white/10 flex flex-col gap-2 transition-all">
+            <button
+              onClick={() => setControlsOpen(!controlsOpen)}
+              className="flex items-center justify-between gap-3 w-full px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer bg-white/[0.02] hover:bg-white/5"
+            >
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={14} className="text-amber-400" />
+                <span className="font-unbounded tracking-wider uppercase text-[10px]">Ebenen & Filter</span>
+                <div className="flex items-center gap-1 ml-1.5">
+                  {showTraffic && <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.8)]" title="Staus aktiv" />}
+                  {is3DMode && <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.8)]" title="3D Ansicht aktiv" />}
+                </div>
+              </div>
+              <ChevronDown size={14} className={`transition-transform duration-300 ${controlsOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-              <button
-                onClick={() => { setLoading(true); fetchData(); if (showTraffic) fetchTraffic(); }}
-                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all"
-                title="Aktualisieren"
-              >
-                <RefreshCw size={14} className={loading || trafficLoading ? "animate-spin" : ""} />
-              </button>
-            </div>
+            <AnimatePresence>
+              {controlsOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden flex flex-col gap-2.5 pt-2 border-t border-white/5"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <button
+                      onClick={() => setShowTraffic(!showTraffic)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                        showTraffic
+                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                          : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
+                      }`}
+                    >
+                      <AlertTriangle size={14} className={showTraffic ? "text-amber-400" : ""} />
+                      <span>Staus {totalTrafficJams > 0 ? `(${totalTrafficJams})` : ""}</span>
+                    </button>
 
-            {showTraffic && (
-              <div className="flex flex-col gap-2 pt-1 border-t border-white/5">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <ServerDropdown
-                      value={trafficServer}
-                      onChange={setTrafficServer}
-                      servers={trafficServers}
-                    />
+                    <button
+                      onClick={toggle3dMode}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                        is3DMode
+                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                          : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
+                      }`}
+                      title="3D Ansicht umschalten (Gebäude & Perspektive)"
+                    >
+                      <Box size={14} className={is3DMode ? "text-amber-400" : ""} />
+                      <span>3D</span>
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => setTrafficHotspotsOpen(!trafficHotspotsOpen)}
-                    className={`p-1.5 rounded-lg border text-[10px] font-bold transition-all flex items-center gap-1 ${
-                      trafficHotspotsOpen
-                        ? "bg-primary/20 text-primary border-primary/30"
-                        : "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10"
-                    }`}
-                  >
-                    <List size={12} />
-                    Top Hotspots
-                  </button>
-                </div>
+
+                  {showTraffic && (
+                    <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <ServerDropdown
+                            value={trafficServer}
+                            onChange={setTrafficServer}
+                            servers={trafficServers}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => setTrafficHotspotsOpen(!trafficHotspotsOpen)}
+                          className={`p-1.5 rounded-lg border text-[10px] font-bold transition-all flex items-center gap-1 ${
+                            trafficHotspotsOpen
+                              ? "bg-primary/20 text-primary border-primary/30"
+                              : "bg-white/5 text-slate-400 border-white/5 hover:bg-white/10"
+                          }`}
+                        >
+                          <List size={12} />
+                          Top Hotspots
+                        </button>
+                      </div>
 
                 <AnimatePresence>
                   {trafficHotspotsOpen && (
@@ -1257,9 +1433,12 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                 </AnimatePresence>
               </div>
             )}
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  </div>
+</div>
 
       {/* Sidebar */}
       <div className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-50 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>

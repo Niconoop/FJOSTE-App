@@ -26,7 +26,7 @@ const Database = lazy(() => import('./pages/Database').then(m => ({ default: m.D
 import { useAuth } from './context/AuthContext';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { apiService } from './services/api';
-import { API_BASE_URL, getAvatarUrl } from './config';
+import { API_URL, API_BASE_URL, getAvatarUrl } from './config';
 import { toast } from 'sonner';
 
 const PAGE_ORDER = [
@@ -60,11 +60,12 @@ const slideVariants = {
 function App() {
   const { user, loading, logout, hasRole } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [pageState, setPageState] = useState({ current: currentPage, prev: null as string | null });
+  const [pageState, setPageState] = useState({ current: 'dashboard', prev: null as string | null });
 
-  if (currentPage !== pageState.current) {
-    setPageState({ current: currentPage, prev: pageState.current });
-  }
+  useEffect(() => {
+    setPageState(prev => (prev.current === currentPage ? prev : { current: currentPage, prev: prev.current }));
+  }, [currentPage]);
+
 
   const prevIdx = PAGE_ORDER.indexOf(pageState.prev || 'dashboard');
   const currIdx = PAGE_ORDER.indexOf(pageState.current);
