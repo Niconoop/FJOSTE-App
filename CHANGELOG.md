@@ -2,6 +2,32 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.7.1] - 2026-08-24
+
+### Features & Design Updates
+  - **Bereinigung der Dashboard-Aktionsleiste ([Dashboard.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Dashboard.tsx) / [MgmtHomePage.js](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/frontend/src/drivershub/pages/MgmtHomePage.js))**:
+    - **Entfernung des Datenbank-Buttons**: Der Schnellzugriffs-Button „Datenbank“ sowie der ungenutzte `Database`-Icon-Import wurden sowohl von der App-Dashboard-Seite als auch von der Website (DriversHub `MgmtHomePage.js`) entfernt.
+  - **Skalierung der Admin-Tabbar & Navbar-Header (`Admin.tsx` / `App.tsx`)**:
+    - **Responsive Admin-Navigationsleiste**: Die Tableiste auf der Admin-Seite (`Admin.tsx`) schaltet nun auf kleineren Fenstern (<768px) automatisch auf Icon-Buttons um (analog zur App-Navbar) und zeigt Beschriftungen auf größeren Bildschirmbreiten (`md:`) an. Verhindert das Abschneiden der Buttons (z. B. „Berichte“).
+    - **Früheres Ausblenden des Benutzernamens in der Header-Bar**: Die Breakpoint-Klasse des Benutzernamens in der Hauptheader-Bar (`App.tsx`) wurde von `hidden sm:inline` auf `hidden xl:inline` angepasst. Der Name („Niconoop“) blendet nun bei schmaleren Fenstern frühzeitig aus, sodass nur das Profilbild sichtbar bleibt und der Header nicht mehr überfüllt wird.
+  - **Behebung der Einladungscode-Erstellung (`server.py` / `routes_content.py` / `InviteCodes.tsx`)**:
+    - **404 Route Mismatch Fix**: Aktualisierung des Backends (`server.py`), sodass `/api/management/invite-codes` und `/api/admin/invite-codes` neben `/api/invite-codes` voll unterstützt werden. Behebt den `Fehler beim Generieren` (404 Not Found) beim Erstellen neuer Einladungscodes in der Desktop-App.
+    - **Anzeige eingelöster Mitglieder**: `invite_codes_list` löst nun automatisch die User-IDs eingelöster Codes in richtige Benutzernamen (`used_by_name`) auf und setzt das `used`-Flag sauber.
+    - **Automatische Registrierungs-Codes bei Bewerbungen**: Beim Annehmen einer Bewerbung in `applications_handle` wird der erzeugte Einladungscode jetzt auch direkt in der `invite_codes`-Datenbanktabelle registriert.
+  - **Koppelung & Synchronisation des CarPlay Karten-Zooms (`CarPlay.tsx` / `GameMapWidget.tsx` / `OverlaySettings.tsx`)**:
+    - **Light Mode für Lokale Musik & Radio-Subtabs**: Vollständige Anbindung des Quellauswahl-Landungsmenüs, der lokalen Musik-Player-Ansicht und der ETS2 Live-Radio-Stream-Seite an das dynamische Themesystem (`c.card`, `c.innerCard`, `c.subBox`, `c.headingText`, `c.mutedText`) in `CarPlay.tsx`.
+    - **Fix des Karten-Canvas-Überstands**: Überarbeitung der CSS-Regeln in `GameMapWidget.tsx` (`border-radius: inherit`, `overflow: hidden !important` & `isolation: isolate`) sowie Anpassen der Container-Wrapper in `CarPlay.tsx`. Verhindert das Überstehen der MapLibre WebGL-Canvas-Fliesen an den abgerundeten Karten-Ecken.
+    - **Entfernung der Radio-Lade-Benachrichtigung**: Das automatische Einblenden der Benachrichtigungs-Toast-Meldung beim Auslesen der `live_streams.sii` Radiosender beim Start wurde entfernt.
+    - **Fix des Coverbild-Überstands**: Hinzufügen von `overflow-hidden` und `rounded-[inherit]` auf den Media-Player-Container und das Hintergrund-Coverbild in `CarPlay.tsx`. Verhindert das Überstehen des Albumcovers an den abgerundeten Ecken des Karten-Containers.
+    - **Vollständige Theme-Übertragung auf alle Tabs & Cards**: Bei Auswahl des hellen (oder blauen / titan) Themes passen sich nun alle Inhaltskarten (Media-Widget, Digital Cockpit, Auftrag, LKW-Diagnose, Einstellungen & Musik-Subtabs) dynamisch an das gewählte Theme an (`c.card`, `c.innerCard`, `c.headingText`), anstelle von nur der Seitenleiste.
+    - **Tiefschwarze CarPlay-Rahmen-Ecken**: Durch Hinzufügen von `html, body, #root { background: #000000 !important; }` und Einbetten in einen Vollbild-`bg-black`-Container sind die 4 äußeren Ecken des CarPlay-Displays nun zu 100% tiefschwarz. Keine weißen Pixel stehen mehr an den abgerundeten Ecken über.
+    - **Dauerhafte Ansicht des Musik-Player-Subtabs**: Beim Wechseln zwischen den Tabs (z. B. von Musik zu Home und zurück zu Musik) bleibt nun deine zuletzt aktive Musikseite (z. B. Windows SMTC Player) geöffnet, anstatt zurück ins Quellauswahl-Menü zu springen. Der Subtab wird zusätzlich in `localStorage` (`opc_carplay_music_subtab`) gespeichert.
+    - **Synchronisierter Karten-Zoom**: Einführung des zentralen States `carPlayMapZoom` in `CarPlay.tsx`, der die Zoom-Stufen aller CarPlay-Kartenansichten (`carplay-home`, `carplay-max` und `tacho-mfd-map`) verkoppelt. Jede Zoom-Änderung (per Mausrad, Touch, Buttons oder Hotkeys) wird in Echtzeit auf alle Ansichten übertragen.
+    - **Direktes Laden des Start-Zooms**: Übernahme von `currentZoomRef.current` direkt beim Erstellen der MapLibre-Instanz (`zoom: currentZoomRef.current`). Verhindert ein nachträgliches Ruckeln/Umschalten von Zoom 9 auf den gespeicherten Zoom.
+    - **Dauerhafte Speicherung**: Speicherung des aktiven CarPlay Zoom-Levels in `localStorage` (`opc_carplay_map_zoom`), sodass die Karte nach jedem Start sofort in deiner gewünschten Zoom-Stufe geladen wird.
+    - **Interaktive Zoom-Steuerungs-Buttons (`+` / `-`)**: Ergänzung von schwebenden Zoom-In (`+`) und Zoom-Out (`-`) Buttons im CarPlay-Design direkt in der Steuerungsleiste des `GameMapWidget.tsx`.
+    - **Vereinheitlichte Hotkey-Zoomsteuerung**: Anpassung der Tastatur- und Controller-Hotkeys (`Pfeil hoch` / `Pfeil runter`), um den gekoppelten Zoom-Level stufenlos zwischen 4x und 12x anzupassen.
+
 ## [1.6.9] - 2026-08-23
 
 ### Features & Design Updates

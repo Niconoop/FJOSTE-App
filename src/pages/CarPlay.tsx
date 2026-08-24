@@ -403,6 +403,24 @@ export default function CarPlayPage() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [timeString, setTimeString] = useState('12:00');
 
+  // Synchronized map zoom level across all CarPlay map views (persisted in localStorage)
+  const [carPlayMapZoom, setCarPlayMapZoom] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('opc_carplay_map_zoom');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 4 && parsed <= 12) return parsed;
+      }
+    } catch (e) {}
+    return 9;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('opc_carplay_map_zoom', carPlayMapZoom.toString());
+    } catch (e) {}
+  }, [carPlayMapZoom]);
+
   // Calculate active theme mode (dark vs light) based on 3 themes: dark, light, or auto (low beam headlights)
   const isLowBeamOn = telemetry.connected ? (telemetry.lightsBeamLow ?? false) : true;
   const activeTheme: 'dark' | 'light' = settings.carPlayTheme === 'auto'
@@ -428,7 +446,21 @@ export default function CarPlayPage() {
   const [mfdMode, setMfdMode] = useState<number>(0);
 
   // Music Mode Sub-Tabs ('menu' | 'windows' | 'local' | 'radio')
-  const [musicSubTab, setMusicSubTab] = useState<'menu' | 'windows' | 'local' | 'radio'>('menu');
+  const [musicSubTab, setMusicSubTab] = useState<'menu' | 'windows' | 'local' | 'radio'>(() => {
+    try {
+      const saved = localStorage.getItem('opc_carplay_music_subtab');
+      if (saved && ['menu', 'windows', 'local', 'radio'].includes(saved)) {
+        return saved as 'menu' | 'windows' | 'local' | 'radio';
+      }
+    } catch (e) {}
+    return 'windows';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('opc_carplay_music_subtab', musicSubTab);
+    } catch (e) {}
+  }, [musicSubTab]);
 
   // Local Music Player State
   const [localTracks, setLocalTracks] = useState<{ id: string; name: string; url: string; file: File }[]>([]);
@@ -622,13 +654,6 @@ export default function CarPlayPage() {
           if (parsed.length > 0) {
             setRadioStations(parsed);
             localStorage.setItem('opc_ets2_radio_stations', JSON.stringify(parsed));
-            showNotification({
-              type: 'music',
-              title: 'ETS2/ATS Radio Auto-Ausgelesen',
-              message: `${parsed.length} Sender direkt aus live_streams.sii geladen!`,
-              color: '#10b981',
-              icon: <Radio size={16} />
-            });
             return true;
           }
         }
@@ -665,13 +690,6 @@ export default function CarPlayPage() {
         if (parsed.length > 0) {
           setRadioStations(parsed);
           localStorage.setItem('opc_ets2_radio_stations', JSON.stringify(parsed));
-          showNotification({
-            type: 'music',
-            title: 'ETS2 Radio geladen',
-            message: `${parsed.length} Radiosender erfolgreich aus live_streams.sii importiert!`,
-            color: '#f59e0b',
-            icon: <Radio size={16} />
-          });
         }
       }
     };
@@ -1084,7 +1102,7 @@ export default function CarPlayPage() {
           searchInputRef.current?.focus();
           return;
         }
-        if (dir === 'up') { maxMapWidgetRef.current?.zoomIn(); return; }
+        if (dir === 'up') { setCarPlayMapZoom(prev => Math.min(prev + 1, 12)); return; }
         if (dir === 'down') {
           // If a pending destination exists, start the route via Down
           if (pendingDest && !customDest) {
@@ -1103,7 +1121,7 @@ export default function CarPlayPage() {
             }, 100);
             return;
           }
-          maxMapWidgetRef.current?.zoomOut();
+          setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
           return;
         }
         if (dir === 'back') { setMaximizedWidget(null); setMaxMapFocus('map'); return; }
@@ -1147,8 +1165,8 @@ export default function CarPlayPage() {
     const count = getContentElementsCount();
     if (activeTab === 'home') {
       if (contentIndex === 0) {
-        if (dir === 'up') mapWidgetRef.current?.zoomIn();
-        else if (dir === 'down') mapWidgetRef.current?.zoomOut();
+        if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 12));
+        else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
         else if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(0); }
         else if (dir === 'right') { setFocusZone('content'); setContentIndex(1); }
         else if (dir === 'enter') setMaximizedWidget('map');
@@ -1167,12 +1185,12 @@ export default function CarPlayPage() {
       }
     } else if (activeTab === 'music') {
       if (dir === 'back') {
-        if (musicSubTab !== 'menu') {
-          setMusicSubTab('menu');
-          setContentIndex(0);
-        } else {
+        if (focusZone === 'content') {
           setFocusZone('sidebar');
           setSidebarIndex(1);
+        } else {
+          setActiveTab('home');
+          setSidebarIndex(0);
         }
         return;
       }
@@ -1855,14 +1873,17 @@ export default function CarPlayPage() {
     switch (th) {
       case 'light':
         return {
-          wrapper: 'bg-[#f4f5f7] text-[#1e293b] border-slate-300 shadow-inner',
-          sidebar: 'bg-[#e4e7eb] border-r border-slate-350 text-[#334155]',
-          activeTab: 'bg-amber-500/20 text-amber-600 shadow-md border border-amber-500/30 shadow-amber-500/5',
+          wrapper: 'bg-[#f1f3f6] text-[#1e293b] border-slate-300 shadow-inner',
+          sidebar: 'bg-[#e2e7ec] border-r border-slate-300 text-[#334155]',
+          activeTab: 'bg-amber-500/20 text-amber-600 shadow-md border border-amber-500/40 shadow-amber-500/10 font-bold',
           inactiveTab: 'text-slate-500 hover:bg-slate-300/40 hover:text-[#1e293b]',
-          card: 'bg-white border border-slate-250 shadow-sm rounded-2xl text-[#1e293b]',
-          badge: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+          card: 'bg-white/95 backdrop-blur-2xl border border-slate-300/80 shadow-lg rounded-3xl text-[#1e293b] overflow-hidden',
+          innerCard: 'bg-slate-100/90 border border-slate-250 text-slate-800 shadow-sm rounded-2xl overflow-hidden',
+          subBox: 'bg-slate-200/80 border border-slate-300 text-slate-900 rounded-xl',
+          badge: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
           mutedText: 'text-slate-500 font-medium',
           accentText: 'text-amber-600 font-bold',
+          headingText: 'text-slate-900 font-black',
           progressBg: 'bg-black/10 border border-black/5',
           progressFill: 'bg-amber-500 shadow-sm',
           glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)] border-amber-500/30'
@@ -1873,10 +1894,13 @@ export default function CarPlayPage() {
           sidebar: 'bg-[#1c2541]/90 border-r border-slate-800/40 text-slate-300 border-r-sky-500/20',
           activeTab: 'bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-lg shadow-sky-500/10',
           inactiveTab: 'text-slate-400 hover:bg-[#1c2541]/40 hover:text-white',
-          card: 'bg-[#1c2541]/50 border border-sky-500/10 rounded-2xl text-slate-100 backdrop-blur-md',
+          card: 'bg-[#1c2541]/90 backdrop-blur-2xl border border-sky-500/20 shadow-xl rounded-3xl text-slate-100 overflow-hidden',
+          innerCard: 'bg-[#0b132b]/80 border border-sky-500/15 text-slate-200 rounded-2xl overflow-hidden',
+          subBox: 'bg-[#0b132b]/60 border border-sky-500/10 text-white rounded-xl',
           badge: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
-          mutedText: 'text-slate-400',
-          accentText: 'text-sky-400',
+          mutedText: 'text-slate-400 font-medium',
+          accentText: 'text-sky-400 font-bold',
+          headingText: 'text-white font-black',
           progressBg: 'bg-[#0b132b]/80 border border-white/5',
           progressFill: 'bg-sky-500 shadow-md shadow-sky-500/20',
           glow: 'shadow-[0_0_15px_rgba(14,165,233,0.2)] border-sky-500/20'
@@ -1887,10 +1911,13 @@ export default function CarPlayPage() {
           sidebar: 'bg-[#151921] border-r border-[#374151] text-[#9ca3af]',
           activeTab: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.25)]',
           inactiveTab: 'text-[#9ca3af] hover:bg-[#202530] hover:text-white',
-          card: 'bg-[#1a1e26]/90 border border-[#374151] rounded-2xl text-[#eceff1] shadow-lg',
+          card: 'bg-[#1a1e26]/95 backdrop-blur-2xl border border-[#374151] shadow-xl rounded-3xl text-[#eceff1] overflow-hidden',
+          innerCard: 'bg-[#12151b]/90 border border-[#374151]/60 text-[#eceff1] rounded-2xl overflow-hidden',
+          subBox: 'bg-[#0d1015]/80 border border-[#374151]/40 text-white rounded-xl',
           badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-          mutedText: 'text-[#9ca3af]',
-          accentText: 'text-amber-400',
+          mutedText: 'text-[#9ca3af] font-medium',
+          accentText: 'text-amber-400 font-bold',
+          headingText: 'text-white font-black',
           progressBg: 'bg-black/40 border border-white/5',
           progressFill: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-md shadow-amber-500/20',
           glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)] border-amber-500/20'
@@ -1902,10 +1929,13 @@ export default function CarPlayPage() {
           sidebar: 'bg-black border-r border-zinc-800/80 text-slate-400',
           activeTab: 'bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-md shadow-amber-500/10',
           inactiveTab: 'text-slate-400 hover:bg-zinc-800/50 hover:text-white',
-          card: 'bg-[#18181b] border border-zinc-700/60 rounded-2xl text-slate-100 shadow-lg',
+          card: 'bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 shadow-xl rounded-3xl text-slate-100 overflow-hidden',
+          innerCard: 'bg-[#080a0f] border border-white/[0.08] text-white rounded-2xl overflow-hidden',
+          subBox: 'bg-black/60 border border-white/10 text-white rounded-xl',
           badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-          mutedText: 'text-zinc-400',
-          accentText: 'text-amber-400',
+          mutedText: 'text-zinc-400 font-medium',
+          accentText: 'text-amber-400 font-bold',
+          headingText: 'text-white font-black',
           progressBg: 'bg-black/50 border border-zinc-700/40',
           progressFill: 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.8)]',
           glow: 'shadow-[0_0_15px_rgba(245,158,11,0.2)] border-amber-500/30'
@@ -1956,6 +1986,13 @@ export default function CarPlayPage() {
         }}
       />
       <style>{`
+        html, body, #root {
+          background-color: #000000 !important;
+          background: #000000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
         .carplay-root {
           --cp-scale: ${cpScale};
         }
@@ -1991,9 +2028,10 @@ export default function CarPlayPage() {
         .carplay-root .text-5xl { font-size: calc(48px * var(--cp-scale)) !important; }
         .carplay-root .text-6xl { font-size: calc(60px * var(--cp-scale)) !important; }
       `}</style>
-      <div 
-        className={`w-screen h-screen flex select-none font-outfit rounded-3xl overflow-hidden border-2 shadow-2xl relative ${c.wrapper} carplay-root`}
-      >
+      <div className="w-screen h-screen bg-black overflow-hidden flex items-center justify-center p-0 m-0 relative">
+        <div 
+          className={`w-full h-full flex select-none font-outfit rounded-3xl overflow-hidden border-2 shadow-2xl relative ${c.wrapper} carplay-root`}
+        >
       {/* CarPlay Alert Notification Toast Banner (Unified Apple CarPlay Dark Glass Pill Banner) */}
       <AnimatePresence>
         {activeNotification && (() => {
@@ -2177,13 +2215,13 @@ export default function CarPlayPage() {
                 {/* Left Side: Map Widget */}
                 <div
                   onClick={() => setMaximizedWidget('map')}
-                  className={`col-span-7 h-full flex flex-col cursor-pointer transition-all duration-300 rounded-2xl border ${
+                  className={`col-span-7 h-full flex flex-col cursor-pointer transition-all duration-300 ${c.card} overflow-hidden ${
                     focusZone === 'content' && contentIndex === 0
                       ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.45)] z-20'
-                      : 'hover:scale-[1.005] hover:border-zinc-600 border border-zinc-800 shadow-lg'
-                  } relative bg-black overflow-hidden`}
+                      : 'hover:scale-[1.005] hover:border-white/20'
+                  } relative`}
                 >
-                  <div ref={setMapContainerRef} className="flex-1 relative bg-black overflow-hidden">
+                  <div ref={setMapContainerRef} className="flex-1 relative bg-black overflow-hidden rounded-[inherit]">
                     <GameMapWidget
                       ref={mapWidgetRef}
                       gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
@@ -2199,6 +2237,8 @@ export default function CarPlayPage() {
                       width={mapDims.w}
                       height={mapDims.h}
                       mapId="carplay-home"
+                      zoom={carPlayMapZoom}
+                      onZoomChange={setCarPlayMapZoom}
                       showInstructions
                     />
                   </div>
@@ -2213,7 +2253,7 @@ export default function CarPlayPage() {
                       setMusicSubTab('windows');
                       setSidebarIndex(1);
                     }}
-                    className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 rounded-3xl overflow-hidden bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.9)] p-3.5 group ${
+                    className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 ${c.card} p-3.5 group ${
                       focusZone === 'content' && contentIndex === 1
                         ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] z-20'
                         : 'hover:scale-[1.005] hover:border-white/20'
@@ -2221,7 +2261,7 @@ export default function CarPlayPage() {
                   >
                     {/* Full Cover Image filling 100% of the entire widget area */}
                     {albumArtSrc ? (
-                      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+                      <div className="absolute inset-0 z-0 overflow-hidden rounded-[inherit] pointer-events-none">
                         <img
                           src={albumArtSrc}
                           alt={media?.title || ''}
@@ -2230,7 +2270,7 @@ export default function CarPlayPage() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/50 pointer-events-none" />
                       </div>
                     ) : (
-                      <div className="absolute inset-0 z-0 bg-gradient-to-br from-zinc-950 via-[#0d1117] to-zinc-900" />
+                      <div className="absolute inset-0 z-0 bg-gradient-to-br from-zinc-950 via-[#0d1117] to-zinc-900 overflow-hidden rounded-[inherit]" />
                     )}
 
                     {/* TOP ROW & ACTIVE MEDIA DISPLAY (Unified for SMTC, Local Music & ETS2 Live Radio) */}
@@ -2347,9 +2387,9 @@ export default function CarPlayPage() {
                   {/* Redesigned Digital Cockpit Widget (Apple CarPlay Ultra-Dark Glass UI) */}
                   <div
                     onClick={() => setMaximizedWidget('diagnostics')}
-                    className={`p-4 flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 rounded-3xl bg-[#080a0f]/95 backdrop-blur-2xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden relative group ${
+                    className={`p-4 flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 ${c.card} overflow-hidden relative group ${
                       focusZone === 'content' && contentIndex === 3
-                        ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)] z-20 bg-[#0d1017]'
+                        ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)] z-20'
                         : 'hover:scale-[1.005] hover:border-white/20'
                     }`}
                   >
@@ -2378,26 +2418,26 @@ export default function CarPlayPage() {
                       {/* Right: Gang, Restreichweite, Zustand (Massive Full-Width Cards & Typography) */}
                       <div className="col-span-7 flex flex-col justify-between gap-2.5 h-full py-0.5">
                         {/* Gang */}
-                        <div className="flex-1 flex items-center justify-between bg-[#0d1017] px-4 py-2 rounded-2xl border border-white/[0.08] shadow-md">
-                          <span className="text-xs font-black text-zinc-300 uppercase tracking-wider font-mono shrink-0">Gang</span>
+                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
+                          <span className={`text-xs font-black uppercase tracking-wider font-mono shrink-0 ${c.mutedText}`}>Gang</span>
                           <span className="text-lg font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-0.5 rounded-xl font-mono leading-none shrink-0 whitespace-nowrap shadow-sm">
                             {gear > 0 ? `D${gear}` : gear < 0 ? `R${Math.abs(gear)}` : 'N'}
                           </span>
                         </div>
 
                         {/* Restreichweite */}
-                        <div className="flex-1 flex items-center justify-between bg-[#0d1017] px-4 py-2 rounded-2xl border border-white/[0.08] shadow-md">
-                          <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono">
+                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
+                          <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono ${c.mutedText}`}>
                             <Fuel size={15} className="text-amber-400 shrink-0" /> Tank
                           </span>
-                          <span className="text-base font-black text-white font-mono tabular-nums shrink-0 whitespace-nowrap">
+                          <span className={`text-base font-black font-mono tabular-nums shrink-0 whitespace-nowrap ${c.headingText}`}>
                             {Math.round(data.fuelRange)} km
                           </span>
                         </div>
 
                         {/* Zustand */}
-                        <div className="flex-1 flex items-center justify-between bg-[#0d1017] px-4 py-2 rounded-2xl border border-white/[0.08] shadow-md">
-                          <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono">
+                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
+                          <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono ${c.mutedText}`}>
                             <Wrench size={15} className="text-amber-400 shrink-0" /> Zustand
                           </span>
                           <span className={`text-xs font-black px-3 py-0.5 rounded-xl font-mono leading-none shrink-0 whitespace-nowrap shadow-sm ${
@@ -2426,24 +2466,24 @@ export default function CarPlayPage() {
                       {/* Button 1: Windows SMTC / Spotify */}
                       <button
                         onClick={() => { setMusicSubTab('windows'); setContentIndex(0); }}
-                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.95)] ${
+                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer ${
                           focusZone === 'content' && contentIndex === 0
-                            ? 'ring-4 ring-amber-500 scale-[1.02] border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.5)] z-20 bg-[#0d1017]'
-                            : 'bg-[#080a0f]/95 hover:bg-[#0f131b] border-white/[0.08] hover:border-amber-500/40 hover:scale-[1.01]'
+                            ? 'ring-4 ring-amber-500 scale-[1.02] border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.5)] z-20 bg-amber-500/20'
+                            : `${c.card} hover:scale-[1.01]`
                         }`}
                       >
                         <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] group-hover:bg-amber-500/10 group-hover:border-amber-500/30 text-amber-400 flex items-center justify-center transition-all duration-300 shrink-0">
                           <Monitor size={26} className="stroke-[2.2]" />
                         </div>
                         <div className="my-auto">
-                          <h3 className="text-xl font-black text-white tracking-tight leading-tight group-hover:text-amber-300 transition-colors">
+                          <h3 className={`text-xl font-black ${c.headingText} tracking-tight leading-tight group-hover:text-amber-400 transition-colors`}>
                             Windows Media
                           </h3>
-                          <p className="text-xs font-semibold text-zinc-400 mt-1.5 leading-relaxed">
+                          <p className={`text-xs font-semibold ${c.mutedText} mt-1.5 leading-relaxed`}>
                             Spotify, Chrome & System-Audio
                           </p>
                         </div>
-                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-amber-400/90 group-hover:text-amber-300 font-mono transition-colors">
+                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-amber-400/90 group-hover:text-amber-400 font-mono transition-colors">
                           <span>Öffnen</span>
                           <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
@@ -2452,24 +2492,24 @@ export default function CarPlayPage() {
                       {/* Button 2: Lokale Musik */}
                       <button
                         onClick={() => { setMusicSubTab('local'); setContentIndex(0); }}
-                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.95)] ${
+                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer ${
                           focusZone === 'content' && contentIndex === 1
-                            ? 'ring-4 ring-blue-500 scale-[1.02] border-blue-400 shadow-[0_0_35px_rgba(59,130,246,0.5)] z-20 bg-[#0d1017]'
-                            : 'bg-[#080a0f]/95 hover:bg-[#0f131b] border-white/[0.08] hover:border-blue-500/40 hover:scale-[1.01]'
+                            ? 'ring-4 ring-blue-500 scale-[1.02] border-blue-400 shadow-[0_0_35px_rgba(59,130,246,0.5)] z-20 bg-blue-500/20'
+                            : `${c.card} hover:scale-[1.01]`
                         }`}
                       >
                         <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] group-hover:bg-blue-500/10 group-hover:border-blue-500/30 text-blue-400 flex items-center justify-center transition-all duration-300 shrink-0">
                           <Disc size={26} className="stroke-[2.2]" />
                         </div>
                         <div className="my-auto">
-                          <h3 className="text-xl font-black text-white tracking-tight leading-tight group-hover:text-blue-300 transition-colors">
+                          <h3 className={`text-xl font-black ${c.headingText} tracking-tight leading-tight group-hover:text-blue-400 transition-colors`}>
                             Lokale Musik
                           </h3>
-                          <p className="text-xs font-semibold text-zinc-400 mt-1.5 leading-relaxed">
+                          <p className={`text-xs font-semibold ${c.mutedText} mt-1.5 leading-relaxed`}>
                             MP3, FLAC & WAV Dateien
                           </p>
                         </div>
-                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-blue-400/90 group-hover:text-blue-300 font-mono transition-colors">
+                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-blue-400/90 group-hover:text-blue-400 font-mono transition-colors">
                           <span>Öffnen</span>
                           <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
@@ -2478,24 +2518,24 @@ export default function CarPlayPage() {
                       {/* Button 3: ETS2 Live Radio */}
                       <button
                         onClick={() => { setMusicSubTab('radio'); setContentIndex(0); }}
-                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer shadow-[0_20px_50px_rgba(0,0,0,0.95)] ${
+                        className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer ${
                           focusZone === 'content' && contentIndex === 2
-                            ? 'ring-4 ring-emerald-500 scale-[1.02] border-emerald-400 shadow-[0_0_35px_rgba(16,185,129,0.5)] z-20 bg-[#0d1017]'
-                            : 'bg-[#080a0f]/95 hover:bg-[#0f131b] border-white/[0.08] hover:border-emerald-500/40 hover:scale-[1.01]'
+                            ? 'ring-4 ring-emerald-500 scale-[1.02] border-emerald-400 shadow-[0_0_35px_rgba(16,185,129,0.5)] z-20 bg-emerald-500/20'
+                            : `${c.card} hover:scale-[1.01]`
                         }`}
                       >
                         <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] group-hover:bg-emerald-500/10 group-hover:border-emerald-500/30 text-emerald-400 flex items-center justify-center transition-all duration-300 shrink-0">
                           <Radio size={26} className="stroke-[2.2]" />
                         </div>
                         <div className="my-auto">
-                          <h3 className="text-xl font-black text-white tracking-tight leading-tight group-hover:text-emerald-300 transition-colors">
+                          <h3 className={`text-xl font-black ${c.headingText} tracking-tight leading-tight group-hover:text-emerald-400 transition-colors`}>
                             ETS2 Live-Radio
                           </h3>
-                          <p className="text-xs font-semibold text-zinc-400 mt-1.5 leading-relaxed">
+                          <p className={`text-xs font-semibold ${c.mutedText} mt-1.5 leading-relaxed`}>
                             Web-Streams & Sendersuche
                           </p>
                         </div>
-                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-emerald-400/90 group-hover:text-emerald-300 font-mono transition-colors">
+                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] text-xs font-bold text-emerald-400/90 group-hover:text-emerald-400 font-mono transition-colors">
                           <span>Öffnen</span>
                           <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
@@ -2531,7 +2571,7 @@ export default function CarPlayPage() {
 
                       if (!displayTitle) {
                         return (
-                          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center rounded-2xl bg-black/95 backdrop-blur-2xl border border-zinc-800 shadow-[0_20px_50px_rgba(0,0,0,0.95)] relative">
+                          <div className={`flex-1 flex flex-col items-center justify-center p-6 text-center ${c.card} relative`}>
                             {/* Floating Back Arrow */}
                             <button
                               onClick={() => { setMusicSubTab('menu'); setContentIndex(0); }}
@@ -2547,8 +2587,8 @@ export default function CarPlayPage() {
                             <div className="w-18 h-18 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3 shadow-lg">
                               <Music size={36} className="text-amber-400 animate-pulse" />
                             </div>
-                            <h3 className="text-xl font-black text-white mb-1.5 tracking-tight">Keine aktive Medienwiedergabe</h3>
-                            <p className="text-xs max-w-[320px] leading-relaxed text-zinc-400 font-bold">
+                            <h3 className={`text-xl font-black ${c.headingText} mb-1.5 tracking-tight`}>Keine aktive Medienwiedergabe</h3>
+                            <p className={`text-xs max-w-[320px] leading-relaxed ${c.mutedText}`}>
                               Starte Spotify, spiele lokale Musik oder schalte das ETS2 Live-Radio ein.
                             </p>
                           </div>
@@ -2556,7 +2596,7 @@ export default function CarPlayPage() {
                       }
 
                       return (
-                        <div className="flex-1 flex flex-col relative overflow-hidden rounded-2xl bg-black border border-zinc-800 shadow-[0_20px_50px_rgba(0,0,0,0.95)]">
+                        <div className={`flex-1 flex flex-col relative overflow-hidden ${c.card}`}>
                           {/* Floating Back Arrow */}
                           <button
                             onClick={() => { setMusicSubTab('menu'); setContentIndex(0); }}
@@ -2701,10 +2741,10 @@ export default function CarPlayPage() {
 
                 {/* --- MODE 2: LOKALE MUSIK PLAYER --- */}
                 {musicSubTab === 'local' && (
-                  <div className="flex-1 flex flex-col bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-3 overflow-hidden justify-between shadow-2xl">
+                  <div className={`flex-1 flex flex-col ${c.card} p-3 overflow-hidden justify-between shadow-2xl`}>
                     {localTracks.length > 0 ? (
                       <div className="flex flex-col h-full justify-between gap-2">
-                        <div className="bg-black/60 border border-white/10 rounded-xl p-2.5 flex items-center gap-3">
+                        <div className={`${c.innerCard} p-2.5 flex items-center gap-3`}>
                           <button
                             onClick={() => { setMusicSubTab('menu'); setContentIndex(0); }}
                             title="Quelle wechseln"
@@ -2721,8 +2761,8 @@ export default function CarPlayPage() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider font-mono">Lokaler Song ({currentLocalIndex + 1} / {localTracks.length})</span>
-                            <h3 className="text-sm font-black text-white truncate leading-tight">{localTracks[currentLocalIndex]?.name}</h3>
-                            <span className="text-[10px] text-zinc-400 font-mono truncate block">{localTracks[currentLocalIndex]?.file.name}</span>
+                            <h3 className={`text-sm font-black ${c.headingText} truncate leading-tight`}>{localTracks[currentLocalIndex]?.name}</h3>
+                            <span className={`text-[10px] ${c.mutedText} font-mono truncate block`}>{localTracks[currentLocalIndex]?.file.name}</span>
                           </div>
                           <label className={`px-3 py-1.5 rounded-xl text-white text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0 ${
                             focusZone === 'content' && contentIndex === 1
@@ -2734,7 +2774,7 @@ export default function CarPlayPage() {
                           </label>
                         </div>
 
-                        <div className="flex-1 min-h-0 overflow-y-auto border border-white/10 rounded-xl bg-black/40 divide-y divide-white/5 p-1">
+                        <div className={`flex-1 min-h-0 overflow-y-auto ${c.innerCard} divide-y divide-black/5 dark:divide-white/5 p-1`}>
                           {localTracks.map((t, idx) => {
                             const isTrackFocused = focusZone === 'content' && contentIndex === idx + 2;
                             return (
@@ -2747,7 +2787,7 @@ export default function CarPlayPage() {
                                     ? 'ring-4 ring-blue-500 scale-[1.02] border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.6)] z-20 bg-blue-500/25 text-white font-bold'
                                     : idx === currentLocalIndex
                                     ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/40'
-                                    : 'hover:bg-white/5 text-zinc-300'
+                                    : `${c.mutedText} hover:bg-black/5 dark:hover:bg-white/5`
                                 }`}
                               >
                                 <div className="flex items-center gap-2 truncate">
@@ -2762,12 +2802,12 @@ export default function CarPlayPage() {
                           })}
                         </div>
 
-                        <div className="bg-black/80 border border-white/10 rounded-xl p-3 flex flex-col gap-2 shrink-0">
+                        <div className={`${c.innerCard} p-3 flex flex-col gap-2 shrink-0`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length)}
-                                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                                className="w-8 h-8 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-slate-800 dark:text-white flex items-center justify-center transition-all cursor-pointer"
                               >
                                 <SkipBack size={14} />
                               </button>
@@ -2779,14 +2819,14 @@ export default function CarPlayPage() {
                               </button>
                               <button
                                 onClick={() => playLocalTrack((currentLocalIndex + 1) % localTracks.length)}
-                                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                                className="w-8 h-8 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-slate-800 dark:text-white flex items-center justify-center transition-all cursor-pointer"
                               >
                                 <SkipForward size={14} />
                               </button>
                             </div>
 
                             <div className="flex items-center gap-2 min-w-[140px]">
-                              <Volume2 size={14} className="text-zinc-400" />
+                              <Volume2 size={14} className={c.mutedText} />
                               <input
                                 type="range"
                                 min="0"
@@ -2798,12 +2838,12 @@ export default function CarPlayPage() {
                                   setLocalVolume(v);
                                   if (localAudioRef.current) localAudioRef.current.volume = v;
                                 }}
-                                className="w-full accent-amber-500 cursor-pointer h-1 bg-white/20 rounded-lg"
+                                className="w-full accent-amber-500 cursor-pointer h-1 bg-black/20 dark:bg-white/20 rounded-lg"
                               />
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400">
+                          <div className={`flex items-center gap-2 text-[10px] font-mono ${c.mutedText}`}>
                             <span>{formatMediaTime(localProgress)}</span>
                             <input
                               type="range"
@@ -2815,7 +2855,7 @@ export default function CarPlayPage() {
                                 setLocalProgress(val);
                                 if (localAudioRef.current) localAudioRef.current.currentTime = val;
                               }}
-                              className="w-full accent-amber-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
+                              className="w-full accent-amber-500 cursor-pointer h-1.5 bg-black/20 dark:bg-white/20 rounded-lg"
                             />
                             <span>{formatMediaTime(localDuration)}</span>
                           </div>
@@ -2834,9 +2874,9 @@ export default function CarPlayPage() {
                         >
                           <ArrowLeft size={18} className="stroke-[2.5]" />
                         </button>
-                        <Disc size={40} className="text-zinc-600 mb-3" />
-                        <h3 className="text-base font-black text-white mb-1">Keine lokalen Songs geladen</h3>
-                        <p className="text-xs text-zinc-400 max-w-[280px] mb-4">
+                        <Disc size={40} className="text-zinc-500 mb-3" />
+                        <h3 className={`text-base font-black ${c.headingText} mb-1`}>Keine lokalen Songs geladen</h3>
+                        <p className={`text-xs ${c.mutedText} max-w-[280px] mb-4`}>
                           Wähle Musikdateien (.mp3, .flac, .wav) von deiner Festplatte aus.
                         </p>
                         <label className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase text-xs tracking-wider cursor-pointer shadow-lg transition-all">
@@ -2850,15 +2890,15 @@ export default function CarPlayPage() {
 
                 {/* --- MODE 3: ETS2 LIVE-RADIO STREAMS --- */}
                 {musicSubTab === 'radio' && (
-                  <div className="flex-1 min-h-0 flex flex-col bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-3xl p-3.5 overflow-hidden justify-between shadow-[0_20px_50px_rgba(0,0,0,0.9)] gap-3">
+                  <div className={`flex-1 min-h-0 flex flex-col ${c.card} p-3.5 overflow-hidden justify-between gap-3`}>
                     <div className="flex items-center gap-2.5 shrink-0">
                       <button
                         onClick={() => { setMusicSubTab('menu'); setContentIndex(0); }}
                         title="Quelle wechseln"
-                        className={`w-10 h-10 rounded-2xl bg-[#0d1117]/90 backdrop-blur-2xl border flex items-center justify-center cursor-pointer shrink-0 transition-all ${
+                        className={`w-10 h-10 rounded-2xl ${c.innerCard} flex items-center justify-center cursor-pointer shrink-0 transition-all ${
                           focusZone === 'content' && contentIndex === 0
                             ? 'ring-4 ring-amber-500 scale-105 bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/40'
-                            : 'border-white/20 text-white hover:border-amber-500/50 hover:scale-105 shadow-md'
+                            : 'hover:border-amber-500/50 hover:scale-105 shadow-md'
                         }`}
                       >
                         <ArrowLeft size={18} className="stroke-[2.5]" />
@@ -2872,14 +2912,14 @@ export default function CarPlayPage() {
                         }`}
                       >
                         <div className="relative flex-1">
-                          <Search size={15} className="absolute left-3.5 top-2.5 text-zinc-400" />
+                          <Search size={15} className={`absolute left-3.5 top-2.5 ${c.mutedText}`} />
                           <input
                             type="text"
                             value={radioSearch}
                             onFocus={() => openVirtualKeyboard('radio')}
                             onChange={(e) => setRadioSearch(e.target.value)}
                             placeholder="Sender oder Genre suchen..."
-                            className="w-full bg-[#0d1117]/90 border border-white/15 rounded-2xl py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner"
+                            className={`w-full ${c.innerCard} py-2 pl-9 pr-3 text-xs ${c.headingText} focus:outline-none focus:border-amber-500 cursor-pointer shadow-inner`}
                           />
                         </div>
                       </div>
@@ -2904,7 +2944,7 @@ export default function CarPlayPage() {
                               </label>
                             </div>
 
-                            <div className="flex-1 min-h-0 overflow-y-auto border border-white/10 rounded-2xl bg-black/40 p-2.5 grid grid-cols-2 gap-2.5 transform-gpu">
+                            <div className={`flex-1 min-h-0 overflow-y-auto ${c.innerCard} p-2.5 grid grid-cols-2 gap-2.5 transform-gpu`}>
                               {filteredRadioStations.map((st, idx) => {
                                 const isCurrent = activeRadio?.id === st.id;
                                 const stLogo = getRadioLogoUrl(st);
@@ -2918,8 +2958,8 @@ export default function CarPlayPage() {
                                       isItemFocused
                                         ? 'ring-4 ring-amber-500 scale-[1.02] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.6)] z-20 bg-amber-500/25 text-white font-bold'
                                         : isCurrent && isRadioPlaying
-                                        ? 'bg-amber-500/15 border-amber-500/70 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
-                                        : 'bg-[#0d1117]/80 backdrop-blur-xl border-white/10 hover:border-amber-500/40 hover:bg-white/[0.05] text-zinc-200'
+                                        ? 'bg-amber-500/15 border-amber-500/70 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                                        : `${c.subBox} hover:border-amber-500/40`
                                     }`}
                                   >
                                     <div className="flex items-center justify-between gap-1 min-w-0">
@@ -2930,7 +2970,7 @@ export default function CarPlayPage() {
                                           size="sm"
                                           className="w-5 h-5 rounded-md object-contain bg-black/60 p-0.5 border border-white/10 shrink-0"
                                         />
-                                        <span className="text-xs font-black truncate">{st.name}</span>
+                                        <span className={`text-xs font-black truncate ${c.headingText}`}>{st.name}</span>
                                       </div>
                                       {st.favorite && (
                                         <span className="text-[9px] bg-amber-500/20 border border-amber-500/40 text-amber-400 px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0">
@@ -2938,9 +2978,9 @@ export default function CarPlayPage() {
                                         </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center justify-between text-[9.5px] font-mono text-zinc-400 mt-1.5">
+                                    <div className={`flex items-center justify-between text-[9.5px] font-mono ${c.mutedText} mt-1.5`}>
                                       <span className="truncate max-w-[100px]">{st.genre}</span>
-                                      <span className="font-bold text-amber-400/80">{st.bitrate} kbps</span>
+                                      <span className="font-bold text-amber-500">{st.bitrate} kbps</span>
                                     </div>
                                   </button>
                                 );
@@ -2948,7 +2988,7 @@ export default function CarPlayPage() {
                             </div>
 
                             {activeRadio && (
-                              <div className="bg-[#0d1117]/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.9)] flex items-center justify-between">
+                              <div className={`${c.innerCard} p-3 flex items-center justify-between`}>
                                 <div className="flex items-center gap-3 min-w-0">
                                   <RadioLogoImage
                                     src={getRadioLogoUrl(activeRadio)}
@@ -2961,13 +3001,13 @@ export default function CarPlayPage() {
                                       <span className="text-[8px] font-black uppercase text-amber-400 font-mono tracking-widest bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md">
                                         {isRadioPlaying ? (radioSongTitle ? '🎵 LIVE TRACK' : 'LIVE STREAM') : 'PAUSIERT'}
                                       </span>
-                                      <span className="text-[8.5px] font-mono text-zinc-400 font-bold">{activeRadio.bitrate} kbps</span>
+                                      <span className={`text-[8.5px] font-mono ${c.mutedText} font-bold`}>{activeRadio.bitrate} kbps</span>
                                     </div>
-                                    <h4 className="text-xs font-black text-white truncate mt-0.5">
+                                    <h4 className={`text-xs font-black ${c.headingText} truncate mt-0.5`}>
                                       {radioSongTitle || activeRadio.name}
                                     </h4>
                                     {radioSongTitle && (
-                                      <p className="text-[10px] text-amber-300/80 font-bold truncate mt-0.5 font-mono">
+                                      <p className="text-[10px] text-amber-500 font-bold truncate mt-0.5 font-mono">
                                         Sender: {activeRadio.name}
                                       </p>
                                     )}
@@ -3012,7 +3052,7 @@ export default function CarPlayPage() {
                {/* --- JOB INFO TAB --- */}
             {activeTab === 'job' && (
               <div className="h-full flex flex-col overflow-hidden">
-                <div className="flex-1 flex flex-col p-5 bg-[#080a0f]/95 backdrop-blur-2xl border border-white/[0.08] rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] overflow-hidden justify-between relative">
+                <div className={`flex-1 flex flex-col p-5 ${c.card} overflow-hidden justify-between relative`}>
                   {/* Subtle Background Aura Glow */}
                   <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -3042,9 +3082,9 @@ export default function CarPlayPage() {
                     <div className="flex-1 flex flex-col gap-3 min-h-0 relative z-10">
                       {/* Frachtgut + Reststrecke */}
                       <div className="grid grid-cols-12 gap-3 shrink-0">
-                        <div className="col-span-7 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-4 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-7 ${c.innerCard} p-4 flex flex-col justify-between shadow-lg`}>
                           <span className="text-[9px] font-black font-mono text-amber-400 uppercase tracking-widest block mb-1">FRACHTGUT</span>
-                          <p className="text-2xl font-black text-white leading-tight truncate drop-shadow-md">{data.cargo}</p>
+                          <p className={`text-2xl font-black ${c.headingText} leading-tight truncate drop-shadow-md`}>{data.cargo}</p>
                           {data.cargoMass > 0 && (
                             <div className="mt-2.5">
                               <span className="text-xs text-white font-mono font-bold inline-flex items-center gap-1.5 bg-black/60 px-3 py-1.5 rounded-xl border border-white/10 shadow-inner">
@@ -3147,7 +3187,7 @@ export default function CarPlayPage() {
             {/* --- TRUCK DIAGNOSTICS TAB (REAL SDK TELEMETRY ONLY) --- */}
             {activeTab === 'truck' && (
               <div className="h-full flex flex-col overflow-hidden">
-                <div className="flex-1 flex flex-col p-3.5 bg-[#080a0f]/95 backdrop-blur-2xl border border-white/[0.08] rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] overflow-hidden justify-between relative">
+                <div className={`flex-1 flex flex-col p-4 ${c.card} overflow-hidden justify-between relative`}>
                   {/* Background Aura Glows */}
                   <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -3204,7 +3244,7 @@ export default function CarPlayPage() {
                         </div>
 
                         {/* Gear & RPM Tachometer Card */}
-                        <div className="col-span-4 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-2.5 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
                           <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-mono font-black text-zinc-400">
                             <span className="text-amber-400 uppercase tracking-wider">ANTRIEB & GANG</span>
                             <span className="text-zinc-400 font-mono">{Math.round(data.rpm || 0)} U/MIN</span>
@@ -3233,7 +3273,7 @@ export default function CarPlayPage() {
                         </div>
 
                         {/* Tank & Wear Summary Card */}
-                        <div className="col-span-3 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-2.5 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-3 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
                           <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-mono font-black text-amber-400">
                             <span className="uppercase tracking-wider">ÜBERSICHT</span>
                             <span className="text-emerald-400 font-mono">{(100 - (data.wearTruck || 0)).toFixed(0)}% OK</span>
@@ -3261,7 +3301,7 @@ export default function CarPlayPage() {
                       {/* BOTTOM ROW: Detailed Diagnostics Columns */}
                       <div className="grid grid-cols-12 gap-2.5 flex-1 min-h-0">
                         {/* Schadensanalyse */}
-                        <div className="col-span-4 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-2.5 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
                           <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
                             <span className="flex items-center gap-1"><Wrench size={11} /> SCHADENSANALYSE</span>
                             <span className="text-white font-mono font-black">{(100 - (data.wearTruck || 0)).toFixed(0)}% OK</span>
@@ -3308,7 +3348,7 @@ export default function CarPlayPage() {
                         </div>
 
                         {/* Kraftstoff & Verbrauch */}
-                        <div className="col-span-4 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-2.5 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
                           <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
                             <span className="flex items-center gap-1"><Fuel size={11} /> KRAFTSTOFF</span>
                             <span className={`px-1.5 py-0.5 rounded border ${
@@ -3352,7 +3392,7 @@ export default function CarPlayPage() {
                         </div>
 
                         {/* Systemstatus Warning Indicators */}
-                        <div className="col-span-4 bg-[#0d1017] border border-white/[0.08] rounded-2xl p-2.5 flex flex-col justify-between shadow-lg">
+                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
                           <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
                             <span className="flex items-center gap-1"><Info size={11} /> SYSTEMSTATUS</span>
                             <span className="text-emerald-400 font-bold">SDK LIVE</span>
@@ -3402,7 +3442,7 @@ export default function CarPlayPage() {
             {/* --- SETTINGS TAB --- */}
             {activeTab === 'settings' && (
               <div className="h-full flex flex-col overflow-hidden">
-                <div className="flex-1 flex flex-col p-4 bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.95)] overflow-hidden justify-between relative">
+                <div className={`flex-1 flex flex-col p-4 ${c.card} overflow-hidden justify-between relative`}>
                   {/* Subtle Background Aura Glow */}
                   <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -3424,7 +3464,7 @@ export default function CarPlayPage() {
                     {/* Left: Design & Text */}
                     <div className="space-y-2.5 flex flex-col justify-between">
                       {/* CarPlay Theme Selection */}
-                      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-xl">
+                      <div className={`${c.innerCard} p-3 shadow-xl`}>
                         <span className="text-[9.5px] font-extrabold text-amber-400 uppercase tracking-widest block mb-2">CarPlay-Design</span>
                         <div className="grid grid-cols-3 gap-2">
                            {[
@@ -3458,7 +3498,7 @@ export default function CarPlayPage() {
                       </div>
 
                       {/* Map Theme Selection */}
-                      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-xl">
+                      <div className={`${c.innerCard} p-3 shadow-xl`}>
                         <span className="text-[9.5px] font-extrabold text-blue-400 uppercase tracking-widest block mb-2">Karten-Design (Map Mode)</span>
                         <div className="grid grid-cols-3 gap-2">
                            {[
@@ -3492,7 +3532,7 @@ export default function CarPlayPage() {
                       </div>
 
                       {/* Text Scale */}
-                      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-xl">
+                      <div className={`${c.innerCard} p-3 shadow-xl`}>
                         <span className="text-[9.5px] font-extrabold text-amber-400 uppercase tracking-widest block mb-2">Textgröße</span>
                         <div className="grid grid-cols-3 gap-2">
                            {[
@@ -3779,6 +3819,8 @@ export default function CarPlayPage() {
                 width={maxMapDims.w}
                 height={maxMapDims.h}
                 mapId="carplay-max"
+                zoom={carPlayMapZoom}
+                onZoomChange={setCarPlayMapZoom}
                 showInstructions
                 onDestinationReached={() => {
                   setCustomDest(null);
@@ -4126,6 +4168,8 @@ export default function CarPlayPage() {
                         width="100%"
                         height="100%"
                         mapId="tacho-mfd-map"
+                        zoom={carPlayMapZoom}
+                        onZoomChange={setCarPlayMapZoom}
                         showInstructions
                         fullWidthInstructions
                       />
@@ -4573,6 +4617,7 @@ export default function CarPlayPage() {
       {isBlackout && (
         <div className="fixed inset-0 bg-black z-[9999999] pointer-events-auto cursor-none flex items-center justify-center select-none" />
       )}
+      </div>
 
     </>
   );

@@ -33,10 +33,19 @@ const InviteCodes = () => {
 
   const loadCodes = async () => {
     try {
-      const r = await axios.get(`${API}/management/invite-codes`, { headers: h });
-      setCodes(r.data);
-    } catch { }
-    finally { setLoading(false); }
+      const r = await axios.get(`${API}/invite-codes`, { headers: h });
+      const raw = Array.isArray(r.data) ? r.data : (r.data?.codes || []);
+      const formatted = raw.map((c: any) => ({
+        ...c,
+        used: Boolean(c.used || (c.used_by && String(c.used_by).trim() !== '')),
+        used_by_name: c.used_by_name || c.used_by || ''
+      }));
+      setCodes(formatted);
+    } catch (err: any) {
+      console.error('Failed to load invite codes:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadCodes(); }, [token]);
@@ -44,19 +53,29 @@ const InviteCodes = () => {
   const generateCode = async () => {
     setGenerating(true);
     try {
-      const r = await axios.post(`${API}/management/invite-codes`, {}, { headers: h });
-      toast.success(`Code erstellt: ${r.data.code}`);
-      loadCodes();
-    } catch { toast.error("Fehler beim Generieren"); }
-    finally { setGenerating(false); }
+      const r = await axios.post(`${API}/invite-codes`, {}, { headers: h });
+      const newCode = r.data?.code || r.data?.invite_code || '';
+      if (newCode) {
+        toast.success(`Code erstellt: ${newCode}`);
+        loadCodes();
+      } else {
+        toast.error("Fehler beim Generieren");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Fehler beim Generieren");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const deleteCode = async (code: string) => {
     try {
-      await axios.delete(`${API}/management/invite-codes/${code}`, { headers: h });
+      await axios.delete(`${API}/invite-codes/${code}`, { headers: h });
       toast.success("Code gelöscht");
       loadCodes();
-    } catch { toast.error("Fehler"); }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Fehler beim Löschen");
+    }
   };
 
   return (

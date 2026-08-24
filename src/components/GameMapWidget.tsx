@@ -3,7 +3,7 @@ import * as proj4 from 'proj4';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as pmtiles from 'pmtiles';
-import { Crosshair, Navigation } from 'lucide-react';
+import { Crosshair, Navigation, Plus, Minus } from 'lucide-react';
 import { API_URL } from '../config';
 import { findCity, findCompany } from '../data/ets2Cities';
 import { CarPlayNavOverlay } from './CarPlayNavOverlay';
@@ -43,11 +43,15 @@ interface GameMapWidgetProps {
   /** Map theme mode ('dark' | 'light') */
   themeMode?: 'dark' | 'light';
   /** Widget width */
-  width?: number;
+  width?: number | string;
   /** Widget height */
-  height?: number;
+  height?: number | string;
+  /** Controlled map zoom level */
+  zoom?: number;
   /** Initial map zoom level */
   initialZoom?: number;
+  /** Callback emitted when zoom changes */
+  onZoomChange?: (zoom: number) => void;
   /** Whether to show top-right CarPlay navigation overlay banner */
   showInstructions?: boolean;
   /** Unique map identifier */
@@ -484,7 +488,7 @@ function getIpcRenderer() {
 const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   gameX, gameY, heading, source, dest, destCompany, city,
   navDistance, connected, accentColor = '#f59e0b', themeMode = 'dark',
-  width = 300, height = 200, initialZoom = 9,
+  width = 300, height = 200, zoom, initialZoom = 9, onZoomChange,
   showInstructions = false, mapId, onDestinationReached
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -496,17 +500,31 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const [mapReady, setMapReady] = useState(false);
   const lastPos = useRef<[number, number] | null>(null);
 
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+
   const [jsonTurnPoints, setJsonTurnPoints] = useState<JSONTurnPoint[]>([]);
   const [segmentLanes, setSegmentLanes] = useState<number[]>([]);
   const [rawRouteCoords, setRawRouteCoords] = useState<[number, number][]>([]);
   const [navInstruction, setNavInstruction] = useState<InstructionResult>({ primary: null, upcoming: [] });
 
-  // Dynamic zoom state tracked in ref to avoid telemetry telemetry zoom resets
-  const currentZoomRef = useRef<number>(initialZoom);
+  // Dynamic zoom state tracked in ref to avoid telemetry zoom resets
+  const currentZoomRef = useRef<number>(zoom ?? initialZoom);
   const lastRouteKeyRef = useRef<string>('');
   const lastRouteCalcPosRef = useRef<{ x: number; y: number } | null>(null);
   const headingRef = useRef<number | undefined>(heading);
   headingRef.current = heading;
+
+  // Controlled zoom prop synchronization
+  useEffect(() => {
+    if (zoom !== undefined && mapRef.current && mapReady) {
+      const current = mapRef.current.getZoom();
+      if (Math.abs(current - zoom) > 0.05) {
+        currentZoomRef.current = zoom;
+        mapRef.current.easeTo({ zoom, duration: 250 });
+      }
+    }
+  }, [zoom, mapReady]);
 
   const [routeGeoJson, setRouteGeoJson] = useState<{
     traveled: GeoJSON.FeatureCollection;
@@ -527,6 +545,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       const next = Math.min(current + 1, 12);
       currentZoomRef.current = next;
       mapRef.current.easeTo({ zoom: next, duration: 300 });
+      if (onZoomChangeRef.current) {
+        onZoomChangeRef.current(next);
+      }
     },
     zoomOut: () => {
       if (!mapRef.current) return;
@@ -534,6 +555,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       const next = Math.max(current - 1, 4);
       currentZoomRef.current = next;
       mapRef.current.easeTo({ zoom: next, duration: 300 });
+      if (onZoomChangeRef.current) {
+        onZoomChangeRef.current(next);
+      }
     },
     recenter: () => {
       if (!mapRef.current || !lastPos.current) return;
@@ -596,7 +620,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       container: mapContainer.current,
       style: createEts2Style(),
       center: [12, 50],
-      zoom: initialZoom,
+      zoom: currentZoomRef.current,
       minZoom: 4,
       maxZoom: 12,
       bearing: 0,
@@ -628,17 +652,19 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       currentBearingRef.current = map.getBearing();
     });
 
-    // Track user zoom actions to update currentZoomRef
-    map.on('zoomend', () => {
+    // Track user zoom actions to update currentZoomRef and notify parent listeners
+    const handleZoomEvent = () => {
       if (mapRef.current) {
-        currentZoomRef.current = mapRef.current.getZoom();
+        const newZoom = Math.round(mapRef.current.getZoom() * 10) / 10;
+        currentZoomRef.current = newZoom;
+        if (onZoomChangeRef.current) {
+          onZoomChangeRef.current(newZoom);
+        }
       }
-    });
-    map.on('zoom', () => {
-      if (mapRef.current) {
-        currentZoomRef.current = mapRef.current.getZoom();
-      }
-    });
+    };
+
+    map.on('zoomend', handleZoomEvent);
+    map.on('zoom', handleZoomEvent);
 
     mapRef.current = map;
 
@@ -1232,6 +1258,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const next = Math.min(current + 1, 12);
     currentZoomRef.current = next;
     mapRef.current.easeTo({ zoom: next, duration: 300 });
+    if (onZoomChangeRef.current) {
+      onZoomChangeRef.current(next);
+    }
   }, []);
 
   const handleZoomOut = useCallback(() => {
@@ -1240,6 +1269,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const next = Math.max(current - 1, 4);
     currentZoomRef.current = next;
     mapRef.current.easeTo({ zoom: next, duration: 300 });
+    if (onZoomChangeRef.current) {
+      onZoomChangeRef.current(next);
+    }
   }, []);
 
   const formatDistance = (meters: number) => {
@@ -1274,14 +1306,41 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         </div>
       )}
 
-      {/* Map Recenter Control (when user panned away) */}
-      {!following && lastPos.current && (
-        <div className="gm-controls-group">
-          <button className="gm-ctrl-btn gm-recenter-active" onClick={recenter} title="Karte zentrieren">
+      {/* Map Controls Group (Zoom In, Zoom Out, Recenter) */}
+      <div className="gm-controls-group" onClick={(e) => e.stopPropagation()}>
+        <button
+          className="gm-ctrl-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleZoomIn();
+          }}
+          title="Heranzoomen (+)"
+        >
+          <Plus size={14} />
+        </button>
+        <button
+          className="gm-ctrl-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleZoomOut();
+          }}
+          title="Herauszoomen (-)"
+        >
+          <Minus size={14} />
+        </button>
+        {!following && lastPos.current && (
+          <button
+            className="gm-ctrl-btn gm-recenter-active"
+            onClick={(e) => {
+              e.stopPropagation();
+              recenter();
+            }}
+            title="Karte zentrieren"
+          >
             <Crosshair size={14} />
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* No connection overlay */}
       {!connected && (
@@ -1293,22 +1352,27 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       <style>{`
         .game-map-widget {
           position: relative;
-          border-radius: 16px;
-          overflow: hidden;
+          width: 100%;
+          height: 100%;
+          border-radius: inherit;
+          overflow: hidden !important;
           background: #0d1117;
-          border: 1px solid rgba(245, 158, 11,0.2);
           box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+          isolation: isolate;
         }
         .game-map-container {
           width: 100%;
           height: 100%;
           position: relative;
           z-index: 0;
-        }
-        .game-map-container .maplibregl-canvas {
-          border-radius: 16px;
+          border-radius: inherit;
+          overflow: hidden !important;
         }
         .game-map-container .maplibregl-canvas-container,
+        .game-map-container .maplibregl-canvas {
+          border-radius: inherit !important;
+          overflow: hidden !important;
+        }
         .game-map-container .maplibregl-canvas-container * {
           z-index: 0 !important;
         }

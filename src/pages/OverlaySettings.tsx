@@ -2080,63 +2080,81 @@ const OverlaySettings = () => {
                         : undefined,
                       backgroundSize: '15px 15px',
                       backgroundColor: settings.carPlayTheme === 'light'
-                        ? 'rgba(255, 255, 255, 0.5)'
-                        : settings.carPlayTheme === 'dark'
-                          ? '#000000'
-                          : '#090b11',
+                        ? '#f1f3f6'
+                        : settings.carPlayTheme === 'blue'
+                          ? '#0b132b'
+                          : '#000000',
                       color: settings.carPlayTheme === 'light' ? '#1e293b' : '#eceff1',
                     }}
                   >
                     {/* Left Sidebar Mock */}
-                    <div className="w-12 h-full flex flex-col justify-between py-2 items-center bg-black/40 border-r border-white/5 shrink-0 text-[8px] font-black">
+                    <div className={`w-12 h-full flex flex-col justify-between py-2 items-center border-r shrink-0 text-[8px] font-black ${
+                      settings.carPlayTheme === 'light'
+                        ? 'bg-[#e2e7ec] border-slate-300 text-[#334155]'
+                        : 'bg-black/40 border-white/5 text-slate-400'
+                    }`}>
                       <div className="flex flex-col items-center gap-1.5">
-                        <span className="text-white bg-black/60 px-1 py-0.5 rounded scale-75">12:00</span>
-                        <div className="w-5 h-5 rounded-full border border-red-500 bg-white flex items-center justify-center text-[7px] text-black">80</div>
+                        <span className={`px-1 py-0.5 rounded scale-75 ${
+                          settings.carPlayTheme === 'light' ? 'bg-slate-300 text-slate-900' : 'text-white bg-black/60'
+                        }`}>12:00</span>
+                        <div className="w-5 h-5 rounded-full border border-red-500 bg-white flex items-center justify-center text-[7px] text-black font-bold">80</div>
                       </div>
                       
                       <div className="flex flex-col gap-1.5 scale-75">
-                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">🏠</div>
-                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">🎵</div>
-                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">💼</div>
-                        <div className="w-6 h-6 rounded-lg bg-white/5 text-slate-400 flex items-center justify-center">🚚</div>
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-500 border border-amber-500/30 flex items-center justify-center">🏠</div>
+                        <div className="w-6 h-6 rounded-lg bg-black/5 text-slate-500 flex items-center justify-center">🎵</div>
+                        <div className="w-6 h-6 rounded-lg bg-black/5 text-slate-500 flex items-center justify-center">💼</div>
+                        <div className="w-6 h-6 rounded-lg bg-black/5 text-slate-500 flex items-center justify-center">🚚</div>
                       </div>
 
-                      <div className="text-emerald-400 scale-75">📶</div>
+                      <div className="text-emerald-500 scale-75">📶</div>
                     </div>
 
                     {/* Main Preview layout */}
                     <div className="flex-1 p-3 flex flex-col justify-between overflow-hidden">
                       <div className="flex-1 grid grid-cols-12 gap-3.5">
                         {/* Left: GPS Map Widget preview */}
-                        <div className="col-span-7 border border-white/10 rounded-xl bg-black/35 flex flex-col items-center justify-center text-center p-4">
-                          <span className="text-[14px] text-amber-400 animate-pulse">🗺️</span>
-                          <span className="text-[9px] font-black tracking-wider uppercase text-slate-300 mt-1">Live Map Widget</span>
-                          <span className="text-[7.5px] text-slate-550 mt-0.5">Automatisches GPS Tracking</span>
+                        <div className={`col-span-7 border rounded-xl flex flex-col items-center justify-center text-center p-4 ${
+                          settings.carPlayTheme === 'light'
+                            ? 'bg-white border-slate-300 text-slate-900 shadow-sm'
+                            : 'bg-black/35 border-white/10 text-slate-300'
+                        }`}>
+                          <span className="text-[14px] text-amber-500 animate-pulse">🗺️</span>
+                          <span className="text-[9px] font-black tracking-wider uppercase mt-1">Live Map Widget</span>
+                          <span className="text-[7.5px] opacity-60 mt-0.5">Automatisches GPS Tracking</span>
                         </div>
 
                         {/* Right side widgets */}
                         <div className="col-span-5 flex flex-col gap-2.5 justify-between">
                           {/* Media Widget preview */}
-                          <div className="flex-1 border border-white/10 rounded-xl bg-black/35 p-2 flex items-center gap-2">
-                            <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-xs">🎵</div>
+                          <div className={`flex-1 border rounded-xl p-2 flex items-center gap-2 ${
+                            settings.carPlayTheme === 'light'
+                              ? 'bg-white border-slate-300 text-slate-900 shadow-sm'
+                              : 'bg-black/35 border-white/10 text-white'
+                          }`}>
+                            <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-xs">🎵</div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-[8px] font-black truncate text-white leading-none">Mock-Song</p>
-                              <p className="text-[7px] font-bold text-slate-400 truncate mt-0.5">Künstler</p>
-                              <div className="h-0.5 w-full bg-white/10 rounded-full mt-1.5 overflow-hidden">
-                                <div className="h-full w-2/3 bg-amber-400" />
+                              <p className="text-[8px] font-black truncate leading-none">Mock-Song</p>
+                              <p className="text-[7px] font-bold opacity-60 truncate mt-0.5">Künstler</p>
+                              <div className="h-0.5 w-full bg-black/10 rounded-full mt-1.5 overflow-hidden">
+                                <div className="h-full w-2/3 bg-amber-500" />
                               </div>
                             </div>
                           </div>
 
                           {/* Telemetry Widget preview */}
-                          <div className="flex-1 border border-white/10 rounded-xl bg-black/35 p-2 flex items-center justify-between">
+                          <div className={`flex-1 border rounded-xl p-2 flex items-center justify-between ${
+                            settings.carPlayTheme === 'light'
+                              ? 'bg-white border-slate-300 text-slate-900 shadow-sm'
+                              : 'bg-black/35 border-white/10 text-white'
+                          }`}>
                             <div>
-                              <span className="text-[7px] text-slate-400 block leading-none">TEMPO</span>
-                              <span className="text-sm font-black text-white leading-none tracking-tight">84 KM/H</span>
+                              <span className="text-[7px] opacity-60 block leading-none">TEMPO</span>
+                              <span className="text-sm font-black leading-none tracking-tight">84 KM/H</span>
                             </div>
                             <div className="text-right">
-                              <span className="text-[7px] text-slate-400 block leading-none">GANG</span>
-                              <span className="text-[8.5px] font-black text-amber-400 uppercase">D12</span>
+                              <span className="text-[7px] opacity-60 block leading-none">GANG</span>
+                              <span className="text-[8.5px] font-black text-amber-500 uppercase">D12</span>
                             </div>
                           </div>
                         </div>

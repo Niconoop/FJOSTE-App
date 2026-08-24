@@ -666,7 +666,7 @@ function App() {
             {/* Logo and Brand */}
             <div className="flex items-center gap-3">
               <img src="logo.png" alt="Open Pipe Club Logo" className="h-10 w-10 rounded-lg object-contain shrink-0" />
-              <span className="font-['Unbounded'] font-bold text-lg tracking-tight text-white hidden sm:block">Open Pipe Club</span>
+              <span className="font-['Unbounded'] font-bold text-lg tracking-tight text-white hidden md:block">Open Pipe Club</span>
             </div>
           </div>
 
@@ -695,7 +695,7 @@ function App() {
         {/* Right side: telemetry status, notifications, controls */}
         <div className="flex items-center gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
           {/* Combined Status Pill */}
-          <div className="hidden sm:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
+          <div className="hidden md:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
             <div className="flex flex-row gap-2 border-r border-white/10 pr-3">
               <div className="flex items-center gap-1.5" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
@@ -790,7 +790,7 @@ function App() {
                   </div>
                 )}
               </div>
-              <span className="hidden sm:inline text-xs font-bold text-slate-350 group-hover:text-white transition-colors max-w-[100px] truncate">{user.username}</span>
+              <span className="hidden xl:inline text-xs font-bold text-slate-350 group-hover:text-white transition-colors max-w-[100px] truncate">{user.username}</span>
             </button>
           )}
 

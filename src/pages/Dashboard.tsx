@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, 
-  MapPin, Monitor, Award, Sparkles, UserCheck, Plus, ShieldAlert, Settings, Database, Package, Newspaper} from 'lucide-react';
+  MapPin, Monitor, Award, Sparkles, UserCheck, Plus, ShieldAlert, Settings, Package, Newspaper} from 'lucide-react';
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -342,15 +342,6 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
 
               {/* Role Dependent Action Board */}
               <div className="flex flex-wrap gap-3 z-10 w-full sm:w-auto md:flex-1 md:min-w-0 md:justify-end">
-                {user?.is_admin && (
-                  <button
-                    onClick={() => onNavigate('database')}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900/50 border border-white/10 hover:bg-white/10 text-xs font-bold uppercase tracking-widest text-white transition-all"
-                  >
-                    <Database className="w-4 h-4" />
-                    Datenbank
-                  </button>
-                )}
                 {isHR && (
                   <button
                     onClick={() => onNavigate('applications')}
