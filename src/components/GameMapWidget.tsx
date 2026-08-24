@@ -3,7 +3,7 @@ import * as proj4 from 'proj4';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as pmtiles from 'pmtiles';
-import { Crosshair, Navigation, Plus, Minus } from 'lucide-react';
+import { Crosshair, Navigation } from 'lucide-react';
 import { API_URL } from '../config';
 import { findCity, findCompany } from '../data/ets2Cities';
 import { CarPlayNavOverlay } from './CarPlayNavOverlay';
@@ -514,6 +514,12 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const lastRouteCalcPosRef = useRef<{ x: number; y: number } | null>(null);
   const headingRef = useRef<number | undefined>(heading);
   headingRef.current = heading;
+  const gameXRef = useRef<number | undefined>(gameX);
+  const gameYRef = useRef<number | undefined>(gameY);
+  gameXRef.current = gameX;
+  gameYRef.current = gameY;
+
+  const [routeCalcTrigger, setRouteCalcTrigger] = useState(0);
 
   // Controlled zoom prop synchronization
   useEffect(() => {
@@ -578,6 +584,12 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       });
     },
     clearRoute: () => {
+      lastRouteKeyRef.current = '';
+      lastRouteCalcPosRef.current = null;
+      setRawRouteCoords([]);
+      setJsonTurnPoints([]);
+      setSegmentLanes([]);
+      setNavInstruction({ primary: null, upcoming: [] });
       setRouteGeoJson({
         traveled: { type: 'FeatureCollection', features: [] },
         remaining: { type: 'FeatureCollection', features: [] },
@@ -586,13 +598,15 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     focusDestination: (lng: number, lat: number) => {
       if (!mapRef.current) return;
       setFollowing(false);
-      mapRef.current.flyTo({ center: [lng, lat], zoom: 9, duration: 1000 });
+      currentZoomRef.current = 12;
+      mapRef.current.flyTo({ center: [lng, lat], zoom: 12, duration: 1000 });
     },
     focusDestinationByGameCoords: (gx: number, gz: number) => {
       const pos = projectGameToLatLng(gx, gz);
       if (!pos || !mapRef.current) return;
       setFollowing(false);
-      mapRef.current.flyTo({ center: [pos[1], pos[0]], zoom: 9, duration: 1000 });
+      currentZoomRef.current = 12;
+      mapRef.current.flyTo({ center: [pos[1], pos[0]], zoom: 12, duration: 1000 });
     },
     setView: (lng: number, lat: number, zoom: number, bearing?: number) => {
       if (!mapRef.current) return;
@@ -619,7 +633,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: createEts2Style(),
-      center: [12, 50],
+      center: [1.85, 50.95],
       zoom: currentZoomRef.current,
       minZoom: 4,
       maxZoom: 12,
@@ -681,49 +695,67 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     };
   }, []);
 
-  // Create/update player marker
-  useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
-
-    if (!markerEl.current) {
-      const el = document.createElement('div');
-      el.className = 'game-map-player-marker';
-      markerEl.current = el;
-    }
-
-    markerEl.current.innerHTML = `
-      <div class="gm-marker-arrow" style="display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 14px ${accentColor}) drop-shadow(0 0 6px rgba(0,0,0,0.9));">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="${accentColor}" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/>
-        </svg>
-      </div>
-    `;
-
-    return () => {
-      if (markerRef.current) {
-        safeRemoveMarker(markerRef.current);
-        markerRef.current = null;
-      }
-    };
-  }, [mapReady, accentColor]);
-
   // Main telemetry position & rotation update loop
   useEffect(() => {
-    if (!mapRef.current || !mapReady || !markerEl.current) return;
-    if (gameX == null || gameY == null) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
 
-    const pos = projectGameToLatLng(gameX, gameY);
+    // Determine effective game coordinates
+    let effX = gameX;
+    let effY = gameY;
+
+    // Check if telemetry position is missing, null, or zero (e.g. game disconnected or telemetry initializing)
+    const isTelemPosValid = effX != null && effY != null && (effX !== 0 || effY !== 0);
+
+    if (!isTelemPosValid) {
+      if (destCompany && dest) {
+        const comp = findCompany(destCompany, dest);
+        if (comp) { effX = comp.x; effY = comp.z; }
+      }
+      if ((effX == null || effX === 0) && dest) {
+        const c = findCity(dest);
+        if (c) { effX = c.x; effY = c.z; }
+      }
+      if ((effX == null || effX === 0) && source) {
+        const c = findCity(source);
+        if (c) { effX = c.x; effY = c.z; }
+      }
+      if ((effX == null || effX === 0) && city) {
+        const c = findCity(city);
+        if (c) { effX = c.x; effY = c.z; }
+      }
+      if (effX == null || effX === 0) {
+        // Fallback: Calais game coordinates (x: -31100, z: -5500 -> lat: 50.95, lng: 1.85)
+        effX = -31100;
+        effY = -5500;
+      }
+    }
+
+    const pos = projectGameToLatLng(effX, effY) || lastPos.current || [50.95, 1.85];
     if (!pos) return;
 
     const [lat, lng] = pos;
     lastPos.current = pos;
 
+    // --- DIAGNOSE (vorübergehend): Marker-Rendering prüfen ---
+    console.log('[GameMapWidget:DIAG] position-effect', {
+      ok: true,
+      gameX, gameY, heading,
+      effX, effY,
+      projected: pos,
+      lng, lat,
+      hasMarkerEl: !!markerEl.current,
+      hasMarkerRef: !!markerRef.current,
+      isTelemPosValid,
+    });
+    // --- ENDE DIAGNOSE ---
+
     const rawHeading = heading ?? lastRawHeading.current ?? 0;
     if (heading != null) lastRawHeading.current = heading;
 
     const theta = (0.5 - rawHeading) * Math.PI * 2 + Math.PI / 2;
-    const lookX = gameX + 1000 * Math.cos(theta);
-    const lookY = gameY + 1000 * Math.sin(theta);
+    const lookX = effX + 1000 * Math.cos(theta);
+    const lookY = effY + 1000 * Math.sin(theta);
     const lookPos = projectGameToLatLng(lookX, lookY);
 
     let desiredBearing = 0;
@@ -744,38 +776,65 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       desiredBearing = normalizeBearing(-(rawHeading * 360));
     }
 
+    const mapBearing = map.getBearing();
+    const arrowRotation = desiredBearing - mapBearing;
+
+    // Create elongated pure purple SVG direction arrow with 3D perspective pitch tilt (60deg) - Extra Large
+    const purpleColor = '#a855f7';
+
+    if (!markerEl.current) {
+      const el = document.createElement('div');
+      el.className = 'game-map-player-marker';
+      el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
+      markerEl.current = el;
+    }
+
+    markerEl.current.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;transform:perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg);transform-origin:center center;filter:drop-shadow(0 0 16px ${purpleColor}) drop-shadow(0 4px 12px rgba(0,0,0,0.9));">
+        <svg width="54" height="70" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 28L12 22L21 28L12 2Z" fill="${purpleColor}"/>
+        </svg>
+      </div>
+    `;
+
     if (!markerRef.current) {
       markerRef.current = new maplibregl.Marker({
         element: markerEl.current,
-        anchor: 'center',
-        pitchAlignment: 'map',
-        rotationAlignment: 'viewport',
       })
         .setLngLat([lng, lat])
-        .addTo(mapRef.current);
+        .addTo(map);
     } else {
       markerRef.current.setLngLat([lng, lat]);
     }
 
-    if (following && mapRef.current) {
+    if (following) {
       const delta = shortestAngleDelta(currentBearingRef.current, desiredBearing);
-      const SMOOTHING = 0.6;
+      const SMOOTHING = 0.35;
       const newBearing = currentBearingRef.current + delta * SMOOTHING;
       currentBearingRef.current = newBearing;
 
-      // Retain current user zoom instead of hardcoding zoom level
-      mapRef.current.easeTo({
+      map.jumpTo({
         center: [lng, lat],
         zoom: currentZoomRef.current,
         bearing: newBearing,
         pitch: 60,
-        duration: 200,
-        easing: (t) => t,
       });
     }
-  }, [gameX, gameY, heading, mapReady, following]);
+  }, [gameX, gameY, heading, mapReady, following, accentColor, dest, destCompany, source, city]);
 
-  // Accurate Road Route calculation logic with movement threshold throttling
+  // Auto max-zoom to 12 when destination company prop becomes active
+  const lastDestCompanyRef = useRef<string | undefined>(destCompany);
+  useEffect(() => {
+    if (destCompany && destCompany !== lastDestCompanyRef.current) {
+      lastDestCompanyRef.current = destCompany;
+      currentZoomRef.current = 12;
+      if (mapRef.current && mapReady) {
+        mapRef.current.easeTo({ zoom: 12, duration: 500 });
+      }
+    }
+  }, [destCompany, mapReady]);
+
+  // Accurate Road Route calculation logic - calculates route once when destination or source changes
   useEffect(() => {
     let canceled = false;
 
@@ -783,6 +842,10 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       if (!dest && !destCompany) {
         lastRouteKeyRef.current = '';
         lastRouteCalcPosRef.current = null;
+        setRawRouteCoords([]);
+        setJsonTurnPoints([]);
+        setSegmentLanes([]);
+        setNavInstruction({ primary: null, upcoming: [] });
         setRouteGeoJson({
           remaining: { type: 'FeatureCollection' as const, features: [] },
           traveled: { type: 'FeatureCollection' as const, features: [] },
@@ -790,17 +853,12 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         return;
       }
 
-      const currentX = gameX ?? 0;
-      const currentY = gameY ?? 0;
+      const currentX = gameXRef.current ?? 0;
+      const currentY = gameYRef.current ?? 0;
       const routeKey = `${source || ''}_${dest || ''}_${destCompany || ''}`;
-      const lastCalcPos = lastRouteCalcPosRef.current;
 
-      const distMoved = lastCalcPos
-        ? Math.hypot(currentX - lastCalcPos.x, currentY - lastCalcPos.y)
-        : Infinity;
-
-      // Throttle: only calculate route if target destination changed OR vehicle moved >= 100 meters
-      if (routeKey === lastRouteKeyRef.current && distMoved < 100) {
+      // Avoid recalculating if destination & source key has not changed
+      if (routeKey === lastRouteKeyRef.current && routeGeoJson.remaining.features.length > 0) {
         return;
       }
 
@@ -827,9 +885,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         }
       }
 
-      const currentPos = lastPos.current || (gameX != null && gameY != null ? projectGameToLatLng(gameX, gameY) : null);
-      const sourceX = gameX ?? (source ? findCity(source)?.x : null);
-      const sourceZ = gameY ?? (source ? findCity(source)?.z : null);
+      const currentPos = lastPos.current || (currentX !== 0 || currentY !== 0 ? projectGameToLatLng(currentX, currentY) : null);
+      const sourceX = currentX !== 0 ? currentX : (source ? findCity(source)?.x : null);
+      const sourceZ = currentY !== 0 ? currentY : (source ? findCity(source)?.z : null);
 
       let remainingCoords: [number, number][] = [];
 
@@ -893,7 +951,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     return () => {
       canceled = true;
     };
-  }, [source, dest, destCompany, gameX, gameY]);
+  }, [source, dest, destCompany, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -939,8 +997,17 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         source: 'route-traveled',
         paint: {
           'line-color': accentColor,
-          'line-width': 3,
-          'line-opacity': 0.3,
+          'line-width': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            4, 2,
+            7, 5,
+            9, 9,
+            11, 14,
+            12, 18
+          ],
+          'line-opacity': 0.35,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
@@ -951,9 +1018,18 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         source: 'route-remaining',
         paint: {
           'line-color': accentColor,
-          'line-width': 8,
-          'line-opacity': 0.2,
-          'line-blur': 4,
+          'line-width': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            4, 3,
+            7, 7,
+            9, 12,
+            11, 18,
+            12, 22
+          ],
+          'line-opacity': 0.25,
+          'line-blur': 3,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
@@ -964,7 +1040,16 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         source: 'route-remaining',
         paint: {
           'line-color': accentColor,
-          'line-width': 5,
+          'line-width': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            4, 2,
+            7, 5,
+            9, 9,
+            11, 14,
+            12, 18
+          ],
           'line-opacity': 0.9,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
@@ -1210,7 +1295,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
   // Generate top-right CarPlay navigation instructions
   useEffect(() => {
-    if (!showInstructions || !rawRouteCoords.length || gameX == null || gameY == null) {
+    if (!showInstructions || (!dest && !destCompany) || !rawRouteCoords.length || gameX == null || gameY == null) {
       setNavInstruction({ primary: null, upcoming: [] });
       return;
     }
@@ -1252,33 +1337,6 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     });
   }, []);
 
-  const handleZoomIn = useCallback(() => {
-    if (!mapRef.current) return;
-    const current = mapRef.current.getZoom();
-    const next = Math.min(current + 1, 12);
-    currentZoomRef.current = next;
-    mapRef.current.easeTo({ zoom: next, duration: 300 });
-    if (onZoomChangeRef.current) {
-      onZoomChangeRef.current(next);
-    }
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    if (!mapRef.current) return;
-    const current = mapRef.current.getZoom();
-    const next = Math.max(current - 1, 4);
-    currentZoomRef.current = next;
-    mapRef.current.easeTo({ zoom: next, duration: 300 });
-    if (onZoomChangeRef.current) {
-      onZoomChangeRef.current(next);
-    }
-  }, []);
-
-  const formatDistance = (meters: number) => {
-    if (!meters || isNaN(meters)) return '';
-    return `${Math.round(meters / 1000)} km`;
-  };
-
   return (
     <div
       className="game-map-widget"
@@ -1306,29 +1364,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         </div>
       )}
 
-      {/* Map Controls Group (Zoom In, Zoom Out, Recenter) */}
-      <div className="gm-controls-group" onClick={(e) => e.stopPropagation()}>
-        <button
-          className="gm-ctrl-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleZoomIn();
-          }}
-          title="Heranzoomen (+)"
-        >
-          <Plus size={14} />
-        </button>
-        <button
-          className="gm-ctrl-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleZoomOut();
-          }}
-          title="Herauszoomen (-)"
-        >
-          <Minus size={14} />
-        </button>
-        {!following && lastPos.current && (
+      {/* Map Controls Group (Recenter when panned) */}
+      {!following && lastPos.current && (
+        <div className="gm-controls-group" onClick={(e) => e.stopPropagation()}>
           <button
             className="gm-ctrl-btn gm-recenter-active"
             onClick={(e) => {
@@ -1339,11 +1377,11 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           >
             <Crosshair size={14} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* No connection overlay */}
-      {!connected && (
+      {!connected && (gameX == null || gameY == null || (gameX === 0 && gameY === 0)) && (
         <div className="gm-no-connection">
           <span>Kein Spiel erkannt</span>
         </div>
@@ -1368,16 +1406,17 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           border-radius: inherit;
           overflow: hidden !important;
         }
-        .game-map-container .maplibregl-canvas-container,
+        .game-map-container .maplibregl-canvas-container {
+          border-radius: inherit !important;
+        }
         .game-map-container .maplibregl-canvas {
           border-radius: inherit !important;
-          overflow: hidden !important;
-        }
-        .game-map-container .maplibregl-canvas-container * {
           z-index: 0 !important;
         }
-        .game-map-container .maplibregl-marker {
-          z-index: 1 !important;
+        .game-map-container .maplibregl-marker,
+        .game-map-container .game-map-player-marker {
+          z-index: 999999 !important;
+          pointer-events: none !important;
         }
         .game-map-container .maplibregl-ctrl-bottom-left,
         .game-map-container .maplibregl-ctrl-bottom-right,
@@ -1467,14 +1506,43 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           border-color: var(--gm-accent, #f59e0b);
         }
 
-        /* Player marker */
+        /* Player marker styling */
         .game-map-player-marker {
           position: relative;
-          width: 48px;
-          height: 48px;
+          width: 52px;
+          height: 52px;
           display: flex;
           align-items: center;
           justify-content: center;
+          pointer-events: none;
+        }
+        .gm-marker-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .gm-marker-pulse {
+          position: absolute;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          opacity: 0.35;
+          animation: gmPulse 2s ease-out infinite;
+        }
+        @keyframes gmPulse {
+          0% { transform: scale(0.6); opacity: 0.7; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        .gm-marker-arrow {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 0.15s ease-out;
         }
 
         /* No connection overlay */

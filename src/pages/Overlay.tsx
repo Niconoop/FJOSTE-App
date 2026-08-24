@@ -291,11 +291,7 @@ const OverlayPage: React.FC = () => {
   // Use batched telemetry updates via requestAnimationFrame
   const telemetry = useTelemetry({ connected: false } as Telemetry);
 
-  useEffect(() => {
-    if (!telemetry.jobActive) {
-      mapWidgetRef.current?.clearRoute();
-    }
-  }, [telemetry.jobActive]);
+
 
   const [isLocked, setIsLocked] = useState(true);
   const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
@@ -1123,13 +1119,14 @@ const OverlayPage: React.FC = () => {
     return (
       <GameMapWidget
         ref={mapWidgetRef}
-        gameX={telemetry?.posX}
-        gameY={telemetry?.posZ}
+        gameX={telemetry?.posX ?? (telemetry as any)?.gameX}
+        gameY={telemetry?.posZ ?? (telemetry as any)?.gameY}
         heading={telemetry?.heading}
-        source={(telemetry?.jobActive && telemetry?.source) || undefined}
-        dest={(telemetry?.jobActive && telemetry?.dest) || undefined}
-        navDistance={(telemetry?.jobActive && telemetry?.navDistance) || undefined}
-        connected={(telemetry?.connected && telemetry?.jobActive) || false}
+        source={telemetry?.source || undefined}
+        dest={telemetry?.dest || undefined}
+        destCompany={(telemetry as any)?.dest_company || (telemetry as any)?.destCompany || undefined}
+        navDistance={telemetry?.navDistance || undefined}
+        connected={telemetry?.connected ?? false}
         accentColor={
           settings.style === 'carbon' ? '#f59e0b' :
             settings.style === 'minimal' ? '#ffffff' :
