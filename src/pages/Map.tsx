@@ -930,7 +930,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     }
   }, [initialSelectedId, mapData, onClearInitialId]);
 
-  const driverMarkersMapRef = useRef<Map<string, { marker: any; el: HTMLDivElement }>>(new Map());
+  const driverMarkersMapRef = useRef<globalThis.Map<string, { marker: any; el: HTMLDivElement }>>(new window.Map());
 
   useEffect(() => {
     const map = mapRef.current;
