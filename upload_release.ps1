@@ -71,8 +71,8 @@ $latestManifest = @{
     version = $version
     releaseNotes = $releaseBody
     pub_date = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
-    downloadUrl = "https://openpipeclub.com/download/setup.exe"
-    portableUrl = "https://openpipeclub.com/download/portable.exe"
+    downloadUrl = "https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe"
+    portableUrl = "https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/portable.exe"
 } | ConvertTo-Json -Depth 5
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)

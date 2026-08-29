@@ -2725,6 +2725,8 @@ ipcMain.on('install-plugin', async (event, gameId) => {
     return;
   }
 
+  event.sender.send('install-plugin-progress', { progress: 10, status: 'Suche Spiel-Verzeichnis...' });
+
   try {
     let gamePath = '';
     try {
@@ -2747,75 +2749,117 @@ ipcMain.on('install-plugin', async (event, gameId) => {
       }
     }
 
-    if (gamePath && fs.existsSync(gamePath)) {
-      const pluginsPath = path.join(gamePath, 'bin', 'win_x64', 'plugins');
-      const dllPath = path.join(pluginsPath, 'OPCGameBridge.dll');
-      const iniPath = path.join(pluginsPath, 'OPCGameBridge.ini');
-
-      if (!fs.existsSync(pluginsPath)) {
-        fs.mkdirSync(pluginsPath, { recursive: true });
-      }
-
-      event.sender.send('install-plugin-progress', { progress: 20, status: 'Lade OPCGameBridge Plugin herunter...' });
-
-      const downloadFile = (url: string, dest: string): Promise<void> => {
-        return new Promise((resolve, reject) => {
-          const req = https.get(url, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) {
-              const redirectUrl = res.headers.location;
-              if (redirectUrl) {
-                return downloadFile(redirectUrl, dest).then(resolve).catch(reject);
-              }
-            }
-            if (res.statusCode !== 200) {
-              return reject(new Error(`Server returned HTTP ${res.statusCode}`));
-            }
-            const fileStream = fs.createWriteStream(dest);
-            res.pipe(fileStream);
-            fileStream.on('finish', () => {
-              fileStream.close();
-              resolve();
-            });
-            fileStream.on('error', (err) => {
-              fs.unlink(dest, () => {});
-              reject(err);
-            });
-          });
-          req.on('error', reject);
-          req.setTimeout(15000, () => { req.destroy(); reject(new Error('Download Timeout')); });
-        });
-      };
-
-      // Step 1: Download DLL
-      event.sender.send('install-plugin-progress', { progress: 50, status: 'Installiere OPCGameBridge.dll...' });
-      await downloadFile(PLUGIN_DLL_URL, dllPath);
-
-      // Step 2: Download INI if not present
-      if (!fs.existsSync(iniPath)) {
-        event.sender.send('install-plugin-progress', { progress: 80, status: 'Erstelle Konfiguration...' });
-        try {
-          await downloadFile(PLUGIN_INI_URL, iniPath);
-        } catch {
-          // INI fallback
-        }
-      }
-
-      // Step 3: Remove obsolete scs-telemetry.dll if present
-      const legacyDll = path.join(pluginsPath, 'scs-telemetry.dll');
-      if (fs.existsSync(legacyDll)) {
-        try { fs.unlinkSync(legacyDll); } catch {}
-      }
-
-      event.sender.send('install-plugin-progress', { progress: 100, status: 'OPCGameBridge erfolgreich installiert!', success: true });
-    } else {
-      event.sender.send('install-plugin-progress', { progress: 0, status: 'Fehler: Pfad nicht gefunden', error: 'Game path not found' });
+    if (!gamePath || !fs.existsSync(gamePath)) {
+      event.sender.send('install-plugin-progress', { progress: 0, status: 'Fehler: Spiel-Pfad nicht gefunden', error: 'Game path not found' });
+      return;
     }
+
+    const pluginsPath = path.join(gamePath, 'bin', 'win_x64', 'plugins');
+    const dllPath = path.join(pluginsPath, 'OPCGameBridge.dll');
+    const iniPath = path.join(pluginsPath, 'OPCGameBridge.ini');
+
+    if (!fs.existsSync(pluginsPath)) {
+      fs.mkdirSync(pluginsPath, { recursive: true });
+    }
+
+    const downloadFileNet = (url: string, dest: string, onProgress?: (p: number) => void): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const req = electronNet.request({ method: 'GET', url });
+        req.setHeader('User-Agent', 'Open-Pipe-Club-App');
+        req.setHeader('Cache-Control', 'no-cache');
+
+        const tempFile = dest + '.tmp';
+        if (fs.existsSync(tempFile)) {
+          try { fs.unlinkSync(tempFile); } catch {}
+        }
+        const fileStream = fs.createWriteStream(tempFile);
+
+        req.on('response', (res) => {
+          if (res.statusCode !== 200) {
+            fileStream.close();
+            try { fs.unlinkSync(tempFile); } catch {}
+            return reject(new Error(`Server Status ${res.statusCode}`));
+          }
+          const total = parseInt(res.headers['content-length'] as string || '0', 10);
+          let loaded = 0;
+
+          res.on('data', (chunk) => {
+            loaded += chunk.length;
+            fileStream.write(chunk);
+            if (total > 0 && onProgress) {
+              onProgress(Math.min(100, Math.round((loaded / total) * 100)));
+            }
+          });
+
+          res.on('end', () => {
+            fileStream.end();
+          });
+
+          res.on('error', (err) => {
+            fileStream.close();
+            try { fs.unlinkSync(tempFile); } catch {}
+            reject(err);
+          });
+        });
+
+        fileStream.on('finish', () => {
+          fileStream.close();
+          try {
+            if (fs.existsSync(dest)) {
+              fs.unlinkSync(dest);
+            }
+            fs.renameSync(tempFile, dest);
+            resolve();
+          } catch (copyErr: any) {
+            try { fs.unlinkSync(tempFile); } catch {}
+            if (copyErr.code === 'EBUSY' || copyErr.code === 'EPERM') {
+              reject(new Error('Spiel läuft noch! Bitte schließe ETS2 / ATS vor der Installation.'));
+            } else {
+              reject(copyErr);
+            }
+          }
+        });
+
+        fileStream.on('error', (err) => {
+          try { fs.unlinkSync(tempFile); } catch {}
+          reject(err);
+        });
+
+        req.on('error', (err) => {
+          fileStream.close();
+          try { fs.unlinkSync(tempFile); } catch {}
+          reject(err);
+        });
+
+        req.end();
+      });
+    };
+
+    event.sender.send('install-plugin-progress', { progress: 30, status: 'Downloade OPCGameBridge.dll...' });
+    await downloadFileNet(PLUGIN_DLL_URL, dllPath, (pct) => {
+      const overall = Math.floor(30 + (pct * 0.4));
+      event.sender.send('install-plugin-progress', { progress: overall, status: `Downloade Plugin (${pct}%)...` });
+    });
+
+    if (!fs.existsSync(iniPath)) {
+      event.sender.send('install-plugin-progress', { progress: 80, status: 'Erstelle Konfiguration...' });
+      try {
+        await downloadFileNet(PLUGIN_INI_URL, iniPath);
+      } catch {
+      }
+    }
+
+    const legacyDll = path.join(pluginsPath, 'scs-telemetry.dll');
+    if (fs.existsSync(legacyDll)) {
+      try { fs.unlinkSync(legacyDll); } catch {}
+    }
+
+    event.sender.send('install-plugin-progress', { progress: 100, status: 'OPCGameBridge erfolgreich installiert!', success: true });
   } catch (e: any) {
     console.error(`Failed to install plugin for ${gameId}:`, e);
-    event.sender.send('install-plugin-progress', { progress: 0, status: 'Fehler bei der Installation', error: e.message });
+    event.sender.send('install-plugin-progress', { progress: 0, status: `Fehler: ${e.message}`, error: e.message });
   }
 });
-
 
 ipcMain.handle('check-app-update', async () => {
   const currentVersion = app.getVersion();
@@ -2857,7 +2901,10 @@ ipcMain.handle('check-app-update', async () => {
     if (r2Res && (r2Res.latestVersion || r2Res.version)) {
       const latestVersion = (r2Res.latestVersion || r2Res.version || '').replace(/^v/, '');
       const releaseNotes = r2Res.releaseNotes || '';
-      const downloadUrl = r2Res.downloadUrl || 'https://openpipeclub.com/download/setup.exe';
+      let downloadUrl = r2Res.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
+      if (downloadUrl.includes('openpipeclub.com/download')) {
+        downloadUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
+      }
 
       if (latestVersion && compareVersions(currentVersion, latestVersion) < 0) {
         return {
@@ -2873,7 +2920,7 @@ ipcMain.handle('check-app-update', async () => {
     }
     return { updateAvailable: false, currentVersion };
   } catch (err) {
-    console.warn("Cloudflare R2 Update check failed:", err);
+    console.warn('Cloudflare R2 Update check failed:', err);
     return { updateAvailable: false, currentVersion, error: String(err) };
   }
 });
@@ -2953,21 +3000,34 @@ function downloadAndApplyUpdate(url: string, event: any) {
     }
 
     try {
+      const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
       const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
       const exeName = path.basename(targetExe);
       const updateBatPath = path.join(app.getPath('temp'), 'openpipeclub_update.bat');
 
-      const batContent = `@echo off\r\n` +
-        `timeout /t 2 /nobreak > NUL\r\n` +
-        `taskkill /f /im "${exeName}" > NUL 2>&1\r\n` +
-        `:loop\r\n` +
-        `copy /Y "${tempUpdatePath}" "${targetExe}" > NUL\r\n` +
-        `if %errorlevel% neq 0 (\r\n` +
-        `  timeout /t 1 /nobreak > NUL\r\n` +
-        `  goto loop\r\n` +
-        `)\r\n` +
-        `start "" "${targetExe}"\r\n` +
-        `del "%~f0"\r\n`;
+      let batContent = '';
+      if (isPortable) {
+        batContent = `@echo off
+timeout /t 2 /nobreak > NUL
+taskkill /f /im "${exeName}" > NUL 2>&1
+:loop
+copy /Y "${tempUpdatePath}" "${targetExe}" > NUL
+if %errorlevel% neq 0 (
+  timeout /t 1 /nobreak > NUL
+  goto loop
+)
+start "" "${targetExe}"
+del "%~f0"
+`;
+      } else {
+        batContent = `@echo off
+timeout /t 2 /nobreak > NUL
+taskkill /f /im "${exeName}" > NUL 2>&1
+timeout /t 1 /nobreak > NUL
+start "" "${tempUpdatePath}"
+del "%~f0"
+`;
+      }
 
       fs.writeFileSync(updateBatPath, batContent, 'utf8');
 
@@ -2978,7 +3038,7 @@ function downloadAndApplyUpdate(url: string, event: any) {
       });
       child.unref();
 
-      event.sender.send('install-update-progress', { progress: 100, status: 'Update abgeschlossen. Starte neu...', success: true });
+      event.sender.send('install-update-progress', { progress: 100, status: 'Update wird installiert. Starte neu...', success: true });
 
       setTimeout(() => {
         app.quit();
@@ -3016,7 +3076,7 @@ ipcMain.on('install-app-update', async (event) => {
         const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
         let downloadUrl = isPortable ? manifest.portableUrl : manifest.downloadUrl;
 
-        if (!downloadUrl) {
+        if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download')) {
           downloadUrl = isPortable
             ? 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/portable.exe'
             : 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
