@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Car, ChevronDown, Check, Radio, Navigation, List, Box, Camera, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Car, ChevronDown, Check, Radio, Navigation, List, Box, Camera, SlidersHorizontal, Mountain } from 'lucide-react';
 
 
 import axios from 'axios';
@@ -11,6 +11,7 @@ import { API_URL, getAvatarUrl } from '../config';
 import * as proj4 from 'proj4';
 import * as pmtiles from 'pmtiles';
 import { loadAllCities, findCity } from '../data/ets2Cities';
+import { getSpeedCamerasGeoJson } from '../data/ets2Speedcams';
 
 const SIDEBAR_WIDTH = 320;
 
@@ -37,7 +38,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-    sprite: 'https://truckermudgeon.github.io/sprites',
+    sprite: `${tileRoot}/sprites`,
     sources: {
       ets2: {
         type: 'vector',
@@ -47,12 +48,26 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         type: 'vector',
         url: `pmtiles://${tileRoot}/world.pmtiles`,
       },
+      terrain: {
+        type: 'raster-dem',
+        url: `pmtiles://${tileRoot}/ets2-terrain.pmtiles`,
+        tileSize: 256,
+        encoding: 'mapbox',
+      },
+      contours: {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-contours.pmtiles`,
+      },
       footprints: {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
       },
     },
 
+    terrain: {
+      source: 'terrain',
+      exaggeration: 2.2,
+    },
 
     layers: [
       {
@@ -69,6 +84,29 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         'source-layer': 'land',
         paint: {
           'fill-color': isLight ? '#e9ecef' : '#08101a',
+        },
+      },
+      {
+        id: 'contours-lines',
+        type: 'line',
+        source: 'contours',
+        'source-layer': 'contours',
+        minzoom: 6.5,
+        filter: ['==', ['%', ['get', 'elevation'], 50], 0],
+        paint: {
+          'line-color': isLight ? '#94a3b8' : '#475569',
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            6.5, 0.4,
+            9, 0.7,
+            13, 1.0,
+          ],
+          'line-opacity': [
+            'interpolate', ['linear'], ['zoom'],
+            6.5, 0.15,
+            8, 0.28,
+            12, 0.4,
+          ],
         },
       },
       {
@@ -109,7 +147,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         },
       },
       {
-        id: 'ets2-prefabs',
+        id: 'ets2-prefabs-base',
         type: 'fill',
         source: 'ets2',
         'source-layer': 'ets2',
@@ -124,6 +162,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         type: 'fill',
         source: 'footprints',
         'source-layer': 'footprints',
+        minzoom: 8.5,
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
         paint: {
           'fill-color': isLight ? '#cbd5e1' : '#1e293b',
@@ -135,7 +174,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         type: 'fill-extrusion',
         source: 'footprints',
         'source-layer': 'footprints',
-        minzoom: 8,
+        minzoom: 8.5,
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
         paint: {
           'fill-extrusion-color': isLight ? '#94a3b8' : '#2b3648',
@@ -184,6 +223,18 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
             10, 13,
           ],
           'line-opacity': 0.95,
+        },
+      },
+      // Prefab surface overlay: renders OVER casing to cover road edges inside intersections
+      {
+        id: 'ets2-prefabs',
+        type: 'fill',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+        paint: {
+          'fill-color': isLight ? '#8e9aa8' : '#475569',
+          'fill-opacity': 0.95
         },
       },
       {
@@ -290,9 +341,9 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
           'icon-allow-overlap': true,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            8, 0.4,
-            11, 0.7,
-            14, 1.0
+            8, 0.65,
+            11, 1.0,
+            14, 1.4
           ]
         }
       },
@@ -314,9 +365,32 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
           'icon-allow-overlap': true,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            9, 0.4,
-            12, 0.7,
-            15, 1.0
+            9, 0.6,
+            12, 0.95,
+            15, 1.35
+          ]
+        }
+      },
+      // Traffic Features (Ampeln / Traffic Lights, Baustellen, Bahnübergänge)
+      {
+        id: 'ets2-traffic',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        minzoom: 10,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'type'], 'traffic']
+        ],
+        layout: {
+          'icon-image': '{sprite}',
+          'icon-allow-overlap': true,
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 0.55,
+            12, 0.85,
+            14, 1.2
           ]
         }
       },
@@ -401,6 +475,218 @@ function projectGameToLatLng(gx: number, gz: number): [number, number] | null {
 
   return null;
 }
+
+const createSpeedcamImage = (map: any) => {
+  if (map.hasImage('speedcam_ico')) return;
+
+  const s = 2;
+  const size = 48 * s;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 6 * s;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, (size / 2) - (4 * s), 0, Math.PI * 2);
+    ctx.fillStyle = '#e11d48';
+    ctx.fill();
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Pillar stand
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(22 * s, 34 * s, 4 * s, 5 * s, 1 * s);
+    ctx.fill();
+
+    // Main camera body
+    ctx.beginPath();
+    ctx.roundRect(14 * s, 17 * s, 20 * s, 17 * s, 3 * s);
+    ctx.fill();
+
+    // Primary Lens
+    ctx.fillStyle = '#e11d48';
+    ctx.beginPath();
+    ctx.arc(21 * s, 25.5 * s, 4.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Lens Reflection
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(21 * s, 25.5 * s, 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Flash sensor
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.roundRect(28 * s, 20 * s, 4 * s, 4 * s, 1 * s);
+    ctx.fill();
+
+    // Lower sensor
+    ctx.fillStyle = '#e11d48';
+    ctx.beginPath();
+    ctx.roundRect(28 * s, 26 * s, 4 * s, 4 * s, 1 * s);
+    ctx.fill();
+
+    // Radar Waves
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 * s;
+    ctx.beginPath();
+    ctx.arc(13 * s, 13 * s, 4.5 * s, 1.1 * Math.PI, 1.6 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(13 * s, 13 * s, 7.5 * s, 1.1 * Math.PI, 1.6 * Math.PI);
+    ctx.stroke();
+  }
+
+  const imgData = ctx?.getImageData(0, 0, size, size);
+  if (imgData) {
+    map.addImage('speedcam_ico', imgData, { pixelRatio: s });
+  }
+};
+
+const createRailcrossingImage = (map: any) => {
+  if (map.hasImage('railcrossing')) return;
+
+  const s = 2;
+  const size = 48 * s;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    // Dark glowing backplate with crimson hazard border
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, (size / 2) - (3 * s), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+    ctx.fill();
+    ctx.lineWidth = 2.5 * s;
+    ctx.strokeStyle = '#e11d48';
+    ctx.stroke();
+
+    // Railway tracks
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2 * s;
+    ctx.beginPath();
+    ctx.moveTo(16 * s, 10 * s); ctx.lineTo(16 * s, 38 * s);
+    ctx.moveTo(32 * s, 10 * s); ctx.lineTo(32 * s, 38 * s);
+    ctx.stroke();
+
+    // Cross ties (Sleepers)
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.8 * s;
+    ctx.beginPath();
+    for (let y = 13; y <= 35; y += 5.5) {
+      ctx.moveTo(13 * s, y * s);
+      ctx.lineTo(35 * s, y * s);
+    }
+    ctx.stroke();
+
+    // White X cross bars (Andreaskreuz)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5.5 * s;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(9 * s, 9 * s); ctx.lineTo(39 * s, 39 * s);
+    ctx.moveTo(39 * s, 9 * s); ctx.lineTo(9 * s, 39 * s);
+    ctx.stroke();
+
+    // Red tips on 4 ends of the cross
+    ctx.strokeStyle = '#e11d48';
+    ctx.lineWidth = 5.5 * s;
+    ctx.beginPath();
+    ctx.moveTo(9 * s, 9 * s); ctx.lineTo(14 * s, 14 * s);
+    ctx.moveTo(34 * s, 34 * s); ctx.lineTo(39 * s, 39 * s);
+    ctx.moveTo(39 * s, 9 * s); ctx.lineTo(34 * s, 14 * s);
+    ctx.moveTo(14 * s, 34 * s); ctx.lineTo(9 * s, 39 * s);
+    ctx.stroke();
+
+    // Center Warning Signal Light
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, 4.5 * s, 0, Math.PI * 2);
+    ctx.fillStyle = '#e11d48';
+    ctx.fill();
+    ctx.lineWidth = 1.2 * s;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, 2 * s, 0, Math.PI * 2);
+    ctx.fillStyle = '#fecaca';
+    ctx.fill();
+  }
+
+  const imgData = ctx?.getImageData(0, 0, size, size);
+  if (imgData) {
+    map.addImage('railcrossing', imgData, { pixelRatio: s });
+  }
+};
+
+const setupSpeedcamsLayer = (map: any) => {
+  if (!map) return;
+  createSpeedcamImage(map);
+
+  if (!map.getSource('speedcams-source')) {
+    map.addSource('speedcams-source', {
+      type: 'geojson',
+      data: getSpeedCamerasGeoJson(),
+    });
+
+    map.addLayer({
+      id: 'ets2-speedcams',
+      type: 'symbol',
+      source: 'speedcams-source',
+      minzoom: 6.5,
+      layout: {
+        'icon-image': 'speedcam_ico',
+        'icon-size': [
+          'interpolate', ['linear'], ['zoom'],
+          6.5, 0.45,
+          9, 0.75,
+          12, 1.05,
+        ],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    });
+
+    map.addLayer({
+      id: 'ets2-speedcams-limit',
+      type: 'symbol',
+      source: 'speedcams-source',
+      minzoom: 8.5,
+      layout: {
+        'text-field': ['concat', ['get', 'speedLimit']],
+        'text-font': ['Open Sans Bold'],
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          8.5, 9,
+          11, 11,
+          13, 13,
+        ],
+        'text-offset': [0, 1.3],
+        'text-anchor': 'top',
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#e11d48',
+        'text-halo-width': 2.5,
+        'text-halo-blur': 0.5,
+      },
+    });
+  }
+};
 
 // Custom Frosted Glass Server Dropdown Component
 const ServerDropdown = ({
@@ -507,6 +793,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
   // Traffic State
   const [showTraffic, setShowTraffic] = useState(true);
+  const [showSpeedcams, setShowSpeedcams] = useState(true);
   const [trafficData, setTrafficData] = useState<any[]>([]);
   const [trafficServer, setTrafficServer] = useState("sim1");
   const [trafficServers, setTrafficServers] = useState<any[]>([]);
@@ -514,6 +801,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [mapZoom, setMapZoom] = useState<number>(4.5);
   const [is3DMode, setIs3DMode] = useState(false);
+  const [showTerrain3D, setShowTerrain3D] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
 
   const toggle3dMode = useCallback(() => {
@@ -524,6 +812,29 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         mapRef.current.easeTo({ pitch: 58, bearing: -15, duration: 1200 });
       } else {
         mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 1200 });
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleTerrain3D = useCallback(() => {
+    if (!mapRef.current) return;
+    setShowTerrain3D(prev => {
+      const next = !prev;
+      try {
+        if (next) {
+          mapRef.current.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+          if (mapRef.current.getLayer('contours-lines')) {
+            mapRef.current.setLayoutProperty('contours-lines', 'visibility', 'visible');
+          }
+        } else {
+          mapRef.current.setTerrain(null);
+          if (mapRef.current.getLayer('contours-lines')) {
+            mapRef.current.setLayoutProperty('contours-lines', 'visibility', 'none');
+          }
+        }
+      } catch (err) {
+        console.debug("Terrain toggle notice:", err);
       }
       return next;
     });
@@ -856,7 +1167,19 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       attributionControl: false,
       fadeDuration: 0,
       trackResize: true,
+      renderWorldCopies: false,
+      maxTileCacheSize: 80,
     });
+    map.on('load', () => {
+      try {
+        createRailcrossingImage(map);
+        setupSpeedcamsLayer(map);
+        map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+      } catch (err) {
+        console.debug("Terrain/Speedcam load notice:", err);
+      }
+    });
+
     map.setMinZoom(4.5);
     map.setMaxZoom(14);
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "bottom-left");
@@ -880,6 +1203,23 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     const updateMapStyle = () => {
       if (mapRef.current && mapRef.current.isStyleLoaded()) {
         mapRef.current.setStyle(createEts2Style(isLight));
+        mapRef.current.once('style.load', () => {
+          try {
+            createRailcrossingImage(mapRef.current);
+            setupSpeedcamsLayer(mapRef.current);
+            if (showTerrain3D) {
+              mapRef.current?.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+              if (mapRef.current?.getLayer('contours-lines')) {
+                mapRef.current.setLayoutProperty('contours-lines', 'visibility', 'visible');
+              }
+            } else {
+              mapRef.current?.setTerrain(null);
+              if (mapRef.current?.getLayer('contours-lines')) {
+                mapRef.current.setLayoutProperty('contours-lines', 'visibility', 'none');
+              }
+            }
+          } catch {}
+        });
       }
     };
 
@@ -1340,16 +1680,54 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                     </button>
 
                     <button
-                      onClick={toggle3dMode}
+                      onClick={() => {
+                        const next = !showSpeedcams;
+                        setShowSpeedcams(next);
+                        if (mapRef.current) {
+                          const vis = next ? 'visible' : 'none';
+                          if (mapRef.current.getLayer('ets2-speedcams')) {
+                            mapRef.current.setLayoutProperty('ets2-speedcams', 'visibility', vis);
+                          }
+                          if (mapRef.current.getLayer('ets2-speedcams-limit')) {
+                            mapRef.current.setLayoutProperty('ets2-speedcams-limit', 'visibility', vis);
+                          }
+                        }
+                      }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
-                        is3DMode
+                        showSpeedcams
+                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.25)]"
+                          : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
+                      }`}
+                      title="Feste Geschwindigkeitsblitzer & Tempolimits an-/ausschalten"
+                    >
+                      <Camera size={14} className={showSpeedcams ? "text-rose-400" : ""} />
+                      <span>Blitzer</span>
+                    </button>
+
+                    <button
+                      onClick={toggleTerrain3D}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                        showTerrain3D
                           ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
                           : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
                       }`}
-                      title="3D Ansicht umschalten (Gebäude & Perspektive)"
+                      title="3D Gelände (Berge, Relief & Höhenringe) an-/ausschalten"
                     >
-                      <Box size={14} className={is3DMode ? "text-amber-400" : ""} />
-                      <span>3D</span>
+                      <Mountain size={14} className={showTerrain3D ? "text-amber-400" : ""} />
+                      <span>3D Gelände</span>
+                    </button>
+
+                    <button
+                      onClick={toggle3dMode}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                        is3DMode
+                          ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
+                          : "bg-white/5 text-slate-400 border border-white/5 hover:text-white"
+                      }`}
+                      title="3D Kamera-Perspektive umschalten (Kippwinkel & Neigung)"
+                    >
+                      <Box size={14} className={is3DMode ? "text-cyan-400" : ""} />
+                      <span>3D Kamera</span>
                     </button>
                   </div>
 

@@ -2,6 +2,50 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.7.6] - 2026-08-29
+
+### Features & Bugfixes
+  - **🚦 Ampel-Filterung auf echte Straßenkreuzungen ([map.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/clis/generator/geo-json/map.ts))**:
+    - **Ausschluss von Nicht-Kreuzungs-Prefabs**: Ampeln (`trafficlight`) werden nun nicht mehr fälschlicherweise an Tankstellen (Einfahrtslichter), Mautstellen (Schranken-Lichter), Grenzkontrollen, Bahnübergängen (Blinker über dem Andreaskreuz), Häfen oder Betriebshöfen platziert.
+    - **Reine Kreuzungsampeln**: Lichtsignalanlagen werden ausschließlich an echten Straßenkreuzungen, Gabelungen und Einmündungen (`/cross/`, `/junction/`, `/roundabout/`) generiert.
+
+## [1.7.5] - 2026-08-29
+
+### Features & Design Updates
+  - **🛑 Klares STOP-Schild & authentisches Andreaskreuz (VZ 201) ([generate_perfect_signs.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_perfect_signs.py), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [upload_sprites.ps1](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/upload_sprites.ps1))**:
+    - **Authentisches VZ 201 Andreaskreuz**: Komplett überarbeitetes, freistehendes Andreaskreuz mit breiten weißen Balken, markanten signalroten Spitzen (`#dc2626`), subtilem Drop Shadow und feiner dunkler Kontur (ohne überladene Gleisleitern oder dunkle Kreisgehäuse).
+    - **Originalgetreues VZ 206 STOP-Schild**: Rotes Achteck mit präziser weißer Innenkontur und massivem, fettem, zentriertem weißem **`STOP`**-Schriftzug (ohne störende Pillenboxen).
+    - **Cloudflare R2 Deployment**: Sämtliche Sprite-Atlanten wurden erfolgreich auf Cloudflare R2 (`open-pipe-club-storage`) aktualisiert.
+
+## [1.7.4] - 2026-08-29
+
+### Features & Design Updates
+  - **🚚 100% originale In-Game Firmenlogos aus ETS2 extrahiert & hochgeladen ([restore_game_companies_keep_modern_pois.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/restore_game_companies_keep_modern_pois.py), [upload_sprites.ps1](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/upload_sprites.ps1))**:
+    - **Originale SCS-Spieldateien**: Sämtliche 389 originalen Firmen- und Speditionslogos wurden direkt über den Game-Parser aus der lokalen Euro Truck Simulator 2 Installation (`base.scs`, `def.scs` und DLC-Archiven) unverändert 1:1 extrahiert und in den Sprite-Atlas integriert.
+    - **Moderne POIs & Autobahnschilder**: Alle 23 POI-Icons (Andreaskreuz, Blitzer, Ampeln, Werkstätten etc.) sowie die 983 Autobahnschilder bleiben in gestochen scharfer Vektorqualität erhalten.
+    - **Cloudflare R2 Deployment**: Die neu gepackten Atlanten wurden erfolgreich auf Cloudflare R2 (`map/` & `map_cache/`) hochgeladen und live geschaltet.
+
+## [1.7.3] - 2026-08-29
+
+### Features & Design Updates
+  - **🎨 Vollständiges Redesign & Neugenerierung aller Map-Sprites ([generate_modern_sprites.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_modern_sprites.py), [pack_sprites.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/pack_sprites.py), [upload_sprites.ps1](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/upload_sprites.ps1))**:
+    - **1.395 Icons komplett neu gerendert**: Alle POI-Symbole (Tankstellen, Werkstätten, LKW-Händler, Rastplätze, Garagen, Arbeitsagenturen, Mautstellen, Grenzkontrollen, Fahrzeugwaagen, Fotospots, Aussichtspunkte, Züge, Fähren, Ampeln, Radarfallen, Baustellen, Stoppschilder, Andreaskreuze, Richtungspfeile und Map-Knoten) wurden in 4K-Supersampling (256x256 -> 48x48 Lanczos) neu gezeichnet.
+    - **Cloudflare R2 Deployment**: Sämtliche Sprite-Atlanten (`sprites.json`, `sprites.png`, `sprites@2x.json`, `sprites@2x.png`) wurden erfolgreich in `open-pipe-club-storage` (`map/` & `map_cache/`) aktualisiert und stehen live zur Verfügung.
+
+## [1.7.2] - 2026-08-29
+
+### Features & Design Updates
+  - **📷 Feste Geschwindigkeitsblitzer & Radar-Warnsystem ([ets2Speedcams.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/data/ets2Speedcams.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx))**:
+    - **100% Exakte Straßen-Snapping-Positionierung aus `ets2.geojson`**: Die Blitzer-Positionen wurden direkt aus den echten Vektorknoten der gerenderten Straßengeometrie (`ets2.geojson`, 859.994 Vektorknoten via Spatial-KDTree) extrahiert. Beseitigt jeden Versatz neben der Fahrbahn – alle Blitzer sitzen nun exakt und kompromisslos auf den Linien der Straßenkarte.
+    - **Reale ETS2-Blitzerpunkte in ganz Europa**: Strukturierter Datensatz fester Radarfallen und Geschwindigkeitsüberwachungen (Deutschland, Frankreich, UK, Italien, Österreich, Schweiz, Polen, Benelux, Skandinavien, Spanien, etc.) mit exakten Koordinaten, Streckenbezeichnungen und Tempolimits.
+    - **Neues Modernes Blitzer-Icon (`speedcam_ico`)**: Signalrotes Verkehrs-Warnbadge mit hochauflösender Kamera-Silhouette, Radar-Impulswellen und Strobe-Flash-Sensor.
+    - **Tempolimit-Badges auf der Karte**: Automatische Anzeige der erlaubten Höchstgeschwindigkeit (z. B. 50, 60, 80, 100, 120 km/h) direkt am Blitzer-Marker bei näherem Zoom.
+    - **CarPlay Annäherungs- & Geschwindigkeitswarnung**: Bei Annäherung an einen Blitzer (<750m) blendet CarPlay automatisch ein dezentes oder bei Überschreitung ein pulsierendes Warn-HUD ein (*„⚠️ Blitzer in 350m – Tempolimit 80 km/h“*).
+    - **Interaktiver Ebenen-Schalter**: Neuer Schnellschalter „Blitzer“ im Dropdown-Menü „Ebenen & Filter“ zum einfachen Ein- und Ausblenden.
+  - **🏎️ Butterweiche 60 FPS CarPlay-Kartenbewegung (Subpixel LERP Interpolation)**:
+    - **Entkoppelte `requestAnimationFrame`-Schleife**: Telemetrie-Events aktualisieren fortan nur noch Zielkoordinaten und Zielwinkel, während der WebGL-Renderloop mit vollen 60–120 FPS kontinuierlich interpoliert.
+    - **Beseitigung aller Mikroruckler**: Subpixel-LERP-Glättung und kürzester Winkelweg (`shortestAngleDelta`) sorgen für fließendes Gleiten und geschmeidige Kurvendrehungen beim Fahren ohne stufenweises Ruckeln.
+
 ## [1.7.1] - 2026-08-24
 
 ### Features & Design Updates

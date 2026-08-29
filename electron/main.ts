@@ -2492,8 +2492,10 @@ function runAfkTask() {
     }
 
     // Fallback: PowerShell keyboard injection
+    const escapedText = JSON.stringify(text);
     const psScript = `
- Add-Type @"
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @"
   using System;
   using System.Runtime.InteropServices;
   public class WindowHelper {
@@ -2514,16 +2516,30 @@ function runAfkTask() {
 "@
 $title = [WindowHelper]::GetActiveWindowTitle()
 if ($title -match "Euro Truck Simulator 2" -or $title -match "TruckersMP") {
-    # 0x59 ist der Code für die 'Y' Taste
-    [WindowHelper]::keybd_event(0x59, 0, 0, 0) # Down
-    Start-Sleep -m 100
-    [WindowHelper]::keybd_event(0x59, 0, 2, 0) # Up
+    $msg = ${escapedText}
+    [System.Windows.Forms.Clipboard]::SetText($msg)
     
-    Start-Sleep -m 500
+    # 0x59 = 'Y' Taste (Chat oeffnen)
+    [WindowHelper]::keybd_event(0x59, 0, 0, 0)
+    Start-Sleep -m 30
+    [WindowHelper]::keybd_event(0x59, 0, 2, 0)
     
-    # Enter senden via keybd_event
+    Start-Sleep -m 400
+    
+    # Ctrl + V (Einfuegen)
+    [WindowHelper]::keybd_event(0x11, 0, 0, 0) # Ctrl Down
+    Start-Sleep -m 25
+    [WindowHelper]::keybd_event(0x56, 0, 0, 0) # V Down
+    Start-Sleep -m 25
+    [WindowHelper]::keybd_event(0x56, 0, 2, 0) # V Up
+    Start-Sleep -m 25
+    [WindowHelper]::keybd_event(0x11, 0, 2, 0) # Ctrl Up
+    
+    Start-Sleep -m 150
+    
+    # 0x0D = Enter
     [WindowHelper]::keybd_event(0x0D, 0, 0, 0) # Enter Down
-    Start-Sleep -m 50
+    Start-Sleep -m 30
     [WindowHelper]::keybd_event(0x0D, 0, 2, 0) # Enter Up
 } else {
     Write-Host "FENSTER NICHT ERKANNT: $title"

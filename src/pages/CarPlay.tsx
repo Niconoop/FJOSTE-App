@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
 import { searchDestinations, findCompany, findCity, type DestinationSearchResult } from '../data/ets2Cities';
+import { type SpeedcamAlertInfo } from '../data/ets2Speedcams';
 
 interface Telemetry {
   connected: boolean;
@@ -438,6 +439,9 @@ export default function CarPlayPage() {
 
   // Real-time ETA state
   const [liveRemainingSeconds, setLiveRemainingSeconds] = useState<number | null>(null);
+
+  // Speed Camera (Blitzer) proximity alert state
+  const [speedcamAlert, setSpeedcamAlert] = useState<SpeedcamAlertInfo | null>(null);
 
   // Focus and maximized state
   const [focusZone, setFocusZone] = useState<'sidebar' | 'content'>('sidebar');
@@ -2385,6 +2389,7 @@ export default function CarPlayPage() {
                       gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                       gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                       heading={telemetry.connected ? telemetry.heading : undefined}
+                      currentSpeed={telemetry.connected ? telemetry.speed : 0}
                       routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
                       source={telemetry.connected ? telemetry.source : undefined}
                       dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
@@ -2400,8 +2405,56 @@ export default function CarPlayPage() {
                       onZoomChange={setCarPlayMapZoom}
                       showInstructions
                       fullWidthInstructions
+                      showSpeedcams={true}
+                      onSpeedcamAlert={setSpeedcamAlert}
                       onRouteCalculated={setCustomRouteInfo}
                     />
+
+                    {/* Speedcam Warning Alert HUD Floating Banner (Home Dashboard) */}
+                    <AnimatePresence>
+                      {speedcamAlert && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -15, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -15, scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute top-2.5 left-1/2 -translate-x-1/2 z-40 pointer-events-none max-w-[90%]"
+                        >
+                          <div
+                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-2xl backdrop-blur-xl border shadow-2xl transition-all ${
+                              speedcamAlert.isSpeeding
+                                ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_25px_rgba(244,63,94,0.65)] animate-pulse'
+                                : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.35)]'
+                            }`}
+                          >
+                            <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-md ${
+                              speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'
+                            }`}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                                <circle cx="12" cy="13" r="3"/>
+                              </svg>
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider font-mono truncate">
+                                  {speedcamAlert.isSpeeding ? '⚠️ BLITZER' : '📷 BLITZER'}
+                                </span>
+                                <span className="text-[9.5px] font-extrabold px-1.5 py-0.2 rounded bg-black/60 border border-white/10 font-mono text-white">
+                                  {speedcamAlert.distanceMeters}m
+                                </span>
+                              </div>
+                              <div className="text-[9.5px] font-mono text-zinc-300 truncate">
+                                Limit: <strong className="text-white">{speedcamAlert.camera.speedLimit} km/h</strong>
+                                {speedcamAlert.isSpeeding && (
+                                  <span className="text-rose-400 font-extrabold ml-1">(+{speedcamAlert.overspeedKmh})</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
@@ -3962,6 +4015,7 @@ export default function CarPlayPage() {
                 gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                 gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                 heading={telemetry.connected ? telemetry.heading : undefined}
+                currentSpeed={telemetry.connected ? telemetry.speed : 0}
                 routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
                 source={telemetry.connected ? telemetry.source : undefined}
                 dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
@@ -3976,6 +4030,8 @@ export default function CarPlayPage() {
                 zoom={carPlayMapZoom}
                 onZoomChange={setCarPlayMapZoom}
                 showInstructions
+                showSpeedcams={true}
+                onSpeedcamAlert={setSpeedcamAlert}
                 onRouteCalculated={setCustomRouteInfo}
                 onDestinationReached={() => {
                   setCustomDest(null);
@@ -3988,6 +4044,61 @@ export default function CarPlayPage() {
                   });
                 }}
               />
+
+              {/* Speedcam Warning Alert HUD Floating Banner (Maximized Map) */}
+              <AnimatePresence>
+                {speedcamAlert && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    transition={{ duration: 0.25 }}
+                    className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                  >
+                    <div
+                      className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${
+                        speedcamAlert.isSpeeding
+                          ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse'
+                          : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${
+                        speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'
+                      }`}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                          <circle cx="12" cy="13" r="3"/>
+                        </svg>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-wider font-mono">
+                            {speedcamAlert.isSpeeding ? '⚠️ GESCHWINDIGKEITSBLITZER' : '📷 FESTBLITZER VORAUS'}
+                          </span>
+                          <span className="text-[11px] font-black px-2 py-0.5 rounded bg-black/60 border border-white/10 font-mono text-white">
+                            in {speedcamAlert.distanceMeters} m
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11.5px] font-mono mt-0.5">
+                          <span className="text-zinc-300">
+                            Tempolimit: <strong className="text-white">{speedcamAlert.camera.speedLimit} km/h</strong> auf {speedcamAlert.camera.road}
+                          </span>
+                          {speedcamAlert.isSpeeding && (
+                            <span className="text-rose-400 font-black">
+                              (+{speedcamAlert.overspeedKmh} km/h zu schnell!)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="w-8 h-8 rounded-full bg-white border-2 border-rose-600 flex items-center justify-center text-slate-950 font-black text-xs font-mono shrink-0 shadow-md">
+                        {speedcamAlert.camera.speedLimit}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Authentic European Speed Limit Sign (VZ 274 Realistic Proportion) */}
               <div className="absolute left-6 top-1/2 -translate-y-1/2 z-40 pointer-events-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)]">

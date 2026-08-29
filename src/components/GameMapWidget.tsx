@@ -8,6 +8,7 @@ import { API_URL } from '../config';
 import { findCity, findCompany } from '../data/ets2Cities';
 import { CarPlayNavOverlay } from './CarPlayNavOverlay';
 import { generateNextInstruction, type JSONTurnPoint, type InstructionResult } from '../utils/navInstructionEngine';
+import { getSpeedCamerasGeoJson, findApproachingSpeedcam, type SpeedcamAlertInfo } from '../data/ets2Speedcams';
 import type { GameMapWidgetHandle } from './GameMapWidget.types';
 
 // Register PMTiles protocol once
@@ -26,6 +27,8 @@ interface GameMapWidgetProps {
   gameY?: number;
   /** Heading in radians */
   heading?: number;
+  /** Current vehicle speed in km/h */
+  currentSpeed?: number;
   /** Exact in-game route waypoints from OPCGameBridge plugin [x, y, z] */
   routeWaypoints?: [number, number, number][] | [number, number][] | null;
   /** Source city name */
@@ -58,6 +61,10 @@ interface GameMapWidgetProps {
   showInstructions?: boolean;
   /** Whether the navigation overlay banner should span 100% full width */
   fullWidthInstructions?: boolean;
+  /** Whether to display speed cameras (Blitzer) on the map */
+  showSpeedcams?: boolean;
+  /** Callback emitted when approaching a speed camera */
+  onSpeedcamAlert?: (alert: SpeedcamAlertInfo | null) => void;
   /** Unique map identifier */
   mapId?: string;
   /** Callback when destination is reached */
@@ -73,8 +80,6 @@ const lengthOfDegree = (earthRadiusMeters * Math.PI) / 180;
 const createTurnArrowheadImage = (map: maplibregl.Map) => {
   if (map.hasImage('turn-arrowhead-icon')) return;
 
-  // Short wide triangle whose base width matches the 8px route line.
-  // Canvas is 32x24: base at bottom spans full width, tip at top center.
   const s = 2; // pixel ratio
   const w = 32 * s;
   const h = 20 * s;
@@ -85,7 +90,6 @@ const createTurnArrowheadImage = (map: maplibregl.Map) => {
   if (ctx) {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#ffffff';
-    // Triangle: tip at top-center, base spans full width at bottom
     ctx.beginPath();
     ctx.moveTo(w / 2, 0);        // tip
     ctx.lineTo(w, h);            // bottom-right
@@ -97,6 +101,141 @@ const createTurnArrowheadImage = (map: maplibregl.Map) => {
   const imgData = ctx?.getImageData(0, 0, w, h);
   if (imgData) {
     map.addImage('turn-arrowhead-icon', imgData, { pixelRatio: s });
+  }
+};
+
+const createSpeedcamImage = (map: maplibregl.Map) => {
+  if (map.hasImage('speedcam_ico')) return;
+
+  const s = 2;
+  const size = 48 * s; // 96x96
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    // High-visibility Crimson/Rose Red Warning Badge with subtle drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 6 * s;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, (size / 2) - (4 * s), 0, Math.PI * 2);
+    ctx.fillStyle = '#e11d48'; // crimson red
+    ctx.fill();
+    ctx.lineWidth = 3 * s;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // Pillar stand
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.roundRect(22 * s, 34 * s, 4 * s, 5 * s, 1 * s);
+    ctx.fill();
+
+    // Main camera body
+    ctx.beginPath();
+    ctx.roundRect(14 * s, 17 * s, 20 * s, 17 * s, 3 * s);
+    ctx.fill();
+
+    // Primary Lens (Crimson cutout)
+    ctx.fillStyle = '#e11d48';
+    ctx.beginPath();
+    ctx.arc(21 * s, 25.5 * s, 4.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Lens Reflection (White dot)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(21 * s, 25.5 * s, 2 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Flash sensor (Yellow / Amber)
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.roundRect(28 * s, 20 * s, 4 * s, 4 * s, 1 * s);
+    ctx.fill();
+
+    // Lower sensor
+    ctx.fillStyle = '#e11d48';
+    ctx.beginPath();
+    ctx.roundRect(28 * s, 26 * s, 4 * s, 4 * s, 1 * s);
+    ctx.fill();
+
+    // Radar Emission Waves (Top-Left)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 * s;
+    ctx.beginPath();
+    ctx.arc(13 * s, 13 * s, 4.5 * s, 1.1 * Math.PI, 1.6 * Math.PI);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(13 * s, 13 * s, 7.5 * s, 1.1 * Math.PI, 1.6 * Math.PI);
+    ctx.stroke();
+  }
+
+  const imgData = ctx?.getImageData(0, 0, size, size);
+  if (imgData) {
+    map.addImage('speedcam_ico', imgData, { pixelRatio: s });
+  }
+};
+
+const createRailcrossingImage = (map: maplibregl.Map) => {
+  if (map.hasImage('railcrossing')) return;
+
+  const s = 2;
+  const size = 48 * s; // 96x96
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    const w = 6.5 * s;
+
+    // 1. Subtle drop shadow
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = w + (2 * s);
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(8 * s, 10 * s); ctx.lineTo(40 * s, 42 * s);
+    ctx.moveTo(40 * s, 10 * s); ctx.lineTo(8 * s, 42 * s);
+    ctx.stroke();
+
+    // 2. Dark outline for crisp contrast on map
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = w + (1.2 * s);
+    ctx.beginPath();
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(7 * s, 41 * s);
+    ctx.stroke();
+
+    // 3. Main pure white beams
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(7 * s, 41 * s);
+    ctx.stroke();
+
+    // 4. Characteristic Signal Red Tips (4 ends)
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(14 * s, 14 * s);
+    ctx.moveTo(34 * s, 34 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(34 * s, 14 * s);
+    ctx.moveTo(14 * s, 34 * s); ctx.lineTo(7 * s, 41 * s);
+    ctx.stroke();
+
+    // 5. Clean white center square
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect((size / 2) - (w / 2), (size / 2) - (w / 2), w, w);
+
+    const imgData = ctx.getImageData(0, 0, size, size);
+    map.addImage('railcrossing', imgData, { pixelRatio: s });
   }
 };
 
@@ -191,7 +330,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-    sprite: 'https://truckermudgeon.github.io/sprites',
+    sprite: `${tileRoot}/sprites`,
     sources: {
       ets2: {
         type: 'vector',
@@ -201,10 +340,24 @@ function createEts2Style(): maplibregl.StyleSpecification {
         type: 'vector',
         url: `pmtiles://${tileRoot}/world.pmtiles`,
       },
+      terrain: {
+        type: 'raster-dem',
+        url: `pmtiles://${tileRoot}/ets2-terrain.pmtiles`,
+        tileSize: 256,
+        encoding: 'mapbox',
+      },
+      contours: {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-contours.pmtiles`,
+      },
       footprints: {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
       },
+    },
+    terrain: {
+      source: 'terrain',
+      exaggeration: 2.2,
     },
     layers: [
       {
@@ -212,6 +365,38 @@ function createEts2Style(): maplibregl.StyleSpecification {
         type: 'background',
         paint: {
           'background-color': '#050508',
+        },
+      },
+      {
+        id: 'world-land',
+        type: 'fill',
+        source: 'world',
+        'source-layer': 'land',
+        paint: {
+          'fill-color': '#08101a',
+        },
+      },
+      {
+        id: 'contours-lines',
+        type: 'line',
+        source: 'contours',
+        'source-layer': 'contours',
+        minzoom: 6.5,
+        filter: ['==', ['%', ['get', 'elevation'], 50], 0],
+        paint: {
+          'line-color': '#475569',
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            6.5, 0.4,
+            9, 0.7,
+            13, 1.0,
+          ],
+          'line-opacity': [
+            'interpolate', ['linear'], ['zoom'],
+            6.5, 0.15,
+            8, 0.28,
+            12, 0.4,
+          ],
         },
       },
       {
@@ -255,6 +440,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         type: 'fill',
         source: 'footprints',
         'source-layer': 'footprints',
+        minzoom: 8.5,
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
         paint: {
           'fill-color': '#1e293b',
@@ -266,7 +452,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         type: 'fill-extrusion',
         source: 'footprints',
         'source-layer': 'footprints',
-        minzoom: 8,
+        minzoom: 8.5,
         filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
         paint: {
           'fill-extrusion-color': '#2b3648',
@@ -401,9 +587,9 @@ function createEts2Style(): maplibregl.StyleSpecification {
           'icon-allow-overlap': true,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            8, 0.4,
-            11, 0.7,
-            14, 1.0
+            8, 0.65,
+            11, 1.0,
+            14, 1.4
           ]
         }
       },
@@ -424,9 +610,32 @@ function createEts2Style(): maplibregl.StyleSpecification {
           'icon-allow-overlap': true,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            9, 0.4,
-            12, 0.7,
-            15, 1.0
+            9, 0.6,
+            12, 0.95,
+            15, 1.35
+          ]
+        }
+      },
+      // Traffic Features (Ampeln / Traffic Lights, Baustellen, Bahnübergänge)
+      {
+        id: 'ets2-traffic',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        minzoom: 10,
+        filter: [
+          'all',
+          ['==', ['geometry-type'], 'Point'],
+          ['==', ['get', 'type'], 'traffic']
+        ],
+        layout: {
+          'icon-image': '{sprite}',
+          'icon-allow-overlap': true,
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 0.55,
+            12, 0.85,
+            14, 1.2
           ]
         }
       },
@@ -492,10 +701,12 @@ function getIpcRenderer() {
 }
 
 const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
-  gameX, gameY, heading, routeWaypoints, source, dest, destCompany, city,
+  gameX, gameY, heading, currentSpeed, routeWaypoints, source, dest, destCompany, city,
   navDistance, connected, accentColor = '#f59e0b', themeMode = 'dark',
   width = 300, height = 200, zoom, initialZoom = 9, onZoomChange,
-  showInstructions = false, fullWidthInstructions = false, mapId, onDestinationReached, onRouteCalculated
+  showInstructions = false, fullWidthInstructions = false,
+  showSpeedcams = true, onSpeedcamAlert,
+  mapId, onDestinationReached, onRouteCalculated
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -503,11 +714,15 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const turnMarkersRef = useRef<maplibregl.Marker[]>([]);
   const [following, setFollowing] = useState(true);
+  const isFollowingRef = useRef<boolean>(true);
+  isFollowingRef.current = following;
   const [mapReady, setMapReady] = useState(false);
   const lastPos = useRef<[number, number] | null>(null);
 
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;
+  const onSpeedcamAlertRef = useRef(onSpeedcamAlert);
+  onSpeedcamAlertRef.current = onSpeedcamAlert;
 
   const [jsonTurnPoints, setJsonTurnPoints] = useState<JSONTurnPoint[]>([]);
   const [segmentLanes, setSegmentLanes] = useState<number[]>([]);
@@ -524,6 +739,14 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const gameYRef = useRef<number | undefined>(gameY);
   gameXRef.current = gameX;
   gameYRef.current = gameY;
+
+  // Target and interpolated position/bearing for smooth 60 FPS driving
+  const targetPosRef = useRef<[number, number]>([50.95, 1.85]);
+  const targetBearingRef = useRef<number>(0);
+  const currentPosRef = useRef<[number, number]>([50.95, 1.85]);
+  const currentBearingRef = useRef<number>(0);
+  const hasInitializedPosRef = useRef<boolean>(false);
+  const lastRawHeading = useRef<number | null>(null);
 
   const [routeCalcTrigger, setRouteCalcTrigger] = useState(0);
 
@@ -545,9 +768,6 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     traveled: { type: 'FeatureCollection', features: [] },
     remaining: { type: 'FeatureCollection', features: [] },
   });
-
-  const currentBearingRef = useRef<number>(0);
-  const lastRawHeading = useRef<number | null>(null);
 
   // Expose imperative ref methods
   useImperativeHandle(ref, () => ({
@@ -618,7 +838,10 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     setView: (lng: number, lat: number, zoom: number, bearing?: number) => {
       if (!mapRef.current) return;
       currentZoomRef.current = zoom;
-      if (bearing != null) currentBearingRef.current = bearing;
+      if (bearing != null) {
+        currentBearingRef.current = bearing;
+        targetBearingRef.current = bearing;
+      }
       mapRef.current.jumpTo({ center: [lng, lat], zoom, bearing: bearing ?? mapRef.current.getBearing() });
     },
     getView: () => {
@@ -657,6 +880,70 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     map.setMaxZoom(12);
 
     map.on('load', () => {
+      try {
+        createArrowImage(map);
+        createTurnArrowheadImage(map);
+        createSpeedcamImage(map);
+        createRailcrossingImage(map);
+
+        // Register speed cameras source & symbol layer
+        if (!map.getSource('speedcams-source')) {
+          map.addSource('speedcams-source', {
+            type: 'geojson',
+            data: getSpeedCamerasGeoJson(),
+          });
+
+          map.addLayer({
+            id: 'ets2-speedcams',
+            type: 'symbol',
+            source: 'speedcams-source',
+            minzoom: 6.5,
+            layout: {
+              'icon-image': 'speedcam_ico',
+              'icon-size': [
+                'interpolate', ['linear'], ['zoom'],
+                6.5, 0.45,
+                9, 0.75,
+                12, 1.05,
+              ],
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            },
+          });
+
+          // Speed camera speed limit badge text (zoom >= 8.5)
+          map.addLayer({
+            id: 'ets2-speedcams-limit',
+            type: 'symbol',
+            source: 'speedcams-source',
+            minzoom: 8.5,
+            layout: {
+              'text-field': ['concat', ['get', 'speedLimit']],
+              'text-font': ['Open Sans Bold'],
+              'text-size': [
+                'interpolate', ['linear'], ['zoom'],
+                8.5, 9,
+                11, 11,
+                13, 13,
+              ],
+              'text-offset': [0, 1.3],
+              'text-anchor': 'top',
+              'text-allow-overlap': true,
+              'text-ignore-placement': true,
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#e11d48',
+              'text-halo-width': 2.5,
+              'text-halo-blur': 0.5,
+            },
+          });
+        }
+
+        map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+      } catch (err) {
+        console.debug("Terrain load notice:", err);
+      }
       setMapReady(true);
     });
 
@@ -671,6 +958,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     map.on('rotateend', () => {
       currentBearingRef.current = map.getBearing();
+      targetBearingRef.current = map.getBearing();
     });
 
     // Track user zoom actions to update currentZoomRef and notify parent listeners
@@ -702,11 +990,21 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     };
   }, []);
 
-  // Main telemetry position & rotation update loop
+  // Toggle speed camera layer visibility
   useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    const vis = showSpeedcams !== false ? 'visible' : 'none';
+    if (map.getLayer('ets2-speedcams')) {
+      map.setLayoutProperty('ets2-speedcams', 'visibility', vis);
+    }
+    if (map.getLayer('ets2-speedcams-limit')) {
+      map.setLayoutProperty('ets2-speedcams-limit', 'visibility', vis);
+    }
+  }, [showSpeedcams, mapReady]);
 
+  // Main telemetry position & rotation update loop (Updates targets + Proximity alerts)
+  useEffect(() => {
     // Determine effective game coordinates
     let effX = gameX;
     let effY = gameY;
@@ -741,21 +1039,13 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const pos = projectGameToLatLng(effX, effY) || lastPos.current || [50.95, 1.85];
     if (!pos) return;
 
-    const [lat, lng] = pos;
     lastPos.current = pos;
+    targetPosRef.current = pos;
 
-    // --- DIAGNOSE (vorübergehend): Marker-Rendering prüfen ---
-    console.log('[GameMapWidget:DIAG] position-effect', {
-      ok: true,
-      gameX, gameY, heading,
-      effX, effY,
-      projected: pos,
-      lng, lat,
-      hasMarkerEl: !!markerEl.current,
-      hasMarkerRef: !!markerRef.current,
-      isTelemPosValid,
-    });
-    // --- ENDE DIAGNOSE ---
+    if (!hasInitializedPosRef.current) {
+      currentPosRef.current = pos;
+      hasInitializedPosRef.current = true;
+    }
 
     const rawHeading = heading ?? lastRawHeading.current ?? 0;
     if (heading != null) lastRawHeading.current = heading;
@@ -783,54 +1073,101 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       desiredBearing = normalizeBearing(-(rawHeading * 360));
     }
 
-    const mapBearing = map.getBearing();
-    const arrowRotation = desiredBearing - mapBearing;
-
-    // Create elongated pure purple SVG direction arrow with 3D perspective pitch tilt (60deg) - Extra Large
-    const purpleColor = '#a855f7';
-
-    if (!markerEl.current) {
-      const el = document.createElement('div');
-      el.className = 'game-map-player-marker';
-      el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
-      markerEl.current = el;
+    targetBearingRef.current = desiredBearing;
+    if (Math.abs(currentBearingRef.current - desiredBearing) > 180 && !hasInitializedPosRef.current) {
+      currentBearingRef.current = desiredBearing;
     }
 
-    markerEl.current.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;transform:perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg);transform-origin:center center;filter:drop-shadow(0 0 16px ${purpleColor}) drop-shadow(0 4px 12px rgba(0,0,0,0.9));">
-        <svg width="54" height="70" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L3 28L12 22L21 28L12 2Z" fill="${purpleColor}"/>
-        </svg>
-      </div>
-    `;
-
-    if (!markerRef.current) {
-      markerRef.current = new maplibregl.Marker({
-        element: markerEl.current,
-      })
-        .setLngLat([lng, lat])
-        .addTo(map);
-    } else {
-      markerRef.current.setLngLat([lng, lat]);
+    // Speedcam Proximity Detection
+    if (showSpeedcams !== false && pos) {
+      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750);
+      onSpeedcamAlertRef.current?.(alert);
     }
+  }, [gameX, gameY, heading, currentSpeed, showSpeedcams, dest, destCompany, source, city]);
 
-    if (following) {
-      const delta = shortestAngleDelta(currentBearingRef.current, desiredBearing);
-      const SMOOTHING = 0.35;
-      const newBearing = currentBearingRef.current + delta * SMOOTHING;
-      currentBearingRef.current = newBearing;
+  // High Performance 60 FPS requestAnimationFrame Smooth Driving Camera & Marker Loop
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
 
-      const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
+    let animFrameId: number;
+    let lastFrameTime = performance.now();
 
-      map.jumpTo({
-        center: [lng, lat],
-        zoom: currentZoomRef.current,
-        bearing: newBearing,
-        pitch: 60,
-        padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
-      });
-    }
-  }, [gameX, gameY, heading, mapReady, following, accentColor, dest, destCompany, source, city, showInstructions, fullWidthInstructions, navInstruction.primary]);
+    const renderLoop = (now: number) => {
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.1); // clamp delta time
+      lastFrameTime = now;
+
+      const map = mapRef.current;
+      if (map) {
+        // Frame-rate independent exponential decay interpolation (Subpixel precision)
+        const posDecay = 14.0;
+        const posAlpha = 1 - Math.exp(-posDecay * dt);
+
+        const targetPos = targetPosRef.current;
+        const curPos = currentPosRef.current;
+
+        const newLat = curPos[0] + (targetPos[0] - curPos[0]) * posAlpha;
+        const newLng = curPos[1] + (targetPos[1] - curPos[1]) * posAlpha;
+        currentPosRef.current = [newLat, newLng];
+
+        // Smooth bearing interpolation (shortest angle delta)
+        const bearingDecay = 12.0;
+        const bearingAlpha = 1 - Math.exp(-bearingDecay * dt);
+        const targetBearing = targetBearingRef.current;
+        const curBearing = currentBearingRef.current;
+
+        const deltaBearing = shortestAngleDelta(curBearing, targetBearing);
+        const newBearing = curBearing + deltaBearing * bearingAlpha;
+        currentBearingRef.current = newBearing;
+
+        // Player marker setup & smooth update
+        if (!markerEl.current) {
+          const el = document.createElement('div');
+          el.className = 'game-map-player-marker';
+          el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
+          markerEl.current = el;
+        }
+
+        const mapBearing = map.getBearing();
+        const arrowRotation = newBearing - mapBearing;
+        const purpleColor = '#a855f7';
+
+        markerEl.current.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;transform:perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg);transform-origin:center center;filter:drop-shadow(0 0 16px ${purpleColor}) drop-shadow(0 4px 12px rgba(0,0,0,0.9));">
+            <svg width="54" height="70" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L3 28L12 22L21 28L12 2Z" fill="${purpleColor}"/>
+            </svg>
+          </div>
+        `;
+
+        if (!markerRef.current) {
+          markerRef.current = new maplibregl.Marker({
+            element: markerEl.current,
+          })
+            .setLngLat([newLng, newLat])
+            .addTo(map);
+        } else {
+          markerRef.current.setLngLat([newLng, newLat]);
+        }
+
+        // Camera follow
+        if (isFollowingRef.current) {
+          const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
+          map.jumpTo({
+            center: [newLng, newLat],
+            bearing: newBearing,
+            zoom: currentZoomRef.current,
+            pitch: 60,
+            padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
+          });
+        }
+      }
+
+      animFrameId = requestAnimationFrame(renderLoop);
+    };
+
+    animFrameId = requestAnimationFrame(renderLoop);
+    return () => cancelAnimationFrame(animFrameId);
+  }, [mapReady, showInstructions, fullWidthInstructions, navInstruction.primary]);
 
   // Auto max-zoom to 12 when destination company prop becomes active
   const lastDestCompanyRef = useRef<string | undefined>(destCompany);
