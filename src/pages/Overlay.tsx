@@ -1122,6 +1122,7 @@ const OverlayPage: React.FC = () => {
         gameX={telemetry?.posX ?? (telemetry as any)?.gameX}
         gameY={telemetry?.posZ ?? (telemetry as any)?.gameY}
         heading={telemetry?.heading}
+        routeWaypoints={(telemetry as any)?.routeWaypoints}
         source={telemetry?.source || undefined}
         dest={telemetry?.dest || undefined}
         destCompany={(telemetry as any)?.dest_company || (telemetry as any)?.destCompany || undefined}

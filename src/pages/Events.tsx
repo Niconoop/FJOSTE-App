@@ -242,7 +242,8 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
+  const initialFormState = { title: "", event_type: "Convoy", organizer: "Open Pipe Club", start_date: "", start_city: "", start_company: "", end_city: "", end_company: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" };
+  const [form, setForm] = useState(initialFormState);
   const [coverFile, setCoverFile] = useState<File | null>(null);
 
   const [rsvpState, setRsvpState] = useState<Record<number, boolean>>({});
@@ -252,6 +253,9 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
   const [showPickerModal, setShowPickerModal] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
   const [pickerTime, setPickerTime] = useState("18:00");
+  const [pickerMonth, setPickerMonth] = useState(new Date());
+  const [showHourPopover, setShowHourPopover] = useState(false);
+  const [showMinPopover, setShowMinPopover] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -333,7 +337,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       await axios.post(`${API_URL}/events`, fd, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } });
       toast.success("Event erfolgreich geplant!");
       setShowForm(false);
-      setForm({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
+      setForm(initialFormState);
       setCoverFile(null); setRouteFile(null);
       loadAll();
     } catch { toast.error("Fehler beim Erstellen des Events"); }
@@ -345,9 +349,12 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
     setForm({
       title: event.title || "",
       event_type: event.event_type || "Convoy",
+      organizer: event.organizer || event.organisator || (event.is_custom ? "Open Pipe Club" : (event.company_name || "Open Pipe Club")),
       start_date: rawDate ? rawDate.toISOString() : "",
       start_city: event.start_city || "",
+      start_company: event.start_company || "",
       end_city: event.end_city || "",
+      end_company: event.end_company || "",
       server: event.server || "",
       game: (event.game && typeof event.game === 'object' ? (event.game.code || event.game.name) : event.game) || "ETS2",
       information: event.information || "",
@@ -372,7 +379,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
       toast.success("Event aktualisiert!");
       setShowForm(false);
       setEditingEvent(null);
-      setForm({ title: "", event_type: "Convoy", start_date: "", start_city: "", end_city: "", server: "", game: "ETS2", information: "", rules: "", voice_link: "", external_url: "" });
+      setForm(initialFormState);
       setCoverFile(null); setRouteFile(null);
       loadAll();
     } catch { toast.error("Fehler beim Aktualisieren des Events"); }
@@ -509,10 +516,15 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                 </div>
 
                 <form id="create-event-form" onSubmit={editingEvent ? handleUpdate : handleCreate} className="p-5 sm:p-6 md:p-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  {/* Title, Type & Organizer */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar size={11} className="text-amber-400/60" /> Event-Titel</label>
                       <input type="text" placeholder="z.B. Freitags-Convoy" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={11} className="text-amber-400/60" /> Organisator</label>
+                      <input type="text" placeholder="z.B. Open Pipe Club" value={form.organizer} onChange={e => setForm({ ...form, organizer: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><List size={11} className="text-amber-400/60" /> Event-Typ</label>
@@ -524,6 +536,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                   </div>
 
+                  {/* Date Picker Trigger */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock size={11} className="text-amber-400/60" /> Datum & Uhrzeit</label>
                     <div className="relative group">
@@ -532,17 +545,29 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                   </div>
 
+                  {/* Route: Start & End (Stadt & Firma) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-emerald-400/60" /> Startort</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-emerald-400/60" /> Start-Stadt</label>
                       <input type="text" placeholder="z.B. Berlin" value={form.start_city} onChange={e => setForm({ ...form, start_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-red-400/60" /> Zielort</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-emerald-400/60" /> Start-Firma (Optional)</label>
+                      <input type="text" placeholder="z.B. ITCC" value={form.start_company} onChange={e => setForm({ ...form, start_company: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-red-400/60" /> Ziel-Stadt</label>
                       <input type="text" placeholder="z.B. München" value={form.end_city} onChange={e => setForm({ ...form, end_city: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={11} className="text-red-400/60" /> Ziel-Firma (Optional)</label>
+                      <input type="text" placeholder="z.B. EuroGoodies" value={form.end_company} onChange={e => setForm({ ...form, end_company: e.target.value })} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300" />
                     </div>
                   </div>
 
+                  {/* Server & Game */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={11} className="text-amber-400/60" /> Server</label>
@@ -556,16 +581,19 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                   </div>
 
+                  {/* Information */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zusätzliche Informationen</label>
                     <textarea placeholder="Beschreibe das Event, Regeln, Treffpunkt, etc..." value={form.information} onChange={e => setForm({ ...form, information: e.target.value })} className="w-full min-h-[80px] sm:min-h-[100px] bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 resize-y" />
                   </div>
 
+                  {/* Regeln */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Shield size={11} className="text-amber-400/60" /> Regeln</label>
                     <textarea placeholder="z.B. Abstand halten&#10;Anweisungen der Guides befolgen&#10;Kein Rammen" value={form.rules} onChange={e => setForm({ ...form, rules: e.target.value })} className="w-full min-h-[70px] sm:min-h-[90px] bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 resize-y" />
                   </div>
 
+                  {/* Links */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><MessageCircle size={11} className="text-indigo-400/60" /> Discord-Link</label>
@@ -577,23 +605,33 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                     </div>
                   </div>
 
+                  {/* File Uploads */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <label className="group flex flex-col items-center justify-center gap-2 h-24 sm:h-28 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02]">
-                      <input type="file" onChange={e => handleFileSelect(e, 'cover')} className="hidden" accept="image/*" />
-                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400/10 group-hover:scale-110 transition-transform">
+                    <label className="group flex items-center gap-3 p-3 sm:p-4 bg-white/[0.02] border border-dashed border-white/10 rounded-xl cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300">
+                      <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                         <ImageIcon size={18} className="text-amber-400/70" />
                       </div>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${coverFile ? 'text-white' : 'text-slate-500'}`}>{coverFile ? coverFile.name : 'Cover-Bild'}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs font-bold block truncate ${coverFile ? 'text-white' : 'text-slate-500'}`}>{coverFile ? coverFile.name : 'Cover-Bild hochladen'}</span>
+                        <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Optional • PNG, JPG</span>
+                      </div>
+                      {coverFile && <XIcon size={14} className="text-slate-500 hover:text-red-400 shrink-0" onClick={(e) => { e.preventDefault(); setCoverFile(null); }} />}
+                      <input type="file" onChange={e => handleFileSelect(e, 'cover')} className="hidden" accept="image/*" />
                     </label>
-                    <label className="group flex flex-col items-center justify-center gap-2 h-24 sm:h-28 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02]">
-                      <input type="file" onChange={e => handleFileSelect(e, 'route')} className="hidden" accept=".png,.jpg,.jpeg" />
-                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-400/10 group-hover:scale-110 transition-transform">
+                    <label className="group flex items-center gap-3 p-3 sm:p-4 bg-white/[0.02] border border-dashed border-white/10 rounded-xl cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300">
+                      <div className="w-10 h-10 rounded-xl bg-amber-400/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                         <Upload size={18} className="text-amber-400/70" />
                       </div>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${routeFile ? 'text-white' : 'text-slate-500'}`}>{routeFile ? routeFile.name : 'Route-Bild'}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs font-bold block truncate ${routeFile ? 'text-white' : 'text-slate-500'}`}>{routeFile ? routeFile.name : 'Route hochladen'}</span>
+                        <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Optional • Bild-Datei</span>
+                      </div>
+                      {routeFile && <XIcon size={14} className="text-slate-500 hover:text-red-400 shrink-0" onClick={(e) => { e.preventDefault(); setRouteFile(null); }} />}
+                      <input type="file" onChange={e => handleFileSelect(e, 'route')} className="hidden" accept=".png,.jpg,.jpeg" />
                     </label>
                   </div>
 
+                  {/* Cover Image Preview */}
                   {coverFile && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-2xl overflow-hidden border border-white/10">
                       <img src={URL.createObjectURL(coverFile)} alt="Cover Preview" className="w-full h-40 object-cover opacity-80" />
@@ -609,69 +647,268 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
                 </div>
               </motion.div>
             </motion.div>
-           )}
-         </AnimatePresence>,
-         document.body
-       )}
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
-      {/* --- Date & Time Picker Modal (Portal) --- */}
+      {/* --- Custom Date & Time Picker Modal (Portal) --- */}
       {showPickerModal && createPortal(
-      <AnimatePresence>
-        {showPickerModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl" onClick={() => setShowPickerModal(false)}>
-            <motion.div
-              initial={{ scale: 0.9, y: 20, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 10, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="frosted-card w-full max-w-sm flex flex-col overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="relative p-6 pb-4 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-                    <Clock size={20} className="text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest">Datum & Uhrzeit</h3>
-                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">Wähle den Zeitpunkt für dein Event.</p>
+        <AnimatePresence>
+          {showPickerModal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-xl" onClick={() => setShowPickerModal(false)}>
+              <motion.div
+                initial={{ scale: 0.92, y: 20, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 10, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                className="bg-[#0b0b0c] border-2 border-[#f59e0b]/25 rounded-[32px] w-full max-w-md overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9),0_0_60px_rgba(245,158,11,0.1)]"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="relative p-6 pb-4 bg-gradient-to-b from-amber-400/10 to-transparent border-b border-white/5">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center shrink-0">
+                        <CalendarDays size={20} className="text-amber-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest">Datum & Uhrzeit</h3>
+                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">Event-Termin individuell festlegen</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowPickerModal(false)} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+                      <XIcon size={18} />
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Date & Time Inputs */}
-              <div className="p-6 space-y-5">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><CalendarDays size={11} className="text-amber-400/60" /> Datum</label>
-                  <input type="date" value={pickerDate.toISOString().split('T')[0]} onChange={e => setPickerDate(new Date(e.target.value))} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 [color-scheme:dark]" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Clock size={11} className="text-amber-400/60" /> Uhrzeit (24h)</label>
-                  <input type="time" value={pickerTime} onChange={e => setPickerTime(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300 [color-scheme:dark]" />
-                </div>
+                <div className="p-5 sm:p-6 space-y-6 max-h-[calc(100vh-10rem)] overflow-y-auto no-scrollbar">
+                  {/* Custom Date Picker */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-2xl p-2 px-3">
+                      <button
+                        type="button"
+                        onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))}
+                        className="p-1.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-amber-400 transition-colors"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider font-unbounded select-none">
+                        {pickerMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))}
+                        className="p-1.5 rounded-xl hover:bg-white/10 text-slate-300 hover:text-amber-400 transition-colors"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
 
-                {/* Preview of selected date/time */}
-                {pickerDate && (
-                  <div className="bg-amber-400/5 border border-amber-400/15 rounded-xl p-3 text-center">
-                    <p className="text-[9px] text-amber-400/70 uppercase tracking-widest font-black mb-1">Ausgewählt</p>
-                    <p className="text-sm font-bold text-white">{pickerDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                    <p className="text-xs text-amber-400 font-bold mt-0.5">{pickerTime} Uhr MEZ</p>
+                    {/* Weekday labels */}
+                    <div className="grid grid-cols-7 gap-1 text-center">
+                      {['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO'].map(d => (
+                        <span key={d} className="text-[10px] font-black text-amber-400/70 tracking-widest select-none">{d}</span>
+                      ))}
+                    </div>
+
+                    {/* Day grid */}
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {(() => {
+                        const today = new Date();
+                        const startOfMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1);
+                        const endOfMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0);
+                        const startDay = (startOfMonth.getDay() + 6) % 7;
+                        const daysInMonth = endOfMonth.getDate();
+
+                        return (
+                          <>
+                            {Array.from({ length: startDay }).map((_, i) => (
+                              <div key={`pad-${i}`} />
+                            ))}
+                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                              const day = i + 1;
+                              const dObj = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), day);
+                              const isSelected = pickerDate && dObj.toDateString() === pickerDate.toDateString();
+                              const isToday = dObj.toDateString() === today.toDateString();
+
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => setPickerDate(dObj)}
+                                  className={`h-9 w-full rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center ${
+                                    isSelected
+                                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black shadow-[0_0_15px_rgba(245,158,11,0.4)] scale-105'
+                                      : isToday
+                                      ? 'border border-amber-400/50 text-amber-400 bg-amber-400/10'
+                                      : 'bg-white/[0.03] text-slate-200 hover:bg-amber-400/20 hover:text-white border border-white/5'
+                                  }`}
+                                >
+                                  {day}
+                                </button>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Footer */}
-              <div className="p-5 border-t border-white/5 flex items-center justify-between shrink-0">
-                <button type="button" onClick={() => setShowPickerModal(false)} className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all rounded-xl hover:bg-white/5">Abbrechen</button>
-                <button type="button" onClick={handlePickerConfirm} className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300">Bestätigen</button>
-              </div>
+                  {/* Custom Time Selector */}
+                  <div className="space-y-3 pt-3 border-t border-white/10">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 select-none">
+                      <Clock size={12} className="text-amber-400" /> Startzeit (24h)
+                    </label>
+
+                    {/* Quick preset pills */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {["18:00", "19:00", "20:00", "20:30"].map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setPickerTime(t)}
+                          className={`py-1.5 rounded-xl text-xs font-bold transition-all ${
+                            pickerTime === t
+                              ? "bg-amber-400 text-black font-black shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+                              : "bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white border border-white/5"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom Hour & Minute Popover Controls */}
+                    <div className="grid grid-cols-2 gap-3 relative">
+                      {/* Custom Hour Button & Popover */}
+                      <div className="space-y-1 relative">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider select-none">Stunde</span>
+                        <button
+                          type="button"
+                          onClick={() => { setShowHourPopover(!showHourPopover); setShowMinPopover(false); }}
+                          className="w-full bg-black/60 border border-white/15 hover:border-amber-400/40 rounded-xl px-3 py-2 text-sm text-white font-bold flex items-center justify-between transition-all"
+                        >
+                          <span>{pickerTime.split(':')[0] || "18"} Uhr</span>
+                          <ChevronDown size={14} className={`text-slate-400 transition-transform ${showHourPopover ? "rotate-180 text-amber-400" : ""}`} />
+                        </button>
+                        <AnimatePresence>
+                          {showHourPopover && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                              className="absolute left-0 right-0 bottom-full mb-1.5 z-[130] bg-[#0c0c0d] border-2 border-amber-400/30 rounded-2xl p-2 max-h-48 overflow-y-auto shadow-[0_20px_40px_rgba(0,0,0,0.9),0_0_25px_rgba(245,158,11,0.15)] no-scrollbar"
+                            >
+                              <div className="grid grid-cols-3 gap-1">
+                                {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => {
+                                  const curH = pickerTime.split(':')[0] || "18";
+                                  const isSel = curH === h;
+                                  return (
+                                    <button
+                                      key={h}
+                                      type="button"
+                                      onClick={() => {
+                                        const m = pickerTime.split(':')[1] || "00";
+                                        setPickerTime(`${h}:${m}`);
+                                        setShowHourPopover(false);
+                                      }}
+                                      className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                        isSel
+                                          ? "bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black shadow-md"
+                                          : "text-slate-300 hover:bg-amber-400/20 hover:text-white"
+                                      }`}
+                                    >
+                                      {h}:00
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Custom Minute Button & Popover */}
+                      <div className="space-y-1 relative">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider select-none">Minute</span>
+                        <button
+                          type="button"
+                          onClick={() => { setShowMinPopover(!showMinPopover); setShowHourPopover(false); }}
+                          className="w-full bg-black/60 border border-white/15 hover:border-amber-400/40 rounded-xl px-3 py-2 text-sm text-white font-bold flex items-center justify-between transition-all"
+                        >
+                          <span>{pickerTime.split(':')[1] || "00"} Min</span>
+                          <ChevronDown size={14} className={`text-slate-400 transition-transform ${showMinPopover ? "rotate-180 text-amber-400" : ""}`} />
+                        </button>
+                        <AnimatePresence>
+                          {showMinPopover && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                              className="absolute left-0 right-0 bottom-full mb-1.5 z-[130] bg-[#0c0c0d] border-2 border-amber-400/30 rounded-2xl p-2 max-h-48 overflow-y-auto shadow-[0_20px_40px_rgba(0,0,0,0.9),0_0_25px_rgba(245,158,11,0.15)] no-scrollbar"
+                            >
+                              <div className="grid grid-cols-3 gap-1">
+                                {["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"].map(m => {
+                                  const curM = pickerTime.split(':')[1] || "00";
+                                  const isSel = curM === m;
+                                  return (
+                                    <button
+                                      key={m}
+                                      type="button"
+                                      onClick={() => {
+                                        const h = pickerTime.split(':')[0] || "18";
+                                        setPickerTime(`${h}:${m}`);
+                                        setShowMinPopover(false);
+                                      }}
+                                      className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                        isSel
+                                          ? "bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black shadow-md"
+                                          : "text-slate-300 hover:bg-amber-400/20 hover:text-white"
+                                      }`}
+                                    >
+                                      :{m}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selection summary */}
+                  {pickerDate && (
+                    <div className="bg-amber-400/10 border border-amber-400/20 rounded-2xl p-3 text-center">
+                      <p className="text-[9px] text-amber-400 uppercase tracking-widest font-black mb-0.5">Ausgewählter Termin</p>
+                      <p className="text-xs font-bold text-white">
+                        {pickerDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                      </p>
+                      <p className="text-xs text-amber-400 font-extrabold mt-0.5">
+                        {pickerTime} Uhr MEZ
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 sm:p-5 border-t border-white/5 bg-black/60 flex items-center justify-between shrink-0">
+                  <button type="button" onClick={() => setShowPickerModal(false)} className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-all rounded-xl hover:bg-white/5">
+                    Abbrechen
+                  </button>
+                  <button type="button" onClick={handlePickerConfirm} className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-xl font-black text-xs uppercase tracking-wider hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all">
+                    Termin Übernehmen
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>,
-      document.body
+          )}
+        </AnimatePresence>,
+        document.body
       )}
     </div>
   );

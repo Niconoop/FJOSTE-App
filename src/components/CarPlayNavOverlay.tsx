@@ -5,12 +5,14 @@ interface CarPlayNavOverlayProps {
   primary: NextManeuver | null;
   upcoming?: Array<{ dir: 'left' | 'straight' | 'right'; distText: string }>;
   accentColor?: string;
+  fullWidth?: boolean;
 }
 
 export const CarPlayNavOverlay: React.FC<CarPlayNavOverlayProps> = ({
   primary,
   upcoming = [],
   accentColor = '#2563eb',
+  fullWidth = false,
 }) => {
   if (!primary) return null;
 
@@ -70,16 +72,17 @@ export const CarPlayNavOverlay: React.FC<CarPlayNavOverlayProps> = ({
       id="cp-carplay-nav-wrapper"
       style={{
         position: 'absolute',
-        top: '12px',
-        right: '12px',
+        top: fullWidth ? '0px' : '12px',
+        left: fullWidth ? '0px' : 'auto',
+        right: fullWidth ? '0px' : '12px',
         zIndex: 999999,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'stretch',
         gap: '0px',
         pointerEvents: 'none',
-        maxWidth: '440px',
-        width: 'calc(100% - 24px)',
+        maxWidth: fullWidth ? 'none' : '440px',
+        width: fullWidth ? '100%' : 'calc(100% - 24px)',
         isolation: 'isolate',
       }}
     >
@@ -93,8 +96,7 @@ export const CarPlayNavOverlay: React.FC<CarPlayNavOverlayProps> = ({
           opacity: 1 !important;
           backdrop-filter: none !important;
           -webkit-backdrop-filter: none !important;
-          border: 2px solid #2563eb !important;
-          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.95) !important;
+          ${fullWidth ? 'border: none !important; border-bottom: 2px solid #2563eb !important; border-radius: 0 0 24px 24px !important; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8) !important;' : 'border: 2px solid #2563eb !important; border-radius: 22px !important; box-shadow: 0 25px 60px rgba(0, 0, 0, 0.95) !important;'}
         }
         #cp-carplay-nav-banner .gm-nav-chip-content {
           background: #1d4ed8 !important;
@@ -127,15 +129,17 @@ export const CarPlayNavOverlay: React.FC<CarPlayNavOverlayProps> = ({
           background: '#1d4ed8',
           backgroundColor: '#1d4ed8',
           opacity: 1,
-          boxShadow: '0 25px 60px rgba(0,0,0,0.95)',
-          borderRadius: '22px',
+          boxShadow: fullWidth ? '0 20px 40px rgba(0,0,0,0.8)' : '0 25px 60px rgba(0,0,0,0.95)',
+          borderRadius: fullWidth ? '0 0 24px 24px' : '22px',
           overflow: 'hidden',
-          minWidth: '320px',
-          maxWidth: '440px',
+          minWidth: fullWidth ? 'auto' : '320px',
+          maxWidth: fullWidth ? 'none' : '440px',
+          width: '100%',
           color: '#ffffff',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif',
           pointerEvents: 'auto',
-          border: '2px solid #2563eb',
+          border: fullWidth ? 'none' : '2px solid #2563eb',
+          borderBottom: '2px solid #2563eb',
           position: 'relative',
           isolation: 'isolate',
         }}

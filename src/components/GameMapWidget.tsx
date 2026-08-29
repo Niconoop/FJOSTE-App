@@ -26,6 +26,8 @@ interface GameMapWidgetProps {
   gameY?: number;
   /** Heading in radians */
   heading?: number;
+  /** Exact in-game route waypoints from OPCGameBridge plugin [x, y, z] */
+  routeWaypoints?: [number, number, number][] | [number, number][] | null;
   /** Source city name */
   source?: string;
   /** Destination city name */
@@ -54,10 +56,14 @@ interface GameMapWidgetProps {
   onZoomChange?: (zoom: number) => void;
   /** Whether to show top-right CarPlay navigation overlay banner */
   showInstructions?: boolean;
+  /** Whether the navigation overlay banner should span 100% full width */
+  fullWidthInstructions?: boolean;
   /** Unique map identifier */
   mapId?: string;
   /** Callback when destination is reached */
   onDestinationReached?: () => void;
+  /** Callback when route calculation completes or updates */
+  onRouteCalculated?: (routeInfo: { distanceMeters: number; durationSeconds: number } | null) => void;
 }
 
 // --- ETS2 coordinate → lat/lng projection (Lambert Conformal Conic) ---
@@ -486,10 +492,10 @@ function getIpcRenderer() {
 }
 
 const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
-  gameX, gameY, heading, source, dest, destCompany, city,
+  gameX, gameY, heading, routeWaypoints, source, dest, destCompany, city,
   navDistance, connected, accentColor = '#f59e0b', themeMode = 'dark',
   width = 300, height = 200, zoom, initialZoom = 9, onZoomChange,
-  showInstructions = false, mapId, onDestinationReached
+  showInstructions = false, fullWidthInstructions = false, mapId, onDestinationReached, onRouteCalculated
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -594,6 +600,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         traveled: { type: 'FeatureCollection', features: [] },
         remaining: { type: 'FeatureCollection', features: [] },
       });
+      onRouteCalculated?.(null);
     },
     focusDestination: (lng: number, lat: number) => {
       if (!mapRef.current) return;
@@ -813,14 +820,17 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       const newBearing = currentBearingRef.current + delta * SMOOTHING;
       currentBearingRef.current = newBearing;
 
+      const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
+
       map.jumpTo({
         center: [lng, lat],
         zoom: currentZoomRef.current,
         bearing: newBearing,
         pitch: 60,
+        padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
       });
     }
-  }, [gameX, gameY, heading, mapReady, following, accentColor, dest, destCompany, source, city]);
+  }, [gameX, gameY, heading, mapReady, following, accentColor, dest, destCompany, source, city, showInstructions, fullWidthInstructions, navInstruction.primary]);
 
   // Auto max-zoom to 12 when destination company prop becomes active
   const lastDestCompanyRef = useRef<string | undefined>(destCompany);
@@ -834,11 +844,92 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     }
   }, [destCompany, mapReady]);
 
-  // Accurate Road Route calculation logic - calculates route once when destination or source changes
+  // Accurate Road Route calculation logic - uses live in-game waypoints from plugin or calculates via road network
   useEffect(() => {
     let canceled = false;
 
     const calculateRoute = async () => {
+      // 1. Direct In-Game Route Waypoints from OPCGameBridge Plugin
+      if (Array.isArray(routeWaypoints) && routeWaypoints.length >= 2) {
+        const rawCoords: [number, number][] = routeWaypoints.map((w: any) => [
+          w[0],
+          w[2] != null ? w[2] : w[1]
+        ]);
+        const remainingCoords = rawCoords
+          .map(([gx, gz]) => {
+            const pt = projectGameToLatLng(gx, gz);
+            return pt ? ([pt[1], pt[0]] as [number, number]) : null;
+          })
+          .filter((pt): pt is [number, number] => pt !== null);
+
+        if (!canceled && remainingCoords.length >= 2) {
+          setRawRouteCoords(rawCoords);
+
+          // Calculate turn points for navigation instructions
+          const turnPoints: JSONTurnPoint[] = [];
+          for (let i = 1; i < rawCoords.length - 1; i++) {
+            const p0 = rawCoords[i - 1];
+            const p1 = rawCoords[i];
+            const p2 = rawCoords[i + 1];
+            const v1x = p1[0] - p0[0];
+            const v1y = p1[1] - p0[1];
+            const v2x = p2[0] - p1[0];
+            const v2y = p2[1] - p1[1];
+            const cross = v1x * v2y - v1y * v2x;
+            const dot = v1x * v2x + v1y * v2y;
+            const angleDeg = (Math.atan2(cross, dot) * 180) / Math.PI;
+            if (Math.abs(angleDeg) > 25) {
+              turnPoints.push({
+                x: p1[0],
+                y: p1[1],
+                turnAngleDeg: angleDeg,
+                type: angleDeg > 0 ? 'turn_left' : 'turn_right',
+                roadName: ''
+              });
+            }
+          }
+          setJsonTurnPoints(turnPoints);
+          setSegmentLanes([]);
+
+          const remainingFeature: GeoJSON.Feature[] = [{
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: remainingCoords },
+          }];
+
+          const currentPos = lastPos.current || (gameXRef.current != null && gameYRef.current != null ? projectGameToLatLng(gameXRef.current, gameYRef.current) : null);
+          const sourceCity = source ? findCity(source) : null;
+          const traveledCoords: [number, number][] = [];
+          if (sourceCity) traveledCoords.push([sourceCity.lng, sourceCity.lat]);
+          if (currentPos) traveledCoords.push([currentPos[1], currentPos[0]]);
+
+          const traveledFeature: GeoJSON.Feature[] = traveledCoords.length >= 2 ? [{
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: traveledCoords },
+          }] : [];
+
+          setRouteGeoJson({
+            remaining: { type: 'FeatureCollection' as const, features: remainingFeature },
+            traveled: { type: 'FeatureCollection' as const, features: traveledFeature },
+          });
+
+          // Compute total polyline distance
+          let totalDist = 0;
+          for (let i = 1; i < rawCoords.length; i++) {
+            const dx = rawCoords[i][0] - rawCoords[i - 1][0];
+            const dy = rawCoords[i][1] - rawCoords[i - 1][1];
+            totalDist += Math.sqrt(dx * dx + dy * dy);
+          }
+          onRouteCalculated?.({
+            distanceMeters: Math.round(totalDist),
+            durationSeconds: Math.round(totalDist / (60 / 3.6)),
+          });
+          return;
+        }
+      }
+
+      // 2. Fallback: If no direct plugin route waypoints are available, calculate via destination & route-service
       if (!dest && !destCompany) {
         lastRouteKeyRef.current = '';
         lastRouteCalcPosRef.current = null;
@@ -850,6 +941,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           remaining: { type: 'FeatureCollection' as const, features: [] },
           traveled: { type: 'FeatureCollection' as const, features: [] },
         });
+        onRouteCalculated?.(null);
         return;
       }
 
@@ -906,6 +998,11 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
                 return pt ? [pt[1], pt[0]] : null;
               })
               .filter((pt): pt is [number, number] => pt !== null);
+
+            onRouteCalculated?.({
+              distanceMeters: res.distanceMeters || 0,
+              durationSeconds: res.durationSeconds || 0,
+            });
           }
         } catch (e) {
           // Fall back to straight line if IPC fails
@@ -951,7 +1048,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     return () => {
       canceled = true;
     };
-  }, [source, dest, destCompany, mapReady]);
+  }, [routeWaypoints, source, dest, destCompany, mapReady, onRouteCalculated]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1329,13 +1426,15 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const recenter = useCallback(() => {
     if (!mapRef.current || !lastPos.current) return;
     setFollowing(true);
+    const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
     mapRef.current.flyTo({
       center: [lastPos.current[1], lastPos.current[0]],
       zoom: currentZoomRef.current,
       bearing: currentBearingRef.current,
       duration: 800,
+      padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
     });
-  }, []);
+  }, [showInstructions, fullWidthInstructions, navInstruction.primary]);
 
   return (
     <div
@@ -1351,6 +1450,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           primary={navInstruction.primary}
           upcoming={navInstruction.upcoming}
           accentColor={accentColor}
+          fullWidth={fullWidthInstructions}
         />
       )}
 

@@ -104,6 +104,33 @@ try {
         write-warning "Portable.exe nicht in dist-app/ gefunden."
     }
 
+    # Upload OPCGameBridge plugin if compiled
+    $pluginDll = "../OPCGameBridge/x64/Release/OPCGameBridge.dll"
+    if (Test-Path $pluginDll) {
+        write-host "Lade OPCGameBridge Plugin zu R2 hoch..."
+        $pluginHash = (Get-FileHash -Path $pluginDll -Algorithm SHA256).Hash.ToLower()
+        $pluginSize = (Get-Item $pluginDll).Length
+        $pluginManifest = @{
+            pluginVersion = $version
+            version = $version
+            name = "OPCGameBridge"
+            sha256 = $pluginHash
+            size = $pluginSize
+            pub_date = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssZ")
+            downloadUrl = "https://open-pipe-club-backend.nicohertling09.workers.dev/api/plugin/download/OPCGameBridge.dll"
+            iniUrl = "https://open-pipe-club-backend.nicohertling09.workers.dev/api/plugin/download/OPCGameBridge.ini"
+            releaseNotes = "OPCGameBridge C++ Plugin fuer ETS2 / ATS"
+        } | ConvertTo-Json -Depth 5
+        [System.IO.File]::WriteAllText((Join-Path (Get-Location) "dist-app/plugin_latest.json"), $pluginManifest, $utf8NoBom)
+        npx wrangler r2 object put "open-pipe-club-storage/plugins/latest.json" --file="dist-app/plugin_latest.json" --remote
+        npx wrangler r2 object put "open-pipe-club-storage/plugins/OPCGameBridge.dll" --file="$pluginDll" --remote
+        $pluginIni = "../OPCGameBridge/x64/Release/OPCGameBridge.ini"
+        if (Test-Path $pluginIni) {
+            npx wrangler r2 object put "open-pipe-club-storage/plugins/OPCGameBridge.ini" --file="$pluginIni" --remote
+        }
+        write-host "[OK] OPCGameBridge Plugin hochgeladen."
+    }
+
     write-host ""
     write-host "======================================="
     write-host "FERTIG! Release v$version ist online auf Cloudflare R2!"

@@ -47,6 +47,7 @@ interface Telemetry {
   oilPressureWarning?: boolean;
   waterTemperatureWarning?: boolean;
   batteryVoltageWarning?: boolean;
+  routeWaypoints?: [number, number, number][] | [number, number][];
 }
 
 interface SmtcData {
@@ -698,12 +699,13 @@ export default function CarPlayPage() {
 
   // Custom Navigation Destination state (Company & City Search)
   const [customDest, setCustomDest] = useState<{ dest: string; destCompany?: string; title: string } | null>(null);
+  const [customRouteInfo, setCustomRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
   const [pendingDest, setPendingDest] = useState<{ dest: string; destCompany?: string; title: string } | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilter, setSearchFilter] = useState<'all' | 'companies' | 'cities'>('all');
   const [searchSelectedIndex, setSearchSelectedIndex] = useState(0);
-  const [maxMapFocus, setMaxMapFocus] = useState<'map' | 'search'>('map');
+  const [maxMapFocus, setMaxMapFocus] = useState<'map' | 'search' | 'bottom-nav'>('map');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // In-Car notification banner state
@@ -828,8 +830,8 @@ export default function CarPlayPage() {
   };
 
   const getContentElementsCount = () => {
-    if (activeTab === 'home') return media ? 4 : 2;
-    if (activeTab === 'music') return media ? 3 : 0;
+    if (activeTab === 'home') return 3;
+    if (activeTab === 'music') return 3;
     if (activeTab === 'settings') return 18;
     return 0;
   };
@@ -960,6 +962,52 @@ export default function CarPlayPage() {
   };
 
   const handleNav = (dir: string) => {
+    // Global hotkey actions
+    if (dir === 'recenter' || dir === 'center') {
+      mapWidgetRef.current?.recenter();
+      maxMapWidgetRef.current?.recenter();
+      showNotification({
+        type: 'system',
+        title: 'GPS zentriert',
+        message: 'Karte auf aktuelle LKW-Position zentriert.',
+        icon: <Navigation size={20} className="text-sky-400" />,
+        color: 'bg-[#18181b]/95 border-sky-500/40 backdrop-blur-2xl shadow-sky-950/40',
+      });
+      return;
+    }
+
+    if (dir === 'fit-route' || dir === 'fit') {
+      mapWidgetRef.current?.fitRoute();
+      maxMapWidgetRef.current?.fitRoute();
+      return;
+    }
+
+    if (dir === 'cancel-route' || dir === 'clear-route') {
+      mapWidgetRef.current?.clearRoute();
+      maxMapWidgetRef.current?.clearRoute();
+      setCustomDest(null);
+      setCustomRouteInfo(null);
+      setPendingDest(null);
+      showNotification({
+        type: 'system',
+        title: 'Navigation beendet',
+        message: 'Aktive Route wurde gelöscht.',
+        icon: <X size={20} className="text-rose-400" />,
+        color: 'bg-[#18181b]/95 border-rose-500/40 backdrop-blur-2xl shadow-rose-950/40',
+      });
+      return;
+    }
+
+    if (dir === 'zoom-in') {
+      setCarPlayMapZoom(prev => Math.min(prev + 1, 12));
+      return;
+    }
+
+    if (dir === 'zoom-out') {
+      setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
+      return;
+    }
+
     if (isVirtualKbOpen) {
       const rows = kbMode === 'abc' ? KB_ROWS_ABC : KB_ROWS_123;
       const currentRow = rows[kbRow] || [];
@@ -1059,6 +1107,48 @@ export default function CarPlayPage() {
         return;
       }
 
+      if (maxMapFocus === 'bottom-nav') {
+        if (dir === 'up' || dir === 'right' || dir === 'back') {
+          setMaxMapFocus('map');
+          return;
+        }
+        if (dir === 'enter') {
+          if (pendingDest && !customDest) {
+            const dest = pendingDest;
+            setCustomDest(dest);
+            setPendingDest(null);
+            setMaxMapFocus('map');
+            showNotification({
+              title: 'Route gestartet',
+              message: `Navigation zu ${dest.title} gestartet!`,
+              icon: <Navigation size={18} />,
+              color: '#3b82f6',
+            });
+            setTimeout(() => {
+              mapWidgetRef.current?.recenter();
+              maxMapWidgetRef.current?.recenter();
+            }, 100);
+            return;
+          }
+          if (customDest) {
+            setCustomDest(null);
+            setCustomRouteInfo(null);
+            mapWidgetRef.current?.clearRoute();
+            maxMapWidgetRef.current?.clearRoute();
+            setMaxMapFocus('map');
+            showNotification({
+              type: 'system',
+              title: 'Navigation beendet',
+              message: 'Aktive Route wurde abgebrochen.',
+              icon: <X size={20} className="text-rose-400" />,
+              color: 'bg-[#18181b]/95 border-rose-500/40 backdrop-blur-2xl shadow-rose-950/40',
+            });
+            return;
+          }
+        }
+        return;
+      }
+
       if (maxMapFocus === 'search') {
         if (dir === 'left' || dir === 'back') {
           setMaxMapFocus('map');
@@ -1075,12 +1165,25 @@ export default function CarPlayPage() {
         }
       } else {
         // maxMapFocus === 'map'
+        if (dir === 'left') {
+          if (pendingDest || customDest) {
+            setMaxMapFocus('bottom-nav');
+            return;
+          }
+          maxMapWidgetRef.current?.recenter();
+          mapWidgetRef.current?.recenter();
+          return;
+        }
+        if (dir === 'home') {
+          maxMapWidgetRef.current?.recenter();
+          mapWidgetRef.current?.recenter();
+          return;
+        }
         if (dir === 'right') {
           setMaxMapFocus('search');
           return;
         }
         if (dir === 'enter') {
-          // If a pending destination exists, start the route via Enter
           if (pendingDest && !customDest) {
             const dest = pendingDest;
             setCustomDest(dest);
@@ -1095,6 +1198,10 @@ export default function CarPlayPage() {
               mapWidgetRef.current?.recenter();
               maxMapWidgetRef.current?.recenter();
             }, 100);
+            return;
+          }
+          if (customDest) {
+            setMaxMapFocus('bottom-nav');
             return;
           }
           setMaxMapFocus('search');
@@ -1103,28 +1210,16 @@ export default function CarPlayPage() {
           return;
         }
         if (dir === 'up') { setCarPlayMapZoom(prev => Math.min(prev + 1, 12)); return; }
-        if (dir === 'down') {
-          // If a pending destination exists, start the route via Down
-          if (pendingDest && !customDest) {
-            const dest = pendingDest;
-            setCustomDest(dest);
+        if (dir === 'down') { setCarPlayMapZoom(prev => Math.max(prev - 1, 4)); return; }
+        if (dir === 'back') {
+          if (pendingDest) {
             setPendingDest(null);
-            showNotification({
-              title: 'Route gestartet',
-              message: `Navigation zu ${dest.title} gestartet!`,
-              icon: <Navigation size={18} />,
-              color: '#3b82f6',
-            });
-            setTimeout(() => {
-              mapWidgetRef.current?.recenter();
-              maxMapWidgetRef.current?.recenter();
-            }, 100);
             return;
           }
-          setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
+          setMaximizedWidget(null);
+          setMaxMapFocus('map');
           return;
         }
-        if (dir === 'back') { setMaximizedWidget(null); setMaxMapFocus('map'); return; }
       }
       return;
     }
@@ -1166,13 +1261,14 @@ export default function CarPlayPage() {
     if (activeTab === 'home') {
       if (contentIndex === 0) {
         if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 12));
-        else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
+        else if (dir === 'down') setContentIndex(2);
         else if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(0); }
-        else if (dir === 'right') { setFocusZone('content'); setContentIndex(1); }
+        else if (dir === 'right') { setContentIndex(1); }
         else if (dir === 'enter') setMaximizedWidget('map');
       } else if (contentIndex === 1) {
         if (dir === 'left') setContentIndex(0);
         else if (dir === 'down') setContentIndex(2);
+        else if (dir === 'up') setContentIndex(0);
         else if (dir === 'enter') {
           setActiveTab('music');
           setMusicSubTab('windows');
@@ -1181,6 +1277,7 @@ export default function CarPlayPage() {
       } else if (contentIndex === 2) {
         if (dir === 'left') setContentIndex(0);
         else if (dir === 'up') setContentIndex(1);
+        else if (dir === 'down') setContentIndex(1);
         else if (dir === 'enter') setMaximizedWidget('diagnostics');
       }
     } else if (activeTab === 'music') {
@@ -1598,6 +1695,60 @@ export default function CarPlayPage() {
     };
     ipcRenderer.on('job-notification', jobNotificationListener);
 
+    // Global direct keyboard event listener for responsive in-car hotkeys
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      const tag = activeEl?.tagName?.toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea';
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleNavRef.current('back');
+        return;
+      }
+
+      if (isInput && e.key !== 'Enter' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+        return;
+      }
+
+      if (e.key === 'ArrowUp' || e.key === 'Up') {
+        e.preventDefault();
+        handleNavRef.current('up');
+      } else if (e.key === 'ArrowDown' || e.key === 'Down') {
+        e.preventDefault();
+        handleNavRef.current('down');
+      } else if (e.key === 'ArrowLeft' || e.key === 'Left') {
+        e.preventDefault();
+        handleNavRef.current('left');
+      } else if (e.key === 'ArrowRight' || e.key === 'Right') {
+        e.preventDefault();
+        handleNavRef.current('right');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleNavRef.current('enter');
+      } else if (e.key === 'Backspace' && !isInput) {
+        e.preventDefault();
+        handleNavRef.current('back');
+      } else if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
+        handleNavRef.current('zoom-in');
+      } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+        handleNavRef.current('zoom-out');
+      } else if ((e.key === 'c' || e.key === 'C' || e.key === 'r' || e.key === 'R') && !isInput) {
+        handleNavRef.current('recenter');
+      } else if ((e.key === 'f' || e.key === 'F') && !isInput) {
+        handleNavRef.current('fit-route');
+      } else if ((e.key === 'x' || e.key === 'X') && !isInput) {
+        handleNavRef.current('cancel-route');
+      } else if ((e.key === 's' || e.key === 'S') && !isInput) {
+        if (maximizedWidget === 'map') {
+          setMaxMapFocus('search');
+          searchInputRef.current?.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       ipcRenderer.removeListener('telemetry-update', telemetryListener);
       ipcRenderer.removeListener('overlay-settings-updated', settingsListener);
@@ -1804,6 +1955,13 @@ export default function CarPlayPage() {
   };
 
   const getRemainingSeconds = () => {
+    if (customDest && customRouteInfo && customRouteInfo.distanceMeters > 0) {
+      if (telemetry.speed >= 10) {
+        const speedMps = telemetry.speed / 3.6;
+        return Math.max(0, Math.round(customRouteInfo.distanceMeters / speedMps));
+      }
+      return customRouteInfo.durationSeconds || Math.round(customRouteInfo.distanceMeters / (60 / 3.6));
+    }
     if (liveRemainingSeconds !== null && liveRemainingSeconds > 0) {
       return liveRemainingSeconds;
     }
@@ -2227,6 +2385,7 @@ export default function CarPlayPage() {
                       gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                       gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                       heading={telemetry.connected ? telemetry.heading : undefined}
+                      routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
                       source={telemetry.connected ? telemetry.source : undefined}
                       dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
                       destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
@@ -2240,6 +2399,8 @@ export default function CarPlayPage() {
                       zoom={carPlayMapZoom}
                       onZoomChange={setCarPlayMapZoom}
                       showInstructions
+                      fullWidthInstructions
+                      onRouteCalculated={setCustomRouteInfo}
                     />
                   </div>
                 </div>
@@ -2361,10 +2522,6 @@ export default function CarPlayPage() {
                                       isAnyActive
                                         ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 text-slate-950 shadow-yellow-400/30 border border-yellow-200'
                                         : 'bg-black/75 text-white border border-white/20 hover:bg-black/90 backdrop-blur-md'
-                                    } ${
-                                      focusZone === 'content' && contentIndex === 2 && activeTab === 'home'
-                                        ? 'ring-4 ring-amber-500 scale-110 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-                                        : ''
                                     }`}
                                   >
                                     {isAnyActive ? <Pause size={15} className="fill-current" /> : <Play size={15} className="fill-current ml-0.5" />}
@@ -2388,7 +2545,7 @@ export default function CarPlayPage() {
                   <div
                     onClick={() => setMaximizedWidget('diagnostics')}
                     className={`p-4 flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 ${c.card} overflow-hidden relative group ${
-                      focusZone === 'content' && contentIndex === 3
+                      focusZone === 'content' && contentIndex === 2
                         ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)] z-20'
                         : 'hover:scale-[1.005] hover:border-white/20'
                     }`}
@@ -3650,51 +3807,51 @@ export default function CarPlayPage() {
               {/* Inline Top Search Input & Floating Results Dropdown (Only on Maximized Map) */}
               <div className="absolute top-4 left-4 z-50 flex flex-col gap-1.5 pointer-events-auto min-w-[420px] max-w-[560px]">
                 <div className="flex items-center gap-2">
-                <div
-                  onClick={() => setMaxMapFocus('search')}
-                  className={`relative flex-1 rounded-2xl transition-all ${
-                    maxMapFocus === 'search'
-                      ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
-                      : ''
-                  }`}
-                >
-                  <Search size={18} className="absolute left-4 top-4 text-zinc-400" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onFocus={() => {
-                      setMaxMapFocus('search');
-                      openVirtualKeyboard('city');
-                    }}
-                    onClick={() => {
-                      setMaxMapFocus('search');
-                      openVirtualKeyboard('city');
-                    }}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setSearchSelectedIndex(0);
-                    }}
-                    placeholder="Firma oder Stadt suchen..."
-                    className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/15 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500 shadow-2xl transition-all cursor-pointer"
-                  />
-                  {searchQuery && (
-                    <button
+                  <div
+                    onClick={() => setMaxMapFocus('search')}
+                    className={`relative flex-1 rounded-2xl transition-all ${
+                      maxMapFocus === 'search'
+                        ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                        : ''
+                    }`}
+                  >
+                    <Search size={18} className="absolute left-4 top-4 text-zinc-400" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onFocus={() => {
+                        setMaxMapFocus('search');
+                        openVirtualKeyboard('city');
+                      }}
                       onClick={() => {
-                        setSearchQuery('');
+                        setMaxMapFocus('search');
+                        openVirtualKeyboard('city');
+                      }}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
                         setSearchSelectedIndex(0);
                       }}
-                      className="absolute right-3.5 top-3.5 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
+                      placeholder="Firma oder Stadt suchen..."
+                      className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/15 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500 shadow-2xl transition-all cursor-pointer"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSearchSelectedIndex(0);
+                        }}
+                        className="absolute right-3.5 top-3.5 text-zinc-400 hover:text-white cursor-pointer transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                 {/* Floating Results Dropdown List directly under Search Bar */}
-                 {searchQuery.trim().length > 0 && (
-                   <div className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden max-h-80 overflow-y-auto divide-y divide-white/5">
+                {/* Floating Results Dropdown List directly under Search Bar */}
+                {searchQuery.trim().length > 0 && (
+                  <div className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden max-h-80 overflow-y-auto divide-y divide-white/5">
                     {/* Category Filter Tabs */}
                     <div className="flex items-center gap-1.5 p-2 bg-white/[0.02] border-b border-white/10">
                       <button
@@ -3745,60 +3902,56 @@ export default function CarPlayPage() {
                         );
                       }
 
-                       return filtered.map((item, idx) => {
-                         const isSelected = idx === searchSelectedIndex;
-                         const initial = (item.title || '?').charAt(0).toUpperCase();
-                         const companyLogo = item.type === 'company' && item.companyName
-                           ? `/company-icons/${item.companyName.toLowerCase()}.png`
-                           : null;
-                         return (
-                           <div
-                             key={idx}
-                              onClick={() => {
-                                const dest = {
-                                  dest: item.cityName,
-                                  destCompany: item.companyName,
-                                  title: item.title,
-                                };
-                                setPendingDest(dest);
-                                setSearchQuery('');
-                                setTimeout(() => {
-                                  const map = maxMapWidgetRef.current as any;
-                                  if (map && 'focusDestinationByGameCoords' in map) {
-                                    const company = findCompany(dest.destCompany || '', dest.dest);
-                                    if (company) {
-                                      map.focusDestinationByGameCoords(company.x, company.z);
-                                    } else {
-                                      const city = findCity(dest.dest);
-                                      if (city) {
-                                        map.focusDestination(city.lng, city.lat);
-                                      }
+                      return filtered.map((item, idx) => {
+                        const isSelected = idx === searchSelectedIndex;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              const dest = {
+                                dest: item.cityName,
+                                destCompany: item.companyName,
+                                title: item.title,
+                              };
+                              setPendingDest(dest);
+                              setSearchQuery('');
+                              setTimeout(() => {
+                                const map = maxMapWidgetRef.current as any;
+                                if (map && 'focusDestinationByGameCoords' in map) {
+                                  const company = findCompany(dest.destCompany || '', dest.dest);
+                                  if (company) {
+                                    map.focusDestinationByGameCoords(company.x, company.z);
+                                  } else {
+                                    const city = findCity(dest.dest);
+                                    if (city) {
+                                      map.focusDestination(city.lng, city.lat);
                                     }
                                   }
-                                }, 50);
-                              }}
-                             className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all ${
-                               isSelected
-                                 ? 'bg-white/[0.08]'
-                                 : 'hover:bg-white/[0.04]'
-                             }`}
-                           >
-                              <CompanyIcon
-                                companyName={item.type === 'company' ? item.companyName : undefined}
-                                title={item.title}
-                                type={item.type}
-                                size="md"
-                              />
-                             <div className="flex-1 min-w-0">
-                               <div className="text-xs font-bold text-white truncate">{item.title}</div>
-                               <div className="text-[11px] text-zinc-400 truncate">{item.subtitle}</div>
-                             </div>
-                             <div className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                               {item.type === 'company' ? 'Firma' : 'Stadt'}
-                             </div>
-                           </div>
-                         );
-                       });
+                                }
+                              }, 50);
+                            }}
+                            className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-white/[0.08]'
+                                : 'hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            <CompanyIcon
+                              companyName={item.type === 'company' ? item.companyName : undefined}
+                              title={item.title}
+                              type={item.type}
+                              size="md"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-white truncate">{item.title}</div>
+                              <div className="text-[11px] text-zinc-400 truncate">{item.subtitle}</div>
+                            </div>
+                            <div className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                              {item.type === 'company' ? 'Firma' : 'Stadt'}
+                            </div>
+                          </div>
+                        );
+                      });
                     })()}
                   </div>
                 )}
@@ -3809,6 +3962,7 @@ export default function CarPlayPage() {
                 gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                 gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                 heading={telemetry.connected ? telemetry.heading : undefined}
+                routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
                 source={telemetry.connected ? telemetry.source : undefined}
                 dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
                 destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
@@ -3822,8 +3976,10 @@ export default function CarPlayPage() {
                 zoom={carPlayMapZoom}
                 onZoomChange={setCarPlayMapZoom}
                 showInstructions
+                onRouteCalculated={setCustomRouteInfo}
                 onDestinationReached={() => {
                   setCustomDest(null);
+                  setCustomRouteInfo(null);
                   showNotification({
                     title: 'Ziel erreicht! 🏁',
                     message: 'Du bist erfolgreich an deinem Zielort angekommen.',
@@ -3881,7 +4037,11 @@ export default function CarPlayPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 12, scale: 0.96 }}
                   transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
-                  className="absolute bottom-3 left-3 flex items-center gap-3 rounded-2xl px-4 py-3 z-40 bg-zinc-900"
+                  className={`absolute bottom-3 left-3 flex items-center gap-3 rounded-2xl px-4 py-3 z-40 bg-zinc-900 transition-all ${
+                    maxMapFocus === 'bottom-nav'
+                      ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]'
+                      : ''
+                  }`}
                   style={{
                     background: activeMapTheme === 'dark' ? '#27272a' : '#ffffff',
                     border: activeMapTheme === 'dark' ? '1px solid #3f3f46' : '1px solid #e4e4e7',
@@ -3921,7 +4081,9 @@ export default function CarPlayPage() {
                           maxMapWidgetRef.current?.recenter();
                         }, 100);
                       }}
-                      className={`shrink-0 bg-blue-600 hover:bg-blue-500 ${activeMapTheme === 'dark' ? 'text-white' : 'text-gray-900'} text-sm font-bold px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer`}
+                      className={`shrink-0 bg-blue-600 hover:bg-blue-500 ${activeMapTheme === 'dark' ? 'text-white' : 'text-gray-900'} text-sm font-bold px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer ${
+                        maxMapFocus === 'bottom-nav' ? 'ring-2 ring-white' : ''
+                      }`}
                     >
                       Route starten
                     </button>
@@ -3935,9 +4097,12 @@ export default function CarPlayPage() {
                         mapWidgetRef.current?.clearRoute();
                         maxMapWidgetRef.current?.clearRoute();
                         setCustomDest(null);
+                        setCustomRouteInfo(null);
                         setPendingDest(null);
                       }}
-                      className="w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0"
+                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                        maxMapFocus === 'bottom-nav' ? 'ring-2 ring-rose-400 scale-110' : ''
+                      }`}
                       style={{
                         background: activeMapTheme === 'dark' ? '#3f3f46' : '#f4f4f5',
                         color: activeMapTheme === 'dark' ? '#e4e4e7' : '#18181b',
@@ -3957,7 +4122,7 @@ export default function CarPlayPage() {
                       </span>
                       <span className="text-sm font-bold" style={{ color: activeMapTheme === 'dark' ? '#a1a1aa' : '#71717a' }}>·</span>
                       <span className="text-base font-black font-mono tracking-tight" style={{ color: activeMapTheme === 'dark' ? '#fafafa' : '#18181b' }}>
-                        {formatDistance(data.navDistance) || '--'}
+                        {formatDistance((customDest && customRouteInfo?.distanceMeters) ? customRouteInfo.distanceMeters : data.navDistance) || '--'}
                       </span>
                     </div>
 
@@ -4158,6 +4323,7 @@ export default function CarPlayPage() {
                         gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                         gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                         heading={telemetry.connected ? telemetry.heading : undefined}
+                        routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
                         source={telemetry.connected ? telemetry.source : undefined}
                         dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
                         destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
@@ -4170,8 +4336,8 @@ export default function CarPlayPage() {
                         mapId="tacho-mfd-map"
                         zoom={carPlayMapZoom}
                         onZoomChange={setCarPlayMapZoom}
-                        showInstructions
-                        fullWidthInstructions
+                        showInstructions={false}
+                        onRouteCalculated={setCustomRouteInfo}
                       />
                     </div>
                   )}

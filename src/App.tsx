@@ -262,9 +262,9 @@ function App() {
             try {
               const status = await ipcRenderer.invoke('check-plugin-status');
               setPluginStatus(status);
-              const missing = status.some((s: any) => !s.installed);
+              const needsAction = status.some((s: any) => !s.installed || s.updateAvailable);
               const ignored = localStorage.getItem('ignore_plugin_warning') === 'true';
-              if (missing && !ignored) {
+              if (needsAction && !ignored) {
                 setShowPluginPopup(true);
               }
             } catch (e) { }
@@ -392,7 +392,7 @@ function App() {
           setTimeout(async () => {
             const newStatus = await ipcRenderer.invoke('check-plugin-status');
             setPluginStatus(newStatus);
-            if (!newStatus.some((s: any) => !s.installed)) {
+            if (!newStatus.some((s: any) => !s.installed || s.updateAvailable)) {
               setShowPluginPopup(false);
             }
             setInstallingPlugin(false);
@@ -970,27 +970,34 @@ function App() {
                   <Download className="text-primary" size={32} />
                 </div>
 
-                <h2 className="text-xl font-unbounded font-bold text-white text-center mb-2 uppercase tracking-tight">Plugin fehlt</h2>
+                <h2 className="text-xl font-unbounded font-bold text-white text-center mb-2 uppercase tracking-tight">
+                  {pluginStatus.some(p => p.updateAvailable) ? 'Plugin Update / Installation' : 'Plugin fehlt'}
+                </h2>
                 <p className="text-slate-400 text-center text-sm mb-8 leading-relaxed">
-                  Für eine einwandfreie Telemetrie-Übertragung wird das SCS-Plugin benötigt. Möchtest du es jetzt installieren?
+                  Für eine hochpräzise Telemetrie-Übertragung und den In-Game Chat Injektor wird das native OPCGameBridge-Plugin benötigt.
                 </p>
 
                 <div className="space-y-4">
-                  {pluginStatus.filter(p => !p.installed).map(game => (
+                  {pluginStatus.filter(p => !p.installed || p.updateAvailable).map(game => (
                     <div key={game.gameId} className="space-y-3 p-5 bg-white/[0.03] border border-white/5 rounded-2xl transition-all hover:bg-white/[0.05]">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 bg-amber-500/10 rounded-xl">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2.5 bg-amber-500/10 rounded-xl shrink-0">
                             <AlertTriangle size={18} className="text-amber-500" />
                           </div>
-                          <span className="text-[11px] font-black text-white uppercase tracking-[0.15em]">{game.gameName}</span>
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-black text-white uppercase tracking-[0.15em] block truncate">{game.gameName}</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-wider block ${game.updateAvailable ? 'text-primary' : 'text-slate-400'}`}>
+                              {game.updateAvailable ? `Update verfügbar (v${game.latestVersion || '1.0.0'})` : 'Nicht installiert'}
+                            </span>
+                          </div>
                         </div>
                         {!installingPlugin && (
                           <button
                             onClick={() => installPlugin(game.gameId)}
-                            className="px-5 py-2.5 bg-primary text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(245, 158, 11,0.2)]"
+                            className="px-5 py-2.5 bg-primary text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-primary/80 transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_rgba(245,158,11,0.2)] shrink-0"
                           >
-                            Installieren
+                            {game.updateAvailable ? 'Aktualisieren' : 'Installieren'}
                           </button>
                         )}
                       </div>
@@ -1006,7 +1013,7 @@ function App() {
                               initial={{ width: 0 }}
                               animate={{ width: `${installProgress}%` }}
                               transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(245, 158, 11,0.5)]"
+                              className="h-full bg-gradient-to-r from-primary/50 to-primary shadow-[0_0_15px_rgba(245,158,11,0.5)]"
                             />
                           </div>
                         </div>

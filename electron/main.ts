@@ -880,10 +880,10 @@ ipcMain.on('rpc-page-changed', (_, page, details) => {
     displayPage = 'Schaut sich das Team an';
   } else if (page === 'Admin' || page === 'admin') {
     displayPage = 'Im Admin-Bereich';
+
   } else {
     displayPage = page.charAt(0).toUpperCase() + page.slice(1);
   }
-
 
   currentAppPage = displayPage;
   updateRpc();
@@ -897,6 +897,27 @@ ipcMain.on('set-auth-username', (_, username) => {
 
 let isQuitting = false;
 const rpcInterval = setInterval(updateRpc, 15000);
+
+// Named Pipe Helper to send commands to OPCGameBridge plugin
+function sendToPluginPipe(messageText: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const pipePath = '\\\\.\\pipe\\OPCCommandPipe';
+    const client = net.connect(pipePath, () => {
+      const payload = JSON.stringify({ text: messageText }) + '\n';
+      client.write(payload, () => {
+        client.end();
+        resolve(true);
+      });
+    });
+    client.on('error', () => {
+      resolve(false);
+    });
+    client.setTimeout(1500, () => {
+      client.destroy();
+      resolve(false);
+    });
+  });
+}
 
 // Telemetry Polling
 const telemetryScript = `
@@ -1022,6 +1043,30 @@ public class SCSTelemetry {
                         result["batteryVoltageWarning"] = raw[1574] > 0;
 
                         result["connected"] = true;
+
+                        // Read OPCRouteData polyline from OPCGameBridge plugin if active
+                        try {
+                            using (var routeMmf = MemoryMappedFile.OpenExisting("Local\\\\OPCRouteData")) {
+                                using (var routeAccessor = routeMmf.CreateViewAccessor()) {
+                                    uint magic = routeAccessor.ReadUInt32(0);
+                                    if (magic == 0x4F505243) {
+                                        uint count = routeAccessor.ReadUInt32(8);
+                                        if (count > 0 && count <= 2000) {
+                                            var waypoints = new List<float[]>();
+                                            for (uint i = 0; i < count; i++) {
+                                                long offset = 68 + (i * 12);
+                                                float wx = routeAccessor.ReadSingle(offset);
+                                                float wy = routeAccessor.ReadSingle(offset + 4);
+                                                float wz = routeAccessor.ReadSingle(offset + 8);
+                                                waypoints.Add(new float[] { wx, wy, wz });
+                                            }
+                                            result["routeWaypoints"] = waypoints;
+                                            result["routeCount"] = count;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch { }
                     } else {
                         result["connected"] = false;
                         result["error"] = "no_data";
@@ -2351,9 +2396,12 @@ async function fetchAlbumCover(term: string): Promise<string | null> {
               resolve(highRes);
               return;
             }
-          } catch (e) {}
-          COVER_CACHE.set(cleanTerm, null);
-          resolve(null);
+            COVER_CACHE.set(cleanTerm, null);
+            resolve(null);
+          } catch (e) {
+      COVER_CACHE.set(cleanTerm, null);
+            resolve(null);
+          }
         });
       }).on('error', () => {
         COVER_CACHE.set(cleanTerm, null);
@@ -2364,16 +2412,6 @@ async function fetchAlbumCover(term: string): Promise<string | null> {
     }
   });
 }
-
-ipcMain.handle('fetch-radio-metadata', async (_, streamUrl: string) => {
-  if (!streamUrl) return { title: null, cover: null };
-  const metadata = await fetchIcyMetadata(streamUrl);
-  let cover: string | null = null;
-  if (metadata.title) {
-    cover = await fetchAlbumCover(metadata.title);
-  }
-  return { ...metadata, cover };
-});
 
 ipcMain.handle('get-route', async (_, sourceX: number, sourceZ: number, destX: number, destZ: number, heading?: number) => {
   if (!mapDataDir) {
@@ -2446,7 +2484,15 @@ function runAfkTask() {
     console.log(`🤖 AFK-Bot: Sende Aktiv-Nachricht... "${text}" (Letzte Bewegung vor ${Math.round(stationaryTimeMs / 1000)}s)`);
   }
 
-  const psScript = `
+  // First attempt: Send via OPCGameBridge C++ Plugin Named Pipe
+  sendToPluginPipe(text).then((sent) => {
+    if (sent) {
+      console.log('🤖 AFK-Bot: Nachricht erfolgreich via OPCGameBridge Named Pipe gesendet!');
+      return;
+    }
+
+    // Fallback: PowerShell keyboard injection
+    const psScript = `
  Add-Type @"
   using System;
   using System.Runtime.InteropServices;
@@ -2473,23 +2519,6 @@ if ($title -match "Euro Truck Simulator 2" -or $title -match "TruckersMP") {
     Start-Sleep -m 100
     [WindowHelper]::keybd_event(0x59, 0, 2, 0) # Up
     
-    Start-Sleep -m 800
-    
-    # Text in die Zwischenablage kopieren (unterstützt Emojis)
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.Clipboard]::SetText(@"
-${text}
-"@, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-    
-    Start-Sleep -m 200
-    
-    # Ctrl+V zum Einfügen (0xA2 = LCtrl, 0x56 = V)
-    [WindowHelper]::keybd_event(0xA2, 0, 0, 0)      # LCtrl Down
-    [WindowHelper]::keybd_event(0x56, 0, 0, 0)      # V Down
-    Start-Sleep -m 50
-    [WindowHelper]::keybd_event(0x56, 0, 2, 0)      # V Up
-    [WindowHelper]::keybd_event(0xA2, 0, 2, 0)      # LCtrl Up
-    
     Start-Sleep -m 500
     
     # Enter senden via keybd_event
@@ -2501,13 +2530,13 @@ ${text}
 }
 `;
 
-  const tempPath = path.join(app.getPath('temp'), 'afk_task.ps1');
-  // Manually add the UTF-8 BOM to ensure PowerShell reads the file with the correct encoding for special characters.
-  fs.writeFileSync(tempPath, '\uFEFF' + psScript, 'utf8');
+    const tempPath = path.join(app.getPath('temp'), 'afk_task.ps1');
+    fs.writeFileSync(tempPath, '\uFEFF' + psScript, 'utf8');
 
-  exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempPath}"`, (err, stdout) => {
-    if (stdout) console.log('💻 PowerShell:', stdout.trim());
-    if (err) console.error('❌ PowerShell Fehler:', err);
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempPath}"`, (err, stdout) => {
+      if (stdout) console.log('💻 PowerShell:', stdout.trim());
+      if (err) console.error('❌ PowerShell Fehler:', err);
+    });
   });
 }
 
@@ -2515,7 +2544,7 @@ function toggleAfkBot() {
   isAfkRunning = !isAfkRunning;
 
   if (isAfkRunning) {
-    lastMovementTime = Date.now(); // reset on start
+    lastMovementTime = Date.now();
     playBotSound('start');
     console.log("🤖 AFK-Bot gestartet. Erste Nachricht in 5s...");
     afkStartTimeout = setTimeout(() => {
@@ -2553,18 +2582,70 @@ ipcMain.on('afk-configure', (e, config) => {
 ipcMain.on('afk-toggle', () => toggleAfkBot());
 ipcMain.handle('afk-status', () => isAfkRunning);
 
+ipcMain.handle('fetch-radio-metadata', async (_, streamUrl: string) => {
+  if (!streamUrl) return { title: null, cover: null };
+  const metadata = await fetchIcyMetadata(streamUrl);
+  let cover: string | null = null;
+  if (metadata.title) {
+    cover = await fetchAlbumCover(metadata.title);
+  }
+  return { ...metadata, cover };
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+// --- OPCGameBridge Plugin Management & R2 Download ---
+const PLUGIN_UPDATE_URL = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/plugin/latest';
+const PLUGIN_DLL_URL = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/plugin/download/OPCGameBridge.dll';
+const PLUGIN_INI_URL = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/plugin/download/OPCGameBridge.ini';
 
-const PLUGIN_URL = 'https://github.com/RenCloud/scs-sdk-plugin/releases/download/V.1.12.1/release_v_1_12_1.zip';
+async function fetchRemotePluginManifest(): Promise<any> {
+  try {
+    return await new Promise<any>((resolve) => {
+      const url = `${PLUGIN_UPDATE_URL}?t=${Date.now()}`;
+      const req = https.get(url, {
+        headers: {
+          'User-Agent': 'Open-Pipe-Club-App',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      }, (res) => {
+        let body = '';
+        if (res.statusCode !== 200) return resolve(null);
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch { resolve(null); }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(4000, () => { req.destroy(); resolve(null); });
+    });
+  } catch {
+    return null;
+  }
+}
+
+function calculateFileSha256(filePath: string): string | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const fileBuffer = fs.readFileSync(filePath);
+    return crypto.createHash('sha256').update(fileBuffer).digest('hex').toLowerCase();
+  } catch {
+    return null;
+  }
+}
 
 async function getPluginStatus() {
   const games = [
     { id: '227300', name: 'Euro Truck Simulator 2' },
     { id: '270880', name: 'American Truck Simulator' }
   ];
+
+  const remoteManifest = await fetchRemotePluginManifest();
+  const remoteHash = remoteManifest?.sha256 ? String(remoteManifest.sha256).toLowerCase() : null;
+  const latestVersion = remoteManifest?.version || remoteManifest?.pluginVersion || '1.0.0';
 
   const results = [];
 
@@ -2576,16 +2657,49 @@ async function getPluginStatus() {
         gamePath = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       } catch (e) { }
 
+      if (!gamePath || !fs.existsSync(gamePath)) {
+        const commonPaths = [
+          `C:\\Program Files (x86)\\Steam\\steamapps\\common\\${game.name}`,
+          `D:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+          `E:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+          `F:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+        ];
+        for (const p of commonPaths) {
+          if (fs.existsSync(p)) {
+            gamePath = p;
+            break;
+          }
+        }
+      }
+
       if (gamePath && fs.existsSync(gamePath)) {
         const pluginsPath = path.join(gamePath, 'bin', 'win_x64', 'plugins');
-        const dllPath = path.join(pluginsPath, 'scs-telemetry.dll');
+        const dllPath = path.join(pluginsPath, 'OPCGameBridge.dll');
+        const legacyDllPath = path.join(pluginsPath, 'scs-telemetry.dll');
+
         const installed = fs.existsSync(dllPath);
+        let updateAvailable = false;
+        let localHash: string | null = null;
+
+        if (installed) {
+          localHash = calculateFileSha256(dllPath);
+          if (remoteHash && localHash && remoteHash !== localHash) {
+            updateAvailable = true;
+          }
+        } else if (fs.existsSync(legacyDllPath)) {
+          updateAvailable = true;
+        }
 
         results.push({
           gameId: game.id,
           gameName: game.name,
           installed,
-          gamePath
+          updateAvailable,
+          latestVersion,
+          gamePath,
+          dllPath,
+          localHash,
+          remoteHash
         });
       }
     } catch (e) {
@@ -2618,31 +2732,81 @@ ipcMain.on('install-plugin', async (event, gameId) => {
       gamePath = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     } catch (e) { }
 
+    if (!gamePath || !fs.existsSync(gamePath)) {
+      const commonPaths = [
+        `C:\\Program Files (x86)\\Steam\\steamapps\\common\\${game.name}`,
+        `D:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+        `E:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+        `F:\\SteamLibrary\\steamapps\\common\\${game.name}`,
+      ];
+      for (const p of commonPaths) {
+        if (fs.existsSync(p)) {
+          gamePath = p;
+          break;
+        }
+      }
+    }
+
     if (gamePath && fs.existsSync(gamePath)) {
       const pluginsPath = path.join(gamePath, 'bin', 'win_x64', 'plugins');
-      const dllPath = path.join(pluginsPath, 'scs-telemetry.dll');
+      const dllPath = path.join(pluginsPath, 'OPCGameBridge.dll');
+      const iniPath = path.join(pluginsPath, 'OPCGameBridge.ini');
 
       if (!fs.existsSync(pluginsPath)) {
         fs.mkdirSync(pluginsPath, { recursive: true });
       }
 
-      const tempZip = path.join(app.getPath('temp'), 'scs_plugin.zip');
-      const tempExtract = path.join(app.getPath('temp'), 'scs_plugin_ext');
+      event.sender.send('install-plugin-progress', { progress: 20, status: 'Lade OPCGameBridge Plugin herunter...' });
 
-      // Step 1: Download
-      event.sender.send('install-plugin-progress', { progress: 20, status: 'Downloade Plugin...' });
-      execSync(`powershell -Command "Invoke-WebRequest -Uri '${PLUGIN_URL}' -OutFile '${tempZip}'"`);
+      const downloadFile = (url: string, dest: string): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          const req = https.get(url, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) {
+              const redirectUrl = res.headers.location;
+              if (redirectUrl) {
+                return downloadFile(redirectUrl, dest).then(resolve).catch(reject);
+              }
+            }
+            if (res.statusCode !== 200) {
+              return reject(new Error(`Server returned HTTP ${res.statusCode}`));
+            }
+            const fileStream = fs.createWriteStream(dest);
+            res.pipe(fileStream);
+            fileStream.on('finish', () => {
+              fileStream.close();
+              resolve();
+            });
+            fileStream.on('error', (err) => {
+              fs.unlink(dest, () => {});
+              reject(err);
+            });
+          });
+          req.on('error', reject);
+          req.setTimeout(15000, () => { req.destroy(); reject(new Error('Download Timeout')); });
+        });
+      };
 
-      // Step 2: Extract
-      event.sender.send('install-plugin-progress', { progress: 60, status: 'Entpacke Dateien...' });
-      execSync(`powershell -Command "Expand-Archive -Path '${tempZip}' -DestinationPath '${tempExtract}' -Force"`);
+      // Step 1: Download DLL
+      event.sender.send('install-plugin-progress', { progress: 50, status: 'Installiere OPCGameBridge.dll...' });
+      await downloadFile(PLUGIN_DLL_URL, dllPath);
 
-      // Step 3: Copy
-      event.sender.send('install-plugin-progress', { progress: 90, status: 'Installiere DLL...' });
-      const copyCmd = `powershell -Command "$dll = Get-ChildItem -Path '${tempExtract}' -Filter 'scs-telemetry.dll' -Recurse | Where-Object { $_.FullName -match 'Win64' -or $_.FullName -match 'x64' } | Select-Object -First 1; if ($dll) { Copy-Item -Path $dll.FullName -Destination '${dllPath}' -Force } else { throw 'DLL not found in ZIP' }"`;
-      execSync(copyCmd);
+      // Step 2: Download INI if not present
+      if (!fs.existsSync(iniPath)) {
+        event.sender.send('install-plugin-progress', { progress: 80, status: 'Erstelle Konfiguration...' });
+        try {
+          await downloadFile(PLUGIN_INI_URL, iniPath);
+        } catch {
+          // INI fallback
+        }
+      }
 
-      event.sender.send('install-plugin-progress', { progress: 100, status: 'Installation erfolgreich!', success: true });
+      // Step 3: Remove obsolete scs-telemetry.dll if present
+      const legacyDll = path.join(pluginsPath, 'scs-telemetry.dll');
+      if (fs.existsSync(legacyDll)) {
+        try { fs.unlinkSync(legacyDll); } catch {}
+      }
+
+      event.sender.send('install-plugin-progress', { progress: 100, status: 'OPCGameBridge erfolgreich installiert!', success: true });
     } else {
       event.sender.send('install-plugin-progress', { progress: 0, status: 'Fehler: Pfad nicht gefunden', error: 'Game path not found' });
     }
@@ -2651,6 +2815,7 @@ ipcMain.on('install-plugin', async (event, gameId) => {
     event.sender.send('install-plugin-progress', { progress: 0, status: 'Fehler bei der Installation', error: e.message });
   }
 });
+
 
 ipcMain.handle('check-app-update', async () => {
   const currentVersion = app.getVersion();
