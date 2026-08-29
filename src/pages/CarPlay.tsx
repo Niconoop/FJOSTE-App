@@ -1939,15 +1939,17 @@ export default function CarPlayPage() {
   };
 
   // Format functions
-  const formatDistance = (meters: number) => {
-    if (!meters || isNaN(meters)) return '0 km';
-    return `${Math.round(meters / 1000)} km`;
+  const formatDistance = (dist: number, isKm = false) => {
+    if (!dist || isNaN(dist) || dist <= 0) return '0 km';
+    const kmVal = isKm ? dist : (dist > 5000 ? dist / 1000 : dist);
+    return `${Math.round(kmVal).toLocaleString('de-DE')} km`;
   };
 
   const formatRemainingTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds)) return '0 min';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
+    if (!seconds || isNaN(seconds) || seconds <= 0) return '0m';
+    const totalM = Math.max(1, Math.round(seconds / 60));
+    const h = Math.floor(totalM / 60);
+    const m = totalM % 60;
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   };
@@ -1966,13 +1968,14 @@ export default function CarPlayPage() {
       }
       return customRouteInfo.durationSeconds || Math.round(customRouteInfo.distanceMeters / (60 / 3.6));
     }
+    if (data.navTime && data.navTime > 0) {
+      return data.navTime;
+    }
     if (liveRemainingSeconds !== null && liveRemainingSeconds > 0) {
       return liveRemainingSeconds;
     }
-    if (data.navTime && data.navTime > 0) {
-      const isATS = data.gameType === 2;
-      const timeScale = isATS ? 20 : 19;
-      return data.navTime / timeScale;
+    if (data.navDistance && data.navDistance > 0) {
+      return Math.round(data.navDistance / (60 / 3.6));
     }
     return null;
   };
@@ -3329,7 +3332,7 @@ export default function CarPlayPage() {
                               <div className="min-w-0">
                                 <span className="text-[9px] font-black font-mono text-zinc-400 uppercase tracking-widest">GEPLANTE STRECKE</span>
                                 <p className="text-xl font-black text-white leading-tight font-mono mt-0.5">
-                                  {formatDistance(data.plannedDistance)}
+                                  {formatDistance(data.plannedDistance, true)}
                                 </p>
                               </div>
                             </div>

@@ -163,9 +163,16 @@ let mapDataDir: string | null = path.join(app.getPath('documents'), 'Open Pipe C
 
 // Job Tracking Stats
 let jobStartFuel = 0;
+let jobStartTime = 0;
+let jobStartOdometer = 0;
+let jobStartIncome = 0;
+let jobPlannedDistance = 0;
 let jobTotalSpeed = 0;
 let jobSpeedTicks = 0;
 let jobMaxSpeed = 0;
+let jobRoutePoints: Array<{ game_x: number; game_y: number; game_z: number; speed: number; ts: string }> = [];
+let jobLastRecordedPos: { x: number; y: number; z: number; time: number } | null = null;
+let lastRoutePointSent = 0;
 
 async function loadSettings(isAppStart = false) {
   writeToLog('Attempting to load settings...');
@@ -991,8 +998,15 @@ public class SCSTelemetry {
                         result["speed"] = BitConverter.ToSingle(raw, 948) * 3.6f;
                         result["rpm"] = BitConverter.ToSingle(raw, 952);
                         result["fuel"] = BitConverter.ToSingle(raw, 1000);
-                        result["speedLimit"] = BitConverter.ToSingle(raw, 1068) * 3.6f;
-                        result["cargoMass"] = BitConverter.ToSingle(raw, 748) / 1000f;
+                        float mass = BitConverter.ToSingle(raw, 748) / 1000f;
+                        if (mass <= 0) {
+                            float unitMass = BitConverter.ToSingle(raw, 944) / 1000f;
+                            uint unitCount = BitConverter.ToUInt32(raw, 92);
+                            if (unitMass > 0 && unitCount > 0) {
+                                mass = unitMass * unitCount;
+                            }
+                        }
+                        result["cargoMass"] = mass;
                         
                         float range = BitConverter.ToSingle(raw, 1008);
                         float avgCons = BitConverter.ToSingle(raw, 1004);
@@ -1022,9 +1036,17 @@ public class SCSTelemetry {
                         result["posY"] = BitConverter.ToDouble(raw, 2208);
                         result["posZ"] = BitConverter.ToDouble(raw, 2216);
                         result["heading"] = BitConverter.ToDouble(raw, 2224);
+                        result["pitch"] = BitConverter.ToDouble(raw, 2232);
+                        result["roll"] = BitConverter.ToDouble(raw, 2240);
 
                         result["income"] = BitConverter.ToUInt64(raw, 4000);
                         result["plannedDistance"] = BitConverter.ToUInt32(raw, 100);
+                        result["odometer"] = BitConverter.ToSingle(raw, 1056);
+                        result["jobDeliveredRevenue"] = BitConverter.ToInt64(raw, 4208);
+                        result["jobDeliveredDistanceKm"] = BitConverter.ToSingle(raw, 1104);
+                        result["jobDeliveredCargoDamage"] = BitConverter.ToSingle(raw, 1100) * 100f;
+                        result["jobDeliveredEarnedXp"] = BitConverter.ToInt32(raw, 636);
+                        result["jobMarket"] = GetString(raw, 3404, 32);
 
                         // Turn indicators, parking brake, lights, and system warnings from Zone 5 (booleans)
                         result["parkBrake"] = raw[1566] > 0;
@@ -1221,37 +1243,62 @@ async function pollTruckersMPSession() {
 function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
   try {
     const docsPath = app.getPath('documents');
+    const userProfile = process.env.USERPROFILE || '';
+    const appData = process.env.APPDATA || '';
     const folderName = game === "ATS" ? "ATSMP" : "ETS2MP";
-    const logsDir = path.join(docsPath, folderName, 'logs');
-    if (!fs.existsSync(logsDir)) return null;
 
-    const files = fs.readdirSync(logsDir)
-      .filter(f => f.startsWith('client_') && f.endsWith('.log'));
+    const candidateDirs = [
+      path.join(docsPath, folderName, 'logs'),
+      path.join(docsPath, folderName),
+      path.join(userProfile, 'Documents', folderName, 'logs'),
+      path.join(userProfile, 'Documents', folderName),
+      path.join(appData, 'TruckersMP', 'logs'),
+    ];
 
-    if (files.length === 0) return null;
+    let allLogFiles: { fullPath: string; mtimeMs: number }[] = [];
 
-    // Sort by modification time desc to get the newest log
-    files.sort((a, b) => {
+    for (const dir of candidateDirs) {
+      if (fs.existsSync(dir)) {
+        try {
+          const entries = fs.readdirSync(dir);
+          for (const f of entries) {
+            if ((f.startsWith('client_') || f.startsWith('log_spawning_') || f.startsWith('connection_')) && f.endsWith('.log')) {
+              const fullPath = path.join(dir, f);
+              try {
+                const stat = fs.statSync(fullPath);
+                allLogFiles.push({ fullPath, mtimeMs: stat.mtimeMs });
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (allLogFiles.length === 0) return null;
+
+    allLogFiles.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    // Read the newest log files (up to 3 newest)
+    for (let fIdx = 0; fIdx < Math.min(3, allLogFiles.length); fIdx++) {
+      const targetFile = allLogFiles[fIdx].fullPath;
       try {
-        return fs.statSync(path.join(logsDir, b)).mtimeMs - fs.statSync(path.join(logsDir, a)).mtimeMs;
-      } catch (e) {
-        return 0;
-      }
-    });
+        const content = fs.readFileSync(targetFile, 'utf8');
+        const lines = content.split('\n');
 
-    const newestFile = path.join(logsDir, files[0]);
-    const content = fs.readFileSync(newestFile, 'utf8');
-    const lines = content.split('\n');
-
-    // Scan backwards for the latest server connection log line
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i];
-      if (line.includes('Connecting to') || line.includes('Connected to')) {
-        const match = line.match(/Connecting to .*? \(([^)]+)\)/) || line.match(/Connected to (.*?)(?:\!|$)/);
-        if (match && match[1]) {
-          return match[1].trim();
+        // Scan backwards for the latest server connection log line
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i];
+          if (line.includes('Connecting to') || line.includes('Connected to') || line.includes('Spawning on') || line.includes('Connection to')) {
+            const match = line.match(/(?:Connecting to|Connected to(?:\s*server:?)?|Spawning on)\s+(?:\[[^\]]*\]\s*)?([^(\r\n!]+)/i);
+            if (match && match[1]) {
+              let s = match[1].replace(/\[.*?\]/g, '').replace(/\.+$/, '').trim();
+              if (s && s.length >= 2 && !s.toLowerCase().includes("failed") && !s.toLowerCase().includes("offline")) {
+                return s;
+              }
+            }
+          }
         }
-      }
+      } catch (e) {}
     }
   } catch (e) {
     console.error('❌ Fehler beim Lesen der TruckersMP Logs:', e);
@@ -1260,35 +1307,42 @@ function getTruckersMPActiveServer(game: string = "ETS2"): string | null {
 }
 
 // Stable server-name resolution.
-// The raw detection (activeTitle / API / logs) is not available on every tick,
-// which made the display flicker between the real server name, "TruckersMP" and
-// "Multiplayer". We cache the last concrete server name while a multiplayer
-// session is active so only the server is shown, consistently.
 let lastResolvedServerName: string | null = null;
 
 function resolveServerName(data: any): string {
-  const isMultiplayer = data && data.multiplayerTimeOffset && data.multiplayerTimeOffset !== 0;
-  if (!isMultiplayer) {
-    lastResolvedServerName = null;
-    return "Singleplayer";
+  // 1. Check local TruckersMP client logs first (most immediate & accurate)
+  const logServerName = getTruckersMPActiveServer(data?.gameType === 2 ? "ATS" : "ETS2");
+  if (logServerName && logServerName.trim()) {
+    lastResolvedServerName = logServerName.trim();
+    return lastResolvedServerName;
   }
 
+  // 2. Check API session
   const apiServerName = truckersmpSession?.server_name;
-  const parsedServer = apiServerName || getTruckersMPActiveServer(data.gameType === 2 ? "ATS" : "ETS2");
-
-  if (parsedServer) {
-    lastResolvedServerName = parsedServer;
-    return parsedServer;
+  if (apiServerName && apiServerName.trim()) {
+    lastResolvedServerName = apiServerName.trim();
+    return lastResolvedServerName;
   }
 
-  // No concrete server name available this tick: keep the last known one to
-  // avoid flickering between generic fallbacks.
-  return lastResolvedServerName || "TruckersMP";
+  // 3. If telemetry is connected and we previously resolved a valid server name, keep it
+  if (lastResolvedServerName && data?.connected) {
+    return lastResolvedServerName;
+  }
+
+  // 4. Check SCS Convoy Mode
+  const isMultiplayer = data && data.multiplayerTimeOffset && data.multiplayerTimeOffset !== 0;
+  if (isMultiplayer) {
+    return lastResolvedServerName || "TruckersMP";
+  }
+
+  return "Singleplayer";
 }
 
 const BACKEND_URL = process.env.VITE_BACKEND_URL 
   ? `${process.env.VITE_BACKEND_URL}/api` 
   : 'https://open-pipe-club-backend.nicohertling09.workers.dev/api';
+
+let activeJobCargoMass = 0;
 
 async function handleTrackingLogic(current: any, prev: any) {
   if (!userToken) return;
@@ -1309,22 +1363,64 @@ async function handleTrackingLogic(current: any, prev: any) {
   const jobDetails = isJobActive ? `${cargo}|${source}|${dest}` : null;
   const now = Date.now();
 
-  // Track stats during active job
+  // Maintain cargo mass across tick cycles while job is active
+  if (current.cargoMass && current.cargoMass > 0) {
+    activeJobCargoMass = current.cargoMass;
+  } else if (isJobActive) {
+    if (activeJobCargoMass > 0) {
+      current.cargoMass = activeJobCargoMass;
+    } else if (cargoValid) {
+      activeJobCargoMass = 18.5;
+      current.cargoMass = 18.5;
+    }
+  }
+  const effectiveCargoMass = (current.cargoMass && current.cargoMass > 0) 
+    ? current.cargoMass 
+    : (activeJobCargoMass > 0 ? activeJobCargoMass : (isJobActive ? 18.5 : 0));
+
+  const serverName = resolveServerName(current);
+  const modeStr = (serverName && serverName !== "Singleplayer" && serverName !== "Convoy") ? "TruckersMP" : ((current.multiplayerTimeOffset && current.multiplayerTimeOffset !== 0) ? "Convoy" : "Singleplayer");
+  const gameStr = current.gameType === 2 ? "ATS" : "ETS2";
+  const steamIdVal = current.steamId || null;
+
+  // Track stats and route points during active job
   if (isJobActive) {
     jobTotalSpeed += (current.speed || 0);
     jobSpeedTicks++;
     jobMaxSpeed = Math.max(jobMaxSpeed, current.speed || 0);
+
+    // Continuous Route Point Recording
+    if (current.posX != null && current.posZ != null) {
+      const gx = Number(current.posX);
+      const gy = Number(current.posZ);
+      const gz = Number(current.posY || 0);
+      const last = jobLastRecordedPos;
+      const distMoved = last ? Math.sqrt(Math.pow(gx - last.x, 2) + Math.pow(gy - last.y, 2)) : 999;
+      const timeDiff = last ? (now - last.time) : 99999;
+
+      if (distMoved >= 35 || (timeDiff >= 4000 && (current.speed || 0) > 2)) {
+        jobRoutePoints.push({
+          game_x: gx,
+          game_y: gy,
+          game_z: gz,
+          speed: Math.round(current.speed || 0),
+          ts: new Date().toISOString()
+        });
+
+        // Keep memory & payload under control (max 1000 points)
+        if (jobRoutePoints.length > 1000) {
+          jobRoutePoints = jobRoutePoints.filter((_, idx) => idx % 2 === 0 || idx === jobRoutePoints.length - 1);
+        }
+
+        jobLastRecordedPos = { x: gx, y: gy, z: gz, time: now };
+      }
+    }
   }
 
   // 1. Position Update (every 5 seconds)
   if (current.connected && (now - lastPositionSent > 5000)) {
     lastPositionSent = now;
     console.log(`📍 Tracking: Sende Position (${current.source || 'Fahrt'})`);
-
-    const serverName = resolveServerName(current);
-
-    const gameStr = current.gameType === 2 ? "ATS" : "ETS2";
-    const steamIdVal = current.steamId || null;
 
     try {
       fetch(`${BACKEND_URL}/desktop/position`, {
@@ -1346,15 +1442,22 @@ async function handleTrackingLogic(current: any, prev: any) {
           server_name: serverName,
           game: gameStr,
           steam_id: steamIdVal,
-          in_game: true
+          in_game: true,
+          cargo: (current.cargo && current.cargo.toLowerCase() !== 'none') ? current.cargo : null,
+          cargo_mass_kg: Math.round(effectiveCargoMass * 1000),
+          source_city: current.source || null,
+          destination_city: current.dest || null,
+          source_company: current.source_company || null,
+          destination_company: current.dest_company || null
         })
       }).then(res => {
         if (!res.ok) console.error(`❌ Tracking Fehler: ${res.status} ${res.statusText}`);
       }).catch(err => console.error("❌ Tracking Netzwerkfehler:", err.message));
     } catch (e) { }
 
-    // 1b. Route-Punkt mitschneiden (falls ein Job läuft)
-    if (currentJobId && current.connected && (now - lastPositionSent > 5000)) {
+    // 1b. Route-Punkt an Backend senden (Live-Backup)
+    if (currentJobId && current.connected && (now - lastRoutePointSent > 8000)) {
+      lastRoutePointSent = now;
       try {
         fetch(`${BACKEND_URL}/desktop/job-position`, {
           method: 'POST',
@@ -1366,6 +1469,7 @@ async function handleTrackingLogic(current: any, prev: any) {
             job_id: currentJobId,
             game_x: current.posX,
             game_y: current.posZ,
+            game_z: current.posY,
             heading: current.heading,
             speed: current.speed,
             game: gameStr,
@@ -1382,11 +1486,27 @@ async function handleTrackingLogic(current: any, prev: any) {
     currentJobId = crypto.randomUUID();
     lastJobDetails = jobDetails;
 
-    // Reset Job Stats
+    // Reset & Initialize Job Stats
+    jobStartTime = Date.now();
     jobStartFuel = current.fuel || 0;
+    jobStartOdometer = current.odometer || 0;
+    jobStartIncome = current.income || 0;
+    jobPlannedDistance = current.plannedDistance || 0;
     jobTotalSpeed = 0;
     jobSpeedTicks = 0;
     jobMaxSpeed = 0;
+    jobRoutePoints = [];
+
+    if (current.posX != null && current.posZ != null) {
+      jobRoutePoints.push({
+        game_x: Number(current.posX),
+        game_y: Number(current.posZ),
+        game_z: Number(current.posY || 0),
+        speed: Math.round(current.speed || 0),
+        ts: new Date().toISOString()
+      });
+      jobLastRecordedPos = { x: Number(current.posX), y: Number(current.posZ), z: Number(current.posY || 0), time: now };
+    }
 
     saveSettings(); // Persist new job state
 
@@ -1415,11 +1535,18 @@ async function handleTrackingLogic(current: any, prev: any) {
           destination_company: current.dest_company,
           destination_city: current.dest,
           cargo: current.cargo,
-          cargo_mass_kg: Math.round((current.cargoMass || 0) * 1000),
-          distance_km: current.plannedDistance,
-          income: current.income,
-          truck: `${current.brand} ${current.model}`,
+          cargo_mass_kg: Math.round(effectiveCargoMass * 1000),
+          planned_distance_km: current.plannedDistance || 0,
+          distance_km: current.plannedDistance || 0,
+          planned_income: current.income || 0,
+          income: current.income || 0,
+          truck: `${current.brand || ''} ${current.model || ''}`.trim() || "LKW",
+          vehicle_brand_name: current.brand || "",
+          vehicle_model_name: current.model || "",
           trailer: current.trailer || "Trailer",
+          game: gameStr,
+          server_name: serverName,
+          mode: modeStr,
           started_at: new Date().toISOString()
         })
       }).catch(() => { });
@@ -1444,8 +1571,40 @@ async function handleTrackingLogic(current: any, prev: any) {
     overlayWin?.webContents.send('job-notification', jobData);
 
     // Calculate final stats
-    const avgSpeed = jobSpeedTicks > 0 ? Math.round(jobTotalSpeed / jobSpeedTicks) : 0;
-    const fuelUsed = Math.max(0, jobStartFuel - current.fuel);
+    const elapsedMinutes = Math.max(1, Math.round((Date.now() - (jobStartTime || (now - 60000))) / 60000));
+    const durationStr = elapsedMinutes < 60 ? `${elapsedMinutes}m` : `${Math.floor(elapsedMinutes / 60)}h ${elapsedMinutes % 60}m`;
+
+    let distanceKm = 0;
+    if (current.jobDeliveredDistanceKm && current.jobDeliveredDistanceKm > 0) {
+      distanceKm = Math.round(current.jobDeliveredDistanceKm);
+    } else if (jobStartOdometer > 0 && current.odometer > jobStartOdometer) {
+      distanceKm = Math.round((current.odometer - jobStartOdometer) * 10) / 10;
+    } else if (jobPlannedDistance > 0) {
+      distanceKm = jobPlannedDistance;
+    } else if (current.plannedDistance > 0) {
+      distanceKm = current.plannedDistance;
+    }
+
+    let income = 0;
+    if (current.jobDeliveredRevenue && current.jobDeliveredRevenue > 0) {
+      income = Number(current.jobDeliveredRevenue);
+    } else if (jobStartIncome > 0) {
+      income = jobStartIncome;
+    } else if (current.income > 0) {
+      income = current.income;
+    } else if (distanceKm > 0) {
+      income = Math.round(distanceKm * 35 + 250);
+    }
+
+    const avgSpeed = jobSpeedTicks > 0
+      ? Math.round(jobTotalSpeed / jobSpeedTicks)
+      : (distanceKm > 0 && elapsedMinutes > 0 ? Math.min(120, Math.round(distanceKm / (elapsedMinutes / 60))) : 0);
+    const maxSpeed = Math.round(jobMaxSpeed);
+    const fuelUsed = Math.max(0, jobStartFuel - (current.fuel || 0));
+    const fuelEcon = (distanceKm > 0 && fuelUsed > 0) ? parseFloat(((fuelUsed / distanceKm) * 100).toFixed(1)) : 0;
+    const pointsVal = (current.jobDeliveredEarnedXp && current.jobDeliveredEarnedXp > 0)
+      ? current.jobDeliveredEarnedXp
+      : (distanceKm > 0 ? Math.floor(distanceKm + (effectiveCargoMass * 15) + 50) : 0);
 
     try {
       fetch(`${BACKEND_URL}/desktop/job`, {
@@ -1457,23 +1616,46 @@ async function handleTrackingLogic(current: any, prev: any) {
         body: JSON.stringify({
           event: event,
           job_id: currentJobId,
+          cargo_mass_kg: Math.round(effectiveCargoMass * 1000),
+          actual_distance_km: distanceKm,
+          planned_distance_km: jobPlannedDistance || current.plannedDistance || distanceKm,
+          actual_income: income,
+          planned_income: jobStartIncome || current.income || income,
           average_speed_kmh: avgSpeed,
-          max_speed_kmh: jobMaxSpeed,
+          max_speed_kmh: maxSpeed,
           fuel_used_l: parseFloat(fuelUsed.toFixed(2)),
-          ended_at: new Date().toISOString()
+          fuel_economy_l100km: fuelEcon,
+          damage_pct: current.jobDeliveredCargoDamage || current.wearCargo || 0,
+          duration: durationStr,
+          points: pointsVal,
+          server_name: serverName,
+          mode: modeStr,
+          game: gameStr,
+          truck: `${current.brand || ''} ${current.model || ''}`.trim() || "LKW",
+          trailer: current.trailer || "Trailer",
+          route: jobRoutePoints,
+          ended_at: new Date().toISOString(),
+          delivered_at: new Date().toISOString()
         })
       }).catch(() => { });
     } catch (e) { }
 
+    activeJobCargoMass = 0;
     lastJobDetails = null;
     currentJobId = null;
     saveSettings();
 
     // Reset stats
     jobStartFuel = 0;
+    jobStartTime = 0;
+    jobStartOdometer = 0;
+    jobStartIncome = 0;
+    jobPlannedDistance = 0;
     jobTotalSpeed = 0;
     jobSpeedTicks = 0;
     jobMaxSpeed = 0;
+    jobRoutePoints = [];
+    jobLastRecordedPos = null;
 
     win?.webContents.send('job-update', jobData);
   }

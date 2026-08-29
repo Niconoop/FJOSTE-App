@@ -728,6 +728,12 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const [segmentLanes, setSegmentLanes] = useState<number[]>([]);
   const [rawRouteCoords, setRawRouteCoords] = useState<[number, number][]>([]);
   const [navInstruction, setNavInstruction] = useState<InstructionResult>({ primary: null, upcoming: [] });
+  const navInstructionRef = useRef<InstructionResult>(navInstruction);
+  navInstructionRef.current = navInstruction;
+  const showInstructionsRef = useRef(showInstructions);
+  showInstructionsRef.current = showInstructions;
+  const fullWidthInstructionsRef = useRef(fullWidthInstructions);
+  fullWidthInstructionsRef.current = fullWidthInstructions;
 
   // Dynamic zoom state tracked in ref to avoid telemetry zoom resets
   const currentZoomRef = useRef<number>(zoom ?? initialZoom);
@@ -1050,31 +1056,11 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const rawHeading = heading ?? lastRawHeading.current ?? 0;
     if (heading != null) lastRawHeading.current = heading;
 
-    const theta = (0.5 - rawHeading) * Math.PI * 2 + Math.PI / 2;
-    const lookX = effX + 1000 * Math.cos(theta);
-    const lookY = effY + 1000 * Math.sin(theta);
-    const lookPos = projectGameToLatLng(lookX, lookY);
-
-    let desiredBearing = 0;
-    if (pos && lookPos) {
-      const [lat1, lon1] = pos;
-      const [lat2, lon2] = lookPos;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const lat1Rad = lat1 * Math.PI / 180;
-      const lat2Rad = lat2 * Math.PI / 180;
-
-      const yVal = Math.sin(dLon) * Math.cos(lat2Rad);
-      const xVal = Math.cos(lat1Rad) * Math.sin(lat2Rad) -
-        Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
-
-      const brng = Math.atan2(yVal, xVal) * 180 / Math.PI;
-      desiredBearing = normalizeBearing(brng);
-    } else {
-      desiredBearing = normalizeBearing(-(rawHeading * 360));
-    }
-
+    // Directly convert SCS SDK heading (in turns) to degrees
+    const desiredBearing = normalizeBearing(-rawHeading * 360);
     targetBearingRef.current = desiredBearing;
-    if (Math.abs(currentBearingRef.current - desiredBearing) > 180 && !hasInitializedPosRef.current) {
+
+    if (!hasInitializedPosRef.current) {
       currentBearingRef.current = desiredBearing;
     }
 
@@ -1116,7 +1102,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         const curBearing = currentBearingRef.current;
 
         const deltaBearing = shortestAngleDelta(curBearing, targetBearing);
-        const newBearing = curBearing + deltaBearing * bearingAlpha;
+        const newBearing = normalizeBearing(curBearing + deltaBearing * bearingAlpha);
         currentBearingRef.current = newBearing;
 
         // Player marker setup & smooth update
@@ -1151,7 +1137,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
         // Camera follow
         if (isFollowingRef.current) {
-          const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
+          const topOffset = (showInstructionsRef.current && navInstructionRef.current.primary && fullWidthInstructionsRef.current) ? 140 : 0;
           map.jumpTo({
             center: [newLng, newLat],
             bearing: newBearing,
@@ -1167,7 +1153,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     animFrameId = requestAnimationFrame(renderLoop);
     return () => cancelAnimationFrame(animFrameId);
-  }, [mapReady, showInstructions, fullWidthInstructions, navInstruction.primary]);
+  }, [mapReady]);
 
   // Auto max-zoom to 12 when destination company prop becomes active
   const lastDestCompanyRef = useRef<string | undefined>(destCompany);
@@ -1234,21 +1220,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
             geometry: { type: 'LineString', coordinates: remainingCoords },
           }];
 
-          const currentPos = lastPos.current || (gameXRef.current != null && gameYRef.current != null ? projectGameToLatLng(gameXRef.current, gameYRef.current) : null);
-          const sourceCity = source ? findCity(source) : null;
-          const traveledCoords: [number, number][] = [];
-          if (sourceCity) traveledCoords.push([sourceCity.lng, sourceCity.lat]);
-          if (currentPos) traveledCoords.push([currentPos[1], currentPos[0]]);
-
-          const traveledFeature: GeoJSON.Feature[] = traveledCoords.length >= 2 ? [{
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'LineString', coordinates: traveledCoords },
-          }] : [];
-
           setRouteGeoJson({
             remaining: { type: 'FeatureCollection' as const, features: remainingFeature },
-            traveled: { type: 'FeatureCollection' as const, features: traveledFeature },
+            traveled: { type: 'FeatureCollection' as const, features: [] },
           });
 
           // Compute total polyline distance
@@ -1363,20 +1337,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         geometry: { type: 'LineString', coordinates: remainingCoords },
       }] : [];
 
-      const sourceCity = source ? findCity(source) : null;
-      const traveledCoords: [number, number][] = [];
-      if (sourceCity) traveledCoords.push([sourceCity.lng, sourceCity.lat]);
-      if (currentPos) traveledCoords.push([currentPos[1], currentPos[0]]);
-
-      const traveledFeature: GeoJSON.Feature[] = traveledCoords.length >= 2 ? [{
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates: traveledCoords },
-      }] : [];
-
       setRouteGeoJson({
         remaining: { type: 'FeatureCollection' as const, features: remainingFeature },
-        traveled: { type: 'FeatureCollection' as const, features: traveledFeature },
+        traveled: { type: 'FeatureCollection' as const, features: [] },
       });
     };
 
@@ -1402,16 +1365,20 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         if (map.getLayer('route-remaining-line')) {
           map.setPaintProperty('route-remaining-line', 'line-color', accentColor);
         }
+        const remSource = map.getSource('route-remaining') as maplibregl.GeoJSONSource;
+        if (remSource && remSource.setData) remSource.setData(routeGeoJson.remaining);
+        const travSource = map.getSource('route-traveled') as maplibregl.GeoJSONSource;
+        if (travSource && travSource.setData) travSource.setData(routeGeoJson.traveled);
         return;
       }
 
       map.addSource('route-remaining', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        data: routeGeoJson.remaining,
       });
       map.addSource('route-traveled', {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
+        data: routeGeoJson.traveled,
       });
       map.addSource('route-turn-curves', {
         type: 'geojson',
@@ -1456,13 +1423,13 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
             'interpolate',
             ['exponential', 1.5],
             ['zoom'],
-            4, 3,
-            7, 7,
-            9, 12,
-            11, 18,
-            12, 22
+            4, 4,
+            7, 8,
+            9, 13,
+            11, 19,
+            12, 23
           ],
-          'line-opacity': 0.25,
+          'line-opacity': 0.35,
           'line-blur': 3,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
@@ -1478,13 +1445,13 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
             'interpolate',
             ['exponential', 1.5],
             ['zoom'],
-            4, 2,
+            4, 2.5,
             7, 5,
             9, 9,
             11, 14,
             12, 18
           ],
-          'line-opacity': 0.9,
+          'line-opacity': 0.95,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
       });
@@ -1537,6 +1504,33 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     }
 
   }, [mapReady, accentColor]);
+
+  // Synchronize route GeoJSON data with MapLibre sources
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const updateSourceData = () => {
+      try {
+        const remainingSource = map.getSource('route-remaining') as maplibregl.GeoJSONSource | undefined;
+        if (remainingSource && typeof remainingSource.setData === 'function') {
+          remainingSource.setData(routeGeoJson.remaining);
+        }
+        const traveledSource = map.getSource('route-traveled') as maplibregl.GeoJSONSource | undefined;
+        if (traveledSource && typeof traveledSource.setData === 'function') {
+          traveledSource.setData(routeGeoJson.traveled);
+        }
+      } catch (e) {
+        console.warn('Error updating route GeoJSON data on map:', e);
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      updateSourceData();
+    } else {
+      map.once('styledata', updateSourceData);
+    }
+  }, [routeGeoJson, mapReady]);
 
   // Dynamic Map Theme (Dark / Light Mode) updates
   useEffect(() => {
