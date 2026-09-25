@@ -71,22 +71,22 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
           <p className="text-slate-400 mt-2 text-sm">Du brauchst einen Einladungscode</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="frosted-card !rounded-[24px] !p-8 space-y-6 border-2 border-[#f59e0b]/20 bg-[#000000]">
+        <form onSubmit={handleSubmit} className="frosted-card !rounded-[24px] !p-8 space-y-6 border-2 border-primary/20 bg-[#000000]">
           <div className="space-y-4">
             {/* Invite Code */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Hash size={11} className="text-amber-400/60" /> Einladungscode
+                <Hash size={11} className="text-primary/60" /> Einladungscode
               </label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-amber-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
                   <Hash size={18} />
                 </div>
                 <input
                   type="text"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white font-mono tracking-[0.3em] text-center uppercase placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 placeholder:normal-case placeholder:tracking-normal"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white font-mono tracking-[0.3em] text-center uppercase placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300 placeholder:normal-case placeholder:tracking-normal"
                   placeholder="8-stelliger Code"
                   maxLength={8}
                   required
@@ -97,17 +97,17 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
             {/* Username */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <UserIcon size={11} className="text-amber-400/60" /> Benutzername
+                <UserIcon size={11} className="text-primary/60" /> Benutzername
               </label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-amber-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
                   <UserIcon size={18} />
                 </div>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
                   placeholder="Benutzername wählen"
                   required
                 />
@@ -117,17 +117,17 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
             {/* Password */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Lock size={11} className="text-amber-400/60" /> Passwort
+                <Lock size={11} className="text-primary/60" /> Passwort
               </label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-amber-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
                   <Lock size={18} />
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
                   placeholder="Passwort wählen"
                   required
                 />
@@ -140,7 +140,7 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl py-3.5 font-black text-[10px] uppercase tracking-widest hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-primary text-black hover:bg-primary/90 rounded-2xl py-3.5 font-black text-[10px] uppercase tracking-widest hover:shadow-[0_0_30px_var(--primary-glow)] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting
               ? <Loader2 size={18} className="animate-spin" />
@@ -154,7 +154,7 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
               <button
                 type="button"
                 onClick={onSwitchToLogin}
-                className="font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest text-[10px] transition-colors"
+                className="font-black text-primary hover:text-primary/80 uppercase tracking-widest text-[10px] transition-colors"
               >
                 Anmelden
               </button>

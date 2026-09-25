@@ -39,7 +39,7 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
     <motion.article
       id={`news-${item.id}`}
       variants={staggerChild}
-      className="bg-[#0b0b0c] rounded-2xl overflow-hidden group border border-zinc-900 transition-all duration-300 hover:border-amber-400/40 hover:shadow-[0_0_25px_rgba(245,158,11,0.12)] flex flex-col h-full"
+      className="bg-[#0b0b0c] rounded-2xl overflow-hidden group border border-zinc-900 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow flex flex-col h-full cursor-pointer"
     >
       <div className="relative h-44 overflow-hidden shrink-0">
         {imageUrl ? (
@@ -52,11 +52,11 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0c] via-transparent to-black/30" />
         <div className="absolute top-4 left-4 bg-zinc-950/80 backdrop-blur-md rounded-xl w-14 h-14 flex flex-col items-center justify-center text-white border border-zinc-800 shadow-md">
           <span className="text-xl font-bold tracking-tighter leading-none">{day}</span>
-          <span className="text-[9px] font-black uppercase text-amber-400 mt-0.5">{month}</span>
+          <span className="text-[9px] font-black uppercase text-primary mt-0.5">{month}</span>
         </div>
         <div className="absolute top-4 right-4">
           {item.visibility === "internal" ? (
-            <span className="text-[9px] font-black text-amber-400 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1 uppercase tracking-widest border border-amber-500/20">
+            <span className="text-[9px] font-black text-primary bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1 uppercase tracking-widest border border-primary/20">
               <Lock size={10} /> Intern
             </span>
           ) : (
@@ -68,7 +68,7 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
       </div>
 
       <div className="p-5 flex-grow flex flex-col">
-        <h3 className="text-base font-extrabold text-white group-hover:text-amber-400 transition-colors duration-200 uppercase tracking-wider mb-3 line-clamp-2">
+        <h3 className="text-base font-extrabold text-white group-hover:text-primary transition-colors duration-200 uppercase tracking-wider mb-3 line-clamp-2">
           {item.title}
         </h3>
 
@@ -91,7 +91,7 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
         </AnimatePresence>
 
         {hasFullContent && (
-          <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-[10px] font-black text-amber-400 uppercase tracking-widest mt-3 hover:underline self-start">
+          <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-[10px] font-black text-primary uppercase tracking-widest mt-3 hover:underline self-start">
             {expanded ? "Weniger anzeigen" : "Weiterlesen"}
             <ChevronDown size={12} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
           </button>
@@ -105,7 +105,7 @@ const NewsCard = ({ item, imageUrl, canDelete, onDelete, onEdit }: any) => {
             </div>
             {canDelete && (
               <div className="flex items-center gap-1">
-                <button onClick={() => onEdit?.(item)} title="Bearbeiten" className="p-2 text-zinc-700 hover:text-amber-400 hover:bg-amber-400/10 rounded-xl transition-all shrink-0">
+                <button onClick={() => onEdit?.(item)} title="Bearbeiten" className="p-2 text-zinc-700 hover:text-primary hover:bg-primary/10 rounded-xl transition-all shrink-0">
                   <Pencil size={16} />
                 </button>
                 <button onClick={() => onDelete(item.id)} className="p-2 text-zinc-700 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all shrink-0">
@@ -258,7 +258,7 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
     <ConfirmDialog />
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-16">
-        <span className="overline text-amber-400 mb-2 inline-block">Ankündigungen</span>
+        <span className="overline text-primary mb-2 inline-block">Ankündigungen</span>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tighter text-white mt-2">VTC News</h1>
         {!loading && <p className="text-zinc-400 text-sm mt-3">{news.length} {news.length === 1 ? "Beitrag" : "Beiträge"} in der Übersicht.</p>}
       </div>
@@ -267,7 +267,7 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
         <div className="flex items-center justify-end mb-12">
             <button
               onClick={() => { setShowForm(!showForm); if (showForm) { setEditingNews(null); setImageFile(null); } }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-amber-400 text-black"}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-primary text-black hover:bg-primary/90"}`}
             >
               {showForm ? <X size={16} /> : <Plus size={16} />}
               {showForm ? "Abbrechen" : "News verfassen"}
@@ -294,11 +294,11 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
                 className="frosted-card w-full max-w-3xl flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="relative p-5 sm:p-6 md:p-8 pb-5 sm:pb-6 bg-gradient-to-b from-amber-400/5 to-transparent border-b border-white/5 shrink-0">
-                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+                <div className="relative p-5 sm:p-6 md:p-8 pb-5 sm:pb-6 bg-gradient-to-b from-primary/5 to-transparent border-b border-white/5 shrink-0">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
                   <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-                      <Newspaper size={20} className="text-amber-400" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                      <Newspaper size={20} className="text-primary" />
                     </div>
                     <div>
                       <h2 className="font-unbounded text-xs sm:text-sm font-bold text-white uppercase tracking-widest">{editingNews ? "News bearbeiten" : "News verfassen"}</h2>
@@ -310,33 +310,33 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
                 <form onSubmit={editingNews ? handleUpdate : handleCreate} className="p-5 sm:p-6 md:p-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5 flex-1 min-h-0 overflow-y-auto no-scrollbar">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Titel *</label>
-                    <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="z.B. Neues Firmen-Event" required />
+                    <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="z.B. Neues Firmen-Event" required />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inhalt *</label>
-                    <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 min-h-[120px] sm:min-h-[150px]" placeholder="Schreibe hier die Details..." required />
+                    <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300 min-h-[120px] sm:min-h-[150px]" placeholder="Schreibe hier die Details..." required />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Kurzfassung</label>
-                      <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="Wird in der Vorschau angezeigt" />
+                      <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300" placeholder="Wird in der Vorschau angezeigt" />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sichtbarkeit</label>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-amber-400/10 border-amber-400/35 text-amber-400" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Eye size={14} /> Public</button>
-                        <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-amber-400/10 border-amber-400/35 text-amber-400" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Lock size={14} /> Intern</button>
+                        <button type="button" onClick={() => setVisibility("public")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "public" ? "bg-primary/10 border-primary/35 text-primary" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Eye size={14} /> Public</button>
+                        <button type="button" onClick={() => setVisibility("internal")} className={`flex-1 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${visibility === "internal" ? "bg-primary/10 border-primary/35 text-primary" : "bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20"}`}><Lock size={14} /> Intern</button>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vorschaubild</label>
-                    <label className="group relative flex flex-col items-center justify-center gap-2 h-28 sm:h-32 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-amber-400/30 hover:bg-amber-400/[0.02] transition-all duration-300 bg-white/[0.02] overflow-hidden">
+                    <label className="group relative flex flex-col items-center justify-center gap-2 h-28 sm:h-32 rounded-xl border border-dashed border-white/10 cursor-pointer hover:border-primary/30 hover:bg-primary/[0.02] transition-all duration-300 bg-white/[0.02] overflow-hidden">
                       <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="hidden" />
-                      {imageFile ? <img src={URL.createObjectURL(imageFile)} className="absolute inset-0 w-full h-full object-cover" /> : (editingNews?.image_id ? <img src={`${API_URL}/news/${editingNews.image_id}/image`} className="absolute inset-0 w-full h-full object-cover" /> : <><Upload size={20} className="text-slate-500 group-hover:text-amber-400/70 transition-colors" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bild auswählen</span></>)}
+                      {imageFile ? <img src={URL.createObjectURL(imageFile)} className="absolute inset-0 w-full h-full object-cover" /> : (editingNews?.image_id ? <img src={`${API_URL}/news/${editingNews.image_id}/image`} className="absolute inset-0 w-full h-full object-cover" /> : <><Upload size={20} className="text-slate-500 group-hover:text-primary/70 transition-colors" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bild auswählen</span></>)}
                       <div className="relative z-10 flex items-center justify-center">
                       </div>
                     </label>
@@ -347,7 +347,7 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                       disabled={submitting}
-                      className="w-full bg-gradient-to-r from-amber-500 to-amber-400 text-black h-12 rounded-xl font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
+                      className="w-full bg-primary text-black hover:bg-primary/90 hover:shadow-[0_0_25px_var(--primary-glow)] h-12 rounded-xl font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
                     >
                       {submitting ? <><Loader2 className="animate-spin" size={18} /> {editingNews ? "Speichere..." : "Veröffentlichen..."}</> : (editingNews ? "Änderungen speichern" : "News Veröffentlichen")}
                     </motion.button>
@@ -360,16 +360,16 @@ const News = ({ selectedId, onClearSelectedId, openCreate, onConsumeCreate }: an
         , document.body
        )}
 
-      <div>
+      <div id="tour-news-grid">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
             Aktuelle Beiträge
           </h2>
         </div>
         {loading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-amber-400" size={32} />
+            <Loader2 className="animate-spin text-primary" size={32} />
           </div>
         ) : news.length === 0 ? (
           <div className="text-center py-16 frosted-card border-dashed border-zinc-800">

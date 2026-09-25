@@ -74,22 +74,22 @@ const VtcSettings = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">VTC Einstellungen</h1>
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-primary uppercase tracking-tight italic">VTC Einstellungen</h1>
         </div>
         <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Verwalte die globalen Einstellungen deiner VTC.</p>
       </div>
 
-      <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="frosted-card p-8 backdrop-blur-xl shadow-xl space-y-8 hover-glow transition-all border-2 border-[#f59e0b]/20 bg-[#000000]">
+      <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="frosted-card p-8 backdrop-blur-xl shadow-xl space-y-8 hover-glow transition-all border-2 border-primary/20 bg-[#000000]">
         <div className="mb-1">
           <div className="flex items-center gap-3">
-            <div className="w-1 h-4 bg-amber-400 rounded-full" />
-            <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest leading-none">Globale Optionen</h2>
+            <div className="w-1 h-4 bg-primary rounded-full" />
+            <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest leading-none">Globale Optionen</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">Steuere die Sichtbarkeit und Datenquellen deiner Spedition.</p>
         </div>
 
-        <motion.div variants={itemVariants} className="flex items-center justify-between p-6 backdrop-blur-xl bg-black/70 border-2 border-[#f59e0b]/20 rounded-3xl hover-glow transition-all">
+        <motion.div variants={itemVariants} className="flex items-center justify-between p-6 backdrop-blur-xl bg-black/70 border-2 border-primary/20 rounded-3xl hover-glow transition-all">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-2xl ${vtcSettings.use_trucky_stats ? "bg-primary/10 text-primary" : "bg-slate-500/10 text-slate-400"}`}>
               <BarChart3 size={24} />
@@ -114,7 +114,7 @@ const VtcSettings = () => {
           </button>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="flex items-center justify-between p-6 backdrop-blur-xl bg-black/70 border-2 border-[#f59e0b]/20 rounded-3xl hover-glow transition-all">
+        <motion.div variants={itemVariants} className="flex items-center justify-between p-6 backdrop-blur-xl bg-black/70 border-2 border-primary/20 rounded-3xl hover-glow transition-all">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-2xl ${applicationsOpen ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
               {applicationsOpen ? <ShieldCheck size={24} /> : <ShieldOff size={24} />}
@@ -143,7 +143,7 @@ const VtcSettings = () => {
 
         {/* About & Requirements Inputs */}
         <motion.div variants={itemVariants} className="space-y-4 pt-6 border-t border-white/5">
-          <h3 className="font-unbounded text-xs font-bold text-amber-400 uppercase tracking-widest">Inhalts-Overrides (Website & App)</h3>
+          <h3 className="font-unbounded text-xs font-bold text-primary uppercase tracking-widest">Inhalts-Overrides (Website & App)</h3>
 
           <button
             type="button"

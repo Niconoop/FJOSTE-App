@@ -5,16 +5,16 @@ import { Users, Route, Weight, Coins, Briefcase, Award } from 'lucide-react';
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
 
-const CYAN = "#f59e0b";
-const AMBER = "#f59e0b";
+const CYAN = "var(--primary, #0ea5e9)";
+const AMBER = "var(--primary, #0ea5e9)";
 const EMERALD = "#10b981";
 const PURPLE = "#8b5cf6";
-const PIE_COLORS = [CYAN, "#0EA5E9", AMBER, EMERALD, PURPLE, "#ec4899"];
+const PIE_COLORS = [CYAN, "#0EA5E9", "#38bdf8", EMERALD, PURPLE, "#ec4899"];
 
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-xl px-3 py-2 text-[10px]">
+    <div className="bg-[#000000] border border-white/10 rounded-xl px-3 py-2 text-[10px]">
       <p className="text-white font-bold mb-1 uppercase tracking-wider">{label}</p>
       {payload.map((e: any, i: number) => (
         <p key={i} style={{ color: e.color }} className="font-medium">
@@ -26,7 +26,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 };
 
 const KpiCard = ({ icon: Icon, label, value, sub, color = CYAN }: any) => (
-  <div className="frosted-card shadow-lg border border-white/5 group">
+  <div className="frosted-card shadow-lg border border-white/5 group hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer">
     <div className="flex items-center gap-2.5 mb-3">
       <div className="p-2 rounded-xl" style={{ backgroundColor: `${color}15` }}>
         <Icon className="w-4 h-4" style={{ color }} />
@@ -106,7 +106,7 @@ const Stats = () => {
   };
 
   const Chart = ({ title, data: d, dataKey, color, gradId, unit }: any) => (
-    <div className="frosted-card border border-white/5 shadow-xl">
+    <div className="frosted-card border border-white/5 shadow-xl hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all">
       <h3 className="font-unbounded text-xs font-bold text-white mb-6 uppercase tracking-widest">{title}</h3>
       <div className="h-60">
         <ResponsiveContainer width="100%" height="100%">
@@ -148,7 +148,7 @@ const Stats = () => {
   return (
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-16">
-        <span className="overline text-amber-400 mb-2 inline-block">Analyse</span>
+        <span className="overline text-primary mb-2 inline-block">Analyse</span>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tighter text-white mt-2">VTC Statistiken</h1>
         {data && <p className="text-zinc-400 text-sm mt-3">{stats?.members ?? members.length} Fahrer im Überblick.</p>}
       </div>
@@ -164,10 +164,16 @@ const Stats = () => {
             className="space-y-8"
           >
             {/* KPI Skeletons */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-24" />
-              ))}
+            <div id="tour-stats-container">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-1 h-4 bg-primary/30 rounded-full" />
+                <div className="h-4 w-28 bg-white/5 rounded" />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="animate-pulse bg-white/5 border border-white/5 rounded-2xl h-24" />
+                ))}
+              </div>
             </div>
 
             {/* Charts Skeletons */}
@@ -185,10 +191,10 @@ const Stats = () => {
             transition={{ duration: 0.2 }}
             className="space-y-10"
           >
-            <div>
+            <div id="tour-stats-container">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                <div className="w-1 h-4 bg-primary rounded-full" />
+                <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
                   Überblick
                 </h2>
               </div>
@@ -204,8 +210,8 @@ const Stats = () => {
 
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                <div className="w-1 h-4 bg-primary rounded-full" />
+                <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
                   Leistung pro Fahrer
                 </h2>
               </div>
@@ -217,13 +223,13 @@ const Stats = () => {
 
             <div>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+                <div className="w-1 h-4 bg-primary rounded-full" />
+                <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
                   Umsatz & Rangliste
                 </h2>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              <div className="frosted-card border border-white/5 shadow-xl lg:col-span-1">
+              <div className="frosted-card border border-white/5 shadow-xl lg:col-span-1 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all">
                 <h3 className="font-unbounded text-xs font-bold text-white mb-6 uppercase tracking-widest text-center">Umsatzverteilung</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -245,7 +251,7 @@ const Stats = () => {
                 </div>
               </div>
 
-              <div className="frosted-card border border-white/5 shadow-xl lg:col-span-3">
+              <div className="frosted-card border border-white/5 shadow-xl lg:col-span-3 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all">
                 <h3 className="font-unbounded text-xs font-bold text-white mb-6 uppercase tracking-widest">Detaillierte Fahrer-Rangliste (Top 10)</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">

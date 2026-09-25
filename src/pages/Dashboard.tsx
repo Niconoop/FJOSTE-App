@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, Briefcase, Route, Coins, Calendar, Truck, ArrowRight, 
-  MapPin, Monitor, Award, Sparkles, UserCheck, Plus, ShieldAlert, Settings, Package, Newspaper} from 'lucide-react';
+  MapPin, Monitor, Award, Sparkles, UserCheck, Plus, ShieldAlert, Settings, Package, Newspaper } from 'lucide-react';
 import { apiService } from '../services/api';
 import { getAvatarUrl } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +21,7 @@ const KpiCard = ({ icon: Icon, label, value, color = "#f59e0b", delay = 0 }: Kpi
     initial={{ opacity: 1, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, delay }}
-    className="frosted-card p-4"
+    className="frosted-card p-4 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer"
   >
     <div className="flex justify-between items-start">
       <div>
@@ -48,11 +48,20 @@ const staggerChild = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 20 } }
 };
 
-const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void; onNewsCreate?: () => void; telemetry?: any }) => {
+const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry, onOpenOnboarding }: { onViewProfile: (id: string | number) => void; onNavigate: (page: string) => void; onNewsCreate?: () => void; telemetry?: any; onOpenOnboarding?: () => void }) => {
   const { user, isAdmin, hasRole } = useAuth();
   const [stats, setStats] = useState<any>(() => getCachedData('dashboard_stats'));
   const [dashboard, setDashboard] = useState<any>(() => getCachedData('dashboard_main'));
-  const [events, setEvents] = useState<any[]>(() => getCachedData('dashboard_events') || []);
+  const [events, setEvents] = useState<any[]>(() => {
+    const cached = getCachedData('dashboard_events') || [];
+    const seen = new Set();
+    return (Array.isArray(cached) ? cached : []).filter((e: any) => {
+      const eid = e.id || e.uid;
+      if (!eid || seen.has(eid)) return false;
+      seen.add(eid);
+      return true;
+    });
+  });
   const [news, setNews] = useState<any[]>(() => getCachedData('dashboard_news') || []);
   const [recentJobs, setRecentJobs] = useState<any[]>(() => getCachedData('dashboard_jobs') || []);
   const [personalDriver, setPersonalDriver] = useState<any>(null);
@@ -105,15 +114,16 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
 
     const runSecondary = () => {
       return Promise.all([
-        Promise.all([
-          apiService.getEvents().catch(() => ({ data: [] })),
-          apiService.getCustomEvents().catch(() => ({ data: [] }))
-        ]).then(([res1, res2]) => {
-          const all = [
-            ...(Array.isArray(res1.data) ? res1.data : []),
-            ...(Array.isArray(res2.data) ? res2.data : [])
-          ];
-          const sorted = all
+        apiService.getEvents().catch(() => ({ data: [] })).then((res) => {
+          const rawEvents = Array.isArray(res.data) ? res.data : [];
+          const seen = new Set();
+          const uniqueEvents = rawEvents.filter((e: any) => {
+            const eid = e.id || e.uid;
+            if (!eid || seen.has(eid)) return false;
+            seen.add(eid);
+            return true;
+          });
+          const sorted = uniqueEvents
             .filter((e: any) => e.start_date && new Date(e.start_date).getTime() >= startOfToday.getTime())
             .sort((a: any, b: any) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
           const sliceEvents = sorted.slice(0, 4);
@@ -314,8 +324,9 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
           >
             {/* Personalized Welcome Hero Card */}
             <motion.div
+              id="tour-dashboard-hero"
               variants={staggerChild}
-              className="relative frosted-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden shadow-2xl border border-white/5 rounded-2xl"
+              className="relative frosted-card p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden shadow-2xl border border-white/5 rounded-2xl hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all"
             >
               <div className="flex items-center gap-4 md:gap-6 z-10">
                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden shadow-[0_0_20px_rgba(255,255,255,0.05)]">
@@ -354,7 +365,7 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                 {isEvent && (
                   <button
                     onClick={() => onNavigate('events')}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 text-black text-xs font-bold uppercase tracking-widest transition-all hover:bg-amber-500"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-bold uppercase tracking-widest transition-all hover:brightness-110"
                   >
                     <Plus className="w-4 h-4" />
                     Event Planen
@@ -363,7 +374,7 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                 {canManageNews && (
                   <button
                     onClick={onNewsCreate}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 text-black text-xs font-bold uppercase tracking-widest transition-all hover:bg-amber-500"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-bold uppercase tracking-widest transition-all hover:brightness-110"
                   >
                     <Newspaper className="w-4 h-4" />
                     News erstellen
@@ -373,35 +384,33 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
             </motion.div>
 
             {/* Personal Driver Stats Grid */}
-            {personalDriver && (
+            <div id="tour-dashboard-kpis">
               <motion.div variants={staggerChild} className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                  <h3 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Deine persönlichen Fahrdaten</h3>
+                  <div className="w-1 h-4 bg-primary rounded-full" />
+                  <h3 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">Deine persönlichen Fahrdaten</h3>
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <KpiCard icon={Route} label="Deine Kilometer" value={`${Math.round(personalDriver.total_driven_distance_km || 0).toLocaleString("de-DE")} KM`} />
-                  <KpiCard icon={Truck} label="Deine Fahrten" value={`${(personalDriver.total_jobs || 0).toLocaleString("de-DE")} Jobs`} />
-                  <KpiCard icon={Coins} label="Dein Umsatz" value={`${Math.round(personalDriver.total_revenue || 0).toLocaleString("de-DE")} $`} />
-                  <KpiCard icon={Award} label="Dein Rang & Level" value={`Lv. ${personalDriver.level || 1}`} />
+                  <KpiCard icon={Route} label="Deine Kilometer" value={`${Math.round(personalDriver?.total_driven_distance_km || displayKm || 0).toLocaleString("de-DE")} KM`} />
+                  <KpiCard icon={Truck} label="Deine Fahrten" value={`${(personalDriver?.total_jobs || displayJobs || 0).toLocaleString("de-DE")} Jobs`} />
+                  <KpiCard icon={Coins} label="Dein Umsatz" value={`${Math.round(personalDriver?.total_revenue || displayRev || 0).toLocaleString("de-DE")} $`} />
+                  <KpiCard icon={Award} label="Dein Rang & Level" value={`Lv. ${personalDriver?.level || 1}`} />
                 </div>
               </motion.div>
-            )}
-
-
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Upcoming Events */}
-              <div className="lg:col-span-2">
+              <div id="tour-dashboard-events" className="lg:col-span-2">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                    <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Nächste Termine</h2>
+                    <div className="w-1 h-4 bg-primary rounded-full" />
+                    <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">Nächste Termine</h2>
                   </div>
                   <motion.button
                     onClick={() => onNavigate('events')}
                     whileHover={{ x: 3 }}
-                    className="text-xs text-amber-400 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
+                    className="text-xs text-primary font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
                   >
                     Alle <ArrowRight className="w-3 h-3" />
                   </motion.button>
@@ -415,15 +424,19 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                     initial="hidden"
                     animate="show"
                   >
-                    {events.map(e => (
+                    {events.map(e => {
+                      const coordinator = (e.organizer && String(e.organizer).trim()) || (e.organisator && String(e.organisator).trim()) || (e.company_name && String(e.company_name).trim()) || "Open Pipe Club";
+                      return (
                       <motion.div
                         key={e.id}
                         variants={staggerChild}
                         onClick={() => window.open(`https://www.openpipeclub.com/events/${e.slug || (typeof e.title === 'object' ? e.title.name : e.title).toLowerCase().replace(/\s+/g, '-')}`, '_blank')}
-                        className="frosted-card p-5 rounded-2xl border border-white/5 hover:border-amber-400/40 transition-all group cursor-pointer flex flex-col"
+                        className="frosted-card p-5 rounded-2xl border border-white/5 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow transition-all group cursor-pointer flex flex-col"
                       >
                         <div className="flex-grow space-y-4">
-                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Veranstaltet von Open Pipe Club</p>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider truncate" title={`Veranstaltet von ${coordinator}`}>
+                            Veranstaltet von {coordinator}
+                          </p>
                           <h3 className="text-white font-bold text-lg uppercase">{typeof e.title === 'object' ? e.title.name : e.title}</h3>
                           
                           <div className="space-y-3 text-xs">
@@ -465,13 +478,15 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                           More Details <ArrowRight className="w-3 h-3" />
                         </button>
                       </motion.div>
-                    ))}
+                      );
+                    })}
                   </motion.div>
                 )}
               </div>
 
               {/* Latest News */}
               <motion.div
+                id="tour-dashboard-news"
                 initial={{ opacity: 1, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.07 }}
@@ -479,13 +494,13 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
               >
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-1 h-4 bg-amber-400 rounded-full" />
-                    <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Neueste News</h2>
+                    <div className="w-1 h-4 bg-primary rounded-full" />
+                    <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">Neueste News</h2>
                   </div>
                   <motion.button
                     onClick={() => onNavigate('news')}
                     whileHover={{ x: 3 }}
-                    className="text-xs text-amber-400 font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
+                    className="text-xs text-primary font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
                   >
                     Alle <ArrowRight className="w-3 h-3" />
                   </motion.button>
@@ -502,7 +517,7 @@ const Dashboard = ({ onViewProfile, onNavigate, onNewsCreate, telemetry }: { onV
                         whileHover={{ y: -3, scale: 1.015 }}
                         whileTap={{ scale: 0.99 }}
                         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                        className="frosted-card flex items-center gap-4 p-4 rounded-2xl border border-white/5 hover:border-amber-400/40 hover:shadow-[0_0_20px_rgba(245,158,11,0.06)] transition-all group cursor-pointer"
+                        className="frosted-card flex items-center gap-4 p-4 rounded-2xl border border-white/5 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow transition-all group cursor-pointer"
                       >
                         <motion.div
                           className="p-3 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors"

@@ -82,22 +82,22 @@ const InviteCodes = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">Einladungscodes</h1>
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-primary uppercase tracking-tight italic">Einladungscodes</h1>
         </div>
         <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Generiere Codes für neue Mitglieder.</p>
       </div>
 
-      <div className="frosted-card p-8 backdrop-blur-xl shadow-xl border-2 border-[#f59e0b]/20 bg-[#000000]">
+      <div className="frosted-card p-8 backdrop-blur-xl shadow-xl border-2 border-primary/20 bg-[#000000] transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
         <div className="flex items-start justify-between gap-4 mb-8">
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-1 h-4 bg-amber-400 rounded-full" />
-              <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest leading-none">Aktive Codes</h2>
+              <div className="w-1 h-4 bg-primary rounded-full" />
+              <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest leading-none">Aktive Codes</h2>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-1">Jeder Code kann einmal von einem neuen Mitglied eingelöst werden.</p>
           </div>
-          <button onClick={generateCode} disabled={generating} className="bg-amber-400 hover:bg-amber-500 text-black px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 hover-glow shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+          <button onClick={generateCode} disabled={generating} className="bg-primary hover:bg-primary/90 text-black px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 hover-glow shadow-[0_0_20px_var(--primary-glow)]">
             {generating ? <Loader2 size={14} className="animate-spin" /> : <Key size={14} />}
             Neuer Code
           </button>
@@ -106,7 +106,7 @@ const InviteCodes = () => {
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="backdrop-blur-xl bg-black/70 border-2 border-[#f59e0b]/20 rounded-2xl p-4 flex items-center justify-between animate-pulse">
+              <div key={i} className="backdrop-blur-xl bg-black/70 border-2 border-primary/20 rounded-2xl p-4 flex items-center justify-between animate-pulse">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-white/5" />
                   <div className="space-y-2">
@@ -125,9 +125,9 @@ const InviteCodes = () => {
         ) : (
           <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.04 } } }} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {codes.map(c => (
-              <motion.div key={c.code} variants={itemVariants} className="backdrop-blur-xl bg-black/70 border-2 border-[#f59e0b]/20 rounded-2xl p-4 flex items-center justify-between group hover:border-primary/60 transition-all hover-glow">
+              <motion.div key={c.code} variants={itemVariants} className="backdrop-blur-xl bg-black/70 border-2 border-primary/20 rounded-2xl p-4 flex items-center justify-between group hover:border-primary/60 transition-all hover-glow">
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.used ? "bg-black/60" : "bg-primary/10 shadow-[0_0_15px_rgba(245, 158, 11,0.1)]"}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${c.used ? "bg-black/60" : "bg-primary/10 shadow-[0_0_15px_var(--primary-glow)]"}`}>
                     <Key size={18} className={c.used ? "text-slate-600" : "text-primary"} />
                   </div>
                   <div>

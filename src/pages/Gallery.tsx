@@ -158,41 +158,41 @@ const Gallery = () => {
     <ConfirmDialog />
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-16">
-        <span className="overline text-amber-400 mb-2 inline-block">Galerie</span>
+        <span className="overline text-primary mb-2 inline-block">Galerie</span>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tighter text-white mt-2">Galerie</h1>
         {!loading && <p className="text-zinc-400 text-sm mt-3">{images.length} {images.length === 1 ? "Aufnahme" : "Aufnahmen"}.</p>}
       </div>
 
-      <div className="flex items-center justify-end gap-3 mb-12">
-        <input
-          type="text"
-          placeholder="Upload-Caption..."
-          value={uploadCaption}
-          onChange={e => setUploadCaption(e.target.value)}
-          className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2 text-xs focus:border-amber-400/40 outline-none text-white hidden sm:block w-48"
-        />
-        <button
-          onClick={() => (document.getElementById('file-upload') as any).click()}
-          disabled={uploading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all bg-amber-400 text-black hover:bg-amber-500 disabled:opacity-50"
-        >
-          {uploading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-          {uploading ? "Lädt..." : "Upload"}
-        </button>
-        <input
-          id="file-upload"
-          type="file"
-          className="hidden"
-          multiple
-          accept="image/*"
-          onChange={(e) => e.target.files && handleUpload(Array.from(e.target.files))}
-        />
-      </div>
+      <div id="tour-gallery-container" className="space-y-8">
+        <div className="flex items-center justify-end gap-3">
+          <input
+            type="text"
+            placeholder="Upload-Caption..."
+            value={uploadCaption}
+            onChange={e => setUploadCaption(e.target.value)}
+            className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-2 text-xs focus:border-primary/40 outline-none text-white hidden sm:block w-48"
+          />
+          <button
+            onClick={() => (document.getElementById('file-upload') as any).click()}
+            disabled={uploading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all bg-primary text-black hover:bg-primary/90 disabled:opacity-50"
+          >
+            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+            {uploading ? "Lädt..." : "Upload"}
+          </button>
+          <input
+            id="file-upload"
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/*"
+            onChange={(e) => e.target.files && handleUpload(Array.from(e.target.files))}
+          />
+        </div>
 
-      <div>
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
             Alle Aufnahmen
           </h2>
         </div>
@@ -221,7 +221,7 @@ const Gallery = () => {
               <motion.div
                 key={img.id}
                 variants={staggerChild}
-                className="group bg-[#0b0b0c] rounded-2xl overflow-hidden border border-zinc-900 transition-all duration-300 hover:border-amber-400/40 hover:shadow-[0_0_25px_rgba(245,158,11,0.12)] flex flex-col"
+                className="group bg-[#0b0b0c] rounded-2xl overflow-hidden border border-zinc-900 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow flex flex-col cursor-pointer"
               >
                 <div
                   className="relative aspect-video overflow-hidden cursor-pointer bg-black flex items-center justify-center shrink-0"
@@ -240,8 +240,8 @@ const Gallery = () => {
 
                   {/* Uploader Badge */}
                   <div className="absolute top-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/5 opacity-0 group-hover:opacity-100 transition-all transform translate-y-[-10px] group-hover:translate-y-0">
-                    <p className="text-[8px] font-black text-amber-400 uppercase tracking-widest italic flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse" />
+                    <p className="text-[8px] font-black text-primary uppercase tracking-widest italic flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />
                       {img.uploaded_by || 'Unbekannt'}
                     </p>
                   </div>
@@ -253,7 +253,7 @@ const Gallery = () => {
                       <input
                         value={captionDraft}
                         onChange={e => setCaptionDraft(e.target.value)}
-                        className="bg-white/10 border border-amber-400/20 rounded-lg px-2 py-1 text-[10px] text-white outline-none w-full"
+                        className="bg-white/10 border border-primary/20 rounded-lg px-2 py-1 text-[10px] text-white outline-none w-full"
                         autoFocus
                       />
                       <button onClick={() => handleSaveCaption(img.id)} className="p-1 text-emerald-400"><Check size={14} /></button>
@@ -265,7 +265,7 @@ const Gallery = () => {
                   )}
                   {canManageImage(img) && (
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={() => { setEditingCaption(img.id); setCaptionDraft(img.caption || ""); }} className="p-1 text-slate-400 hover:text-amber-400"><Pencil size={12} /></button>
+                      <button onClick={() => { setEditingCaption(img.id); setCaptionDraft(img.caption || ""); }} className="p-1 text-slate-400 hover:text-primary"><Pencil size={12} /></button>
                       <button onClick={() => handleDelete(img.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
                     </div>
                   )}
@@ -289,7 +289,7 @@ const Gallery = () => {
             >
               {/* Left Navigation Button */}
               <button
-                className="absolute left-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-amber-400/50 rounded-full text-slate-200 hover:text-white shadow-lg transition-all duration-300 z-20"
+                className="absolute left-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-primary/50 rounded-full text-slate-200 hover:text-white shadow-lg transition-all duration-300 z-20"
                 onClick={showPrevImage}
               >
                 <ChevronLeft size={24} />
@@ -297,18 +297,18 @@ const Gallery = () => {
 
               {/* Right Navigation Button */}
               <button
-                className="absolute right-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-amber-400/50 rounded-full text-slate-200 hover:text-white shadow-lg transition-all duration-300 z-20"
+                className="absolute right-6 top-1/2 -translate-y-1/2 p-3 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-primary/50 rounded-full text-slate-200 hover:text-white shadow-lg transition-all duration-300 z-20"
                 onClick={showNextImage}
               >
                 <ChevronRight size={24} />
               </button>
 
               <div
-                className="relative bg-black backdrop-blur-2xl border-2 border-[#f59e0b]/20 w-[95vw] max-w-7xl p-2 rounded-xl shadow-lg"
+                className="relative bg-black backdrop-blur-2xl border border-white/15 w-[95vw] max-w-7xl p-2 rounded-xl shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
-                  className="absolute right-4 top-4 p-1.5 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-amber-400/50 rounded-full text-white shadow-lg transition-all duration-300 z-10"
+                  className="absolute right-4 top-4 p-1.5 bg-white/10 backdrop-blur-xl border border-white/15 hover:bg-white/20 hover:border-primary/50 rounded-full text-white shadow-lg transition-all duration-300 z-10"
                   onClick={() => setSelectedImage(null)}
                 >
                   <X size={14} />

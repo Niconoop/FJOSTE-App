@@ -139,13 +139,56 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
   };
 
   const toggleAdminRole = async (userId: string, currentIsAdmin: boolean) => {
-    const newRole = currentIsAdmin ? "Fahrer" : "Admin";
+    const newIsAdmin = !currentIsAdmin;
     try {
-      await axios.put(`${API}/management/users/${userId}/role?role=${encodeURIComponent(newRole)}`, {}, { headers: h });
-      toast.success(`Admin-Rechte ${newRole === 'Admin' ? 'erteilt' : 'entzogen'}`);
-      setRoleModal((prev: any) => ({ ...prev, is_admin: newRole === 'Admin', role: newRole }));
+      await axios.put(`${API}/management/users/${userId}/role?is_admin=${newIsAdmin ? 1 : 0}`, {}, { headers: h });
+      toast.success(`Admin-Rechte ${newIsAdmin ? 'erteilt' : 'entzogen'}`);
+      setRoleModal((prev: any) => ({ ...prev, is_admin: newIsAdmin }));
       loadAll();
     } catch { toast.error("Fehler beim Rollenwechsel"); }
+  };
+
+  const getEffectiveRole = (userItem: any) => {
+    const linked = drivers.find((d: any) =>
+      (userItem.trucky_driver_id && (String(d.id) === String(userItem.trucky_driver_id) || String(d.trucky_id) === String(userItem.trucky_driver_id))) ||
+      (userItem.username && d.name && d.name.toLowerCase() === userItem.username.toLowerCase())
+    );
+    const truckyRole = linked?.role?.name || linked?.role;
+    const directRole = userItem.role;
+
+    // If directRole exists and is not simply "admin", use it
+    if (directRole && directRole.toLowerCase() !== "admin") {
+      return directRole.toLowerCase() === "driver" ? "Fahrer" : directRole;
+    }
+    // If directRole is "admin" or missing, fallback to Trucky role if available
+    if (truckyRole && truckyRole.toLowerCase() !== "admin") {
+      return truckyRole.toLowerCase() === "driver" ? "Fahrer" : truckyRole;
+    }
+    if (userItem.username?.toLowerCase() === "niconoop") return "Inhaber";
+    return (directRole && directRole.toLowerCase() !== "admin") ? directRole : "Fahrer";
+  };
+
+  const getRoleBadgeStyle = (roleStr: string) => {
+    const r = (roleStr || '').toLowerCase();
+    if (r.includes('inhaber') || r.includes('owner')) {
+      return 'text-primary bg-primary/10 border-primary/25 font-black';
+    }
+    if (r.includes('leitung') || r.includes('management') || r.includes('manager')) {
+      return 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 font-black';
+    }
+    if (r.includes('event')) {
+      return 'text-purple-400 bg-purple-500/10 border-purple-500/20 font-black';
+    }
+    if (r.includes('modding')) {
+      return 'text-amber-400 bg-amber-500/10 border-amber-500/20 font-black';
+    }
+    if (r.includes('personal') || r.includes('hr')) {
+      return 'text-blue-400 bg-blue-500/10 border-blue-500/20 font-black';
+    }
+    if (r.includes('probe')) {
+      return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20 font-black';
+    }
+    return 'text-slate-400 bg-white/5 border-white/10 font-bold';
   };
 
   const setTruckyRole = async (userId: string, roleName: string) => {
@@ -182,8 +225,8 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">Benutzer-Management</h1>
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-primary uppercase tracking-tight italic">Benutzer-Management</h1>
         </div>
         <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Verwalte Benutzer, Rollen und Trucky-Verknüpfungen.</p>
       </div>
@@ -194,7 +237,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Benutzer suchen..."
-          className="w-full bg-white/[0.03] border border-white/10 hover:border-white/20 text-white placeholder:text-slate-600 rounded-full h-12 pl-12 pr-4 focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20 transition-all outline-none text-sm font-medium backdrop-blur-sm"
+          className="w-full bg-white/[0.03] border border-white/10 hover:border-white/20 text-white placeholder:text-slate-600 rounded-full h-12 pl-12 pr-4 focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all outline-none text-sm font-medium backdrop-blur-sm"
         />
         {search && (
           <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
@@ -203,13 +246,13 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
         )}
       </div>
 
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="frosted-card !p-0 overflow-hidden border-2 border-[#f59e0b]/20 bg-[#000000] shadow-xl">
+      <motion.div variants={containerVariants} initial="hidden" animate="show" className="frosted-card !p-0 overflow-hidden border-2 border-primary/20 bg-[#000000] shadow-xl hover-glow hover:border-primary transition-all">
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/20">
           <div className="flex items-center gap-3">
-            <div className="w-1 h-4 bg-amber-400 rounded-full" />
-            <h2 className="font-unbounded text-sm font-bold text-amber-400 uppercase tracking-widest">Alle Benutzer</h2>
+            <div className="w-1 h-4 bg-primary rounded-full" />
+            <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">Alle Benutzer</h2>
           </div>
-          <button onClick={syncRoles} disabled={syncing} className="flex items-center gap-2 text-[10px] font-black uppercase text-amber-400 tracking-widest hover:bg-amber-400/10 px-3 py-1.5 rounded-xl transition-all hover-glow border border-amber-400/10">
+          <button onClick={syncRoles} disabled={syncing} className="flex items-center gap-2 text-[10px] font-black uppercase text-primary tracking-widest hover:bg-primary/10 px-3 py-1.5 rounded-xl transition-all hover-glow border border-primary/10">
             <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
             Rollen Synchronisieren
           </button>
@@ -240,20 +283,37 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
             {filteredUsers.map(u => (
               <motion.div key={u.id} variants={itemVariants} className="p-6 hover:bg-black/40 transition-colors group border-b border-white/5 last:border-0">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-white/5 flex items-center justify-center text-white font-black shrink-0 overflow-hidden group-hover:border-amber-400 transition-colors">
+                  <div
+                    onClick={() => onViewProfile(u.username || u.id)}
+                    className="w-12 h-12 rounded-lg bg-zinc-900 border border-white/5 flex items-center justify-center text-white font-black shrink-0 overflow-hidden group-hover:border-primary transition-colors cursor-pointer"
+                    title={`${u.username} Profil öffnen`}
+                  >
                     {getAvatarUrl(u.avatar_url) ? <img src={getAvatarUrl(u.avatar_url)!} className="w-full h-full object-cover" /> : <User size={24} className="text-slate-600" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => onViewProfile(u.trucky_driver_id || u.id)}
-                        className="text-sm font-bold text-white tracking-tight hover:text-primary transition-colors"
+                        type="button"
+                        onClick={() => onViewProfile(u.username || u.id)}
+                        className="text-sm font-bold text-white tracking-tight hover:text-primary transition-colors cursor-pointer text-left"
+                        title={`${u.username} Profil öffnen`}
                       >
                         {u.username}
                       </button>
-                      <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${u.is_admin ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-slate-500 bg-white/5 border-white/10"}`}>
-                        {u.is_admin ? "Admin" : (u.role || "driver")}
-                      </span>
+                      {u.is_admin && (
+                        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-sm">
+                          Admin
+                        </span>
+                      )}
+                      {(() => {
+                        const effectiveRole = getEffectiveRole(u);
+                        if (u.is_admin && effectiveRole.toLowerCase() === 'admin') return null;
+                        return (
+                          <span className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-full border ${getRoleBadgeStyle(effectiveRole)} shadow-sm`}>
+                            {effectiveRole}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center gap-4 mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                       {u.truckersmp_id && <span className="text-red-500/70 flex items-center gap-1"><MapPin size={12} /> TMP #{u.truckersmp_id}</span>}
@@ -261,7 +321,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
                     </div>
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setRoleModal(u)} className="p-2 text-slate-400 hover:text-amber-500 transition-all hover-glow" title="Rolle ändern"><Crown size={18} /></button>
+                    <button onClick={() => setRoleModal(u)} className="p-2 text-slate-400 hover:text-primary transition-all hover-glow" title="Rolle ändern"><Crown size={18} /></button>
                     <button onClick={() => { setEditingTmpId(u.id); setTmpIdDraft(u.truckersmp_id || ""); }} className="p-2 text-slate-400 hover:text-red-500 transition-all hover-glow" title="TMP ID setzen"><MapPin size={18} /></button>
                     {u.trucky_driver_id ? (
                       <button onClick={() => unlinkUser(u.id)} className="p-2 text-slate-400 hover:text-orange-500 transition-all hover-glow" title="Entknüpfen"><Unlink size={18} /></button>
@@ -294,7 +354,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
       <AnimatePresence>
         {linkModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setLinkModal(null)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-primary/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-white/5 bg-black/40">
                 <h3 className="font-unbounded text-sm font-bold text-white uppercase tracking-widest italic">Fahrer Verknüpfen</h3>
                 <p className="text-xs text-slate-500 mt-1">Wähle den passenden Trucky-Account für <span className="text-primary font-bold">{linkModal.username}</span>.</p>
@@ -345,7 +405,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
       <AnimatePresence>
         {roleModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setRoleModal(null)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#000000] border-2 border-primary/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-white/5 bg-black/40 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -399,7 +459,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
       <AnimatePresence>
         {deleteModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setDeleteModal(null)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[#000000] border-2 border-primary/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
               <div className="p-8 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 mx-auto">
                   <AlertTriangle size={32} className="text-red-500" />
@@ -429,7 +489,7 @@ const UsersManagement = ({ onViewProfile }: { onViewProfile: (id: string | numbe
       <AnimatePresence>
         {resetPasswordModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setResetPasswordModal(null)}>
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[#000000] border-2 border-[#f59e0b]/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[#000000] border-2 border-primary/20 rounded-[32px] !p-0 overflow-hidden shadow-2xl backdrop-blur-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
               <div className="p-8">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 mx-auto">
                   <Key size={32} className="text-primary" />

@@ -132,17 +132,17 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
     <div className="space-y-8 pb-16 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="text-center mb-16">
-        <span className="overline text-amber-400 mb-2 inline-block">VTC Familie</span>
+        <span className="overline text-primary mb-2 inline-block">VTC Familie</span>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tighter text-white mt-2">
           Unsere Mitglieder
         </h1>
         {!loading && (
           <div className="flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-6">
             <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
-              <Users className="w-3.5 h-3.5 text-[#f59e0b]" /> {members.length} Mitglieder
+              <Users className="w-3.5 h-3.5 text-primary" /> {members.length} Mitglieder
             </span>
             <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
-              <Route className="w-3.5 h-3.5 text-[#f59e0b]" /> {Math.round(totalKm).toLocaleString("de-DE")} km
+              <Route className="w-3.5 h-3.5 text-primary" /> {Math.round(totalKm).toLocaleString("de-DE")} km
             </span>
             <span className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-lg border border-white/10">
               <Coins className="w-3.5 h-3.5 text-emerald-400" /> {Math.round(totalRev).toLocaleString("de-DE")} €
@@ -186,10 +186,10 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
             className="space-y-12 animate-pulse"
           >
             {[1, 2].map(g => (
-              <div key={g} className="mb-14">
+              <div key={g} id={g === 1 ? "tour-team-container" : undefined} className="mb-14">
                 <div className="flex items-center gap-3 mb-8"><div className="w-1 h-4 bg-amber-400/30 rounded-full" /><div className="h-6 w-40 bg-zinc-950 rounded" /></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {[1, 2, 3, 4].map(i => (
+                  {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="bg-[#0b0b0c]/40 border border-zinc-900 rounded-2xl p-5 space-y-4 h-32" />
                   ))}
                 </div>
@@ -219,15 +219,15 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
           >
             {filteredMembers.length === 0 ? (
               <div className="text-center py-20 opacity-30 select-none">
-                <Search className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+                <Search className="w-12 h-12 text-primary mx-auto mb-4" />
                 <p className="font-['Unbounded'] text-xs font-bold uppercase tracking-widest">Keine Mitglieder gefunden</p>
               </div>
             ) : (
-              groups.map((group: any) => (
-                <section key={group.name} className="mb-16">
+              groups.map((group: any, gIdx: number) => (
+                <section key={group.name} id={gIdx === 0 ? "tour-team-container" : undefined} className="mb-16">
                   {/* Left-Border Section Header */}
                   <div className="flex items-center gap-3 mb-8">
-                    <div className="w-1 h-4 bg-amber-400 rounded-full" />
+                    <div className="w-1 h-4 bg-primary rounded-full" />
                     <RoleIcon isOwner={group.isOwner} roleName={group.name} />
                     <h2 className="text-base font-black text-white uppercase tracking-widest font-unbounded">
                       {group.name}
@@ -243,11 +243,11 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
                         whileHover={{ y: -4, scale: 1.015 }}
                         whileTap={{ scale: 0.99 }}
                         onClick={() => onViewProfile(member.id)}
-                        className="group transition-all duration-300 border border-white/5 hover:border-amber-400/40 hover:shadow-[0_0_25px_rgba(245,158,11,0.12)] p-5 cursor-pointer flex flex-col frosted-card rounded-2xl h-full space-y-4"
+                        className="group transition-all duration-300 border border-white/5 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow p-5 cursor-pointer flex flex-col frosted-card rounded-2xl h-full space-y-4"
                       >
                         <div className="flex items-center gap-4">
                           <div className="relative shrink-0">
-                            <div className="w-14 h-14 rounded-full border-2 border-zinc-800 group-hover:border-amber-400/50 transition-colors duration-300 overflow-hidden bg-zinc-950 flex items-center justify-center text-white font-bold text-lg">
+                            <div className="w-14 h-14 rounded-full border-2 border-zinc-800 group-hover:border-primary/50 transition-colors duration-300 overflow-hidden bg-zinc-950 flex items-center justify-center text-white font-bold text-lg">
                               {getAvatarUrlLocal(member.avatar_url) ? (
                                 <img src={getAvatarUrlLocal(member.avatar_url)!} alt={member.name} className="w-full h-full object-cover" />
                               ) : (
@@ -256,17 +256,17 @@ const Team = ({ onViewProfile }: { onViewProfile: (id: string | number) => void 
                             </div>
                             {group.isOwner && (
                               <div className="absolute -bottom-1 -right-1 bg-zinc-950 border border-zinc-900 rounded-full p-1 shadow-md">
-                                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                                <Crown className="w-3.5 h-3.5 text-primary" />
                               </div>
                             )}
                           </div>
 
                           <div className="overflow-hidden">
-                            <h3 className="text-base font-bold text-white truncate group-hover:text-amber-400 transition-colors duration-200">
+                            <h3 className="text-base font-bold text-white truncate group-hover:text-primary transition-colors duration-200">
                               {member.name}
                             </h3>
                             <span
-                              className={`text-xs font-semibold uppercase tracking-wider truncate block text-zinc-500 mt-0.5 ${group.isOwner ? "text-amber-400/80" : ""}`}
+                              className={`text-xs font-semibold uppercase tracking-wider truncate block text-zinc-500 mt-0.5 ${group.isOwner ? "text-primary/80" : ""}`}
                             >
                               {getRoleName(member)}
                             </span>

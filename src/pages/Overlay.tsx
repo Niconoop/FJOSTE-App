@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Lock, Unlock, Calendar, Users, Package, Gauge, Fuel, MapPin, Clock, AlertTriangle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
@@ -7,7 +7,10 @@ import { Toaster, toast } from 'sonner';
 import { API_URL, getAvatarUrl } from '../config';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
+import { TrafficLightWidget } from '../components/TrafficLightWidget';
+import { detectApproachingTrafficLight, type ApproachingTrafficLight } from '../utils/trafficLightDetector';
 import { loadAllCities, findCity, findClosestCity } from '../data/ets2Cities';
+import { hexToRgbValues } from '../context/ThemeContext';
 
 interface Telemetry {
   connected: boolean;
@@ -63,6 +66,8 @@ interface Settings {
   showEvent: boolean;
   showSpotify: boolean;
   showGameMap: boolean;
+  showTrafficLight?: boolean;
+  trafficLightVariant?: 'compact' | 'large';
   widgetOrder: string[];
   zoom: number;
   bgOpacity: number;
@@ -114,11 +119,19 @@ function useTelemetry(initialTelemetry: Telemetry): Telemetry {
   const [telemetry, setTelemetry] = useState<Telemetry>(initialTelemetry);
   const pendingRef = useRef<Telemetry | null>(null);
   const rafRef = useRef<number | null>(null);
+  const cachedRouteWaypointsRef = useRef<any>(null);
 
   useEffect(() => {
     try {
       const { ipcRenderer } = window.require('electron');
       const listener = (_: any, data: Telemetry) => {
+        if (data) {
+          if ((data as any).routeWaypoints !== undefined) {
+            cachedRouteWaypointsRef.current = (data as any).routeWaypoints;
+          } else if (cachedRouteWaypointsRef.current) {
+            (data as any).routeWaypoints = cachedRouteWaypointsRef.current;
+          }
+        }
         pendingRef.current = data;
         if (!rafRef.current) {
           rafRef.current = requestAnimationFrame(() => {
@@ -152,7 +165,9 @@ const DEFAULT_SETTINGS: Settings = {
   showEvent: true,
   showSpotify: true,
   showGameMap: true,
-  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify', 'gameMap'],
+  showTrafficLight: true,
+  trafficLightVariant: 'compact',
+  widgetOrder: ['logo', 'mainHud', 'event', 'drivers', 'spotify', 'gameMap', 'trafficLight'],
   zoom: 100,
   bgOpacity: 0,
   showGear: true,
@@ -168,7 +183,8 @@ const DEFAULT_SETTINGS: Settings = {
     event: { w: 288, h: 64 },
     drivers: { w: 192, h: 0 },
     spotify: { w: 280, h: 140 },
-    gameMap: { w: 300, h: 200 }
+    gameMap: { w: 300, h: 200 },
+    trafficLight: { w: 70, h: 160 }
   },
   singleRowHud: false,
   customAccentColor: '#f59e0b',
@@ -224,7 +240,8 @@ const getWidgetDefaultSize = (widget: string, singleRowHud: boolean) => {
     event: { w: 288, h: 64 },
     drivers: { w: 192, h: 0 },
     spotify: { w: 280, h: 140 },
-    gameMap: { w: 300, h: 200 }
+    gameMap: { w: 300, h: 200 },
+    trafficLight: { w: 70, h: 160 }
   };
   return defaults[widget] || { w: 80, h: 80 };
 };
@@ -255,6 +272,9 @@ const OverlayPage: React.FC = () => {
         base.widgetSizes = { ...DEFAULT_SETTINGS.widgetSizes, ...JSON.parse(savedSizes) };
       } catch (e) { }
     }
+    if (base.widgetSizes?.trafficLight && (base.widgetSizes.trafficLight.w > 100 || base.widgetSizes.trafficLight.h < 100)) {
+      base.widgetSizes.trafficLight = { w: 70, h: 160 };
+    }
     return base;
   });
 
@@ -274,7 +294,8 @@ const OverlayPage: React.FC = () => {
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
       spotify: { x: 40, y: 580 },
-      gameMap: { x: 40, y: 740 }
+      gameMap: { x: 40, y: 740 },
+      trafficLight: { x: 440, y: 130 }
     };
     if (saved) {
       try {
@@ -297,6 +318,44 @@ const OverlayPage: React.FC = () => {
   const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
 
+  // Compute active accent color and RGB values (from overlay custom style or app appearance)
+  const activeAccent = useMemo(() => {
+    if (settings.style === 'custom' && settings.customAccentColor) {
+      return settings.customAccentColor;
+    }
+    if (settings.customAccentColor && settings.customAccentColor !== '#f59e0b') {
+      return settings.customAccentColor;
+    }
+    try {
+      const appSaved = localStorage.getItem('openpipeclub_app_appearance');
+      if (appSaved) {
+        const parsed = JSON.parse(appSaved);
+        if (parsed.accentColor) return parsed.accentColor;
+      }
+    } catch (e) { }
+    return settings.customAccentColor || '#f59e0b';
+  }, [settings.style, settings.customAccentColor]);
+
+  const accentRgb = useMemo(() => hexToRgbValues(activeAccent), [activeAccent]);
+
+  // Synchronize CSS custom properties on root document so all toasts, notifications, and components reflect the active accent and glow
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--primary', activeAccent);
+    root.style.setProperty('--color-primary', activeAccent);
+    root.style.setProperty('--color-amber-300', activeAccent);
+    root.style.setProperty('--color-amber-400', activeAccent);
+    root.style.setProperty('--color-amber-500', activeAccent);
+    root.style.setProperty('--color-amber-600', activeAccent);
+    root.style.setProperty('--app-accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+    root.style.setProperty('--app-glow-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+    root.style.setProperty('--primary-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.35)`);
+    root.style.setProperty('--custom-accent', activeAccent);
+    root.style.setProperty('--custom-border', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2)`);
+    root.style.setProperty('--custom-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.5)`);
+    root.style.setProperty('--custom-glow-subtle', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.15)`);
+  }, [activeAccent, accentRgb]);
+
   // Overlay Notification State & Refs
   interface OverlayNotification {
     id: string;
@@ -311,9 +370,68 @@ const OverlayPage: React.FC = () => {
   const trafficDataRef = useRef<any[]>([]);
   const mapWidgetRef = useRef<GameMapWidgetHandle>(null);
 
+  // Approaching traffic light detection
+  const approachingLight = useMemo(() => {
+    if (!telemetry?.connected) return null;
+    const semaphores = (telemetry as any)?.semaphores;
+    const px = telemetry?.posX ?? (telemetry as any)?.gameX;
+    const pz = telemetry?.posZ ?? (telemetry as any)?.gameY;
+    const heading = telemetry?.heading;
+    return detectApproachingTrafficLight(semaphores, px, pz, heading, undefined, 100);
+  }, [
+    (telemetry as any)?.semaphores,
+    telemetry?.posX,
+    (telemetry as any)?.gameX,
+    telemetry?.posZ,
+    (telemetry as any)?.gameY,
+    telemetry?.heading,
+    telemetry?.connected
+  ]);
+
+  const previewTrafficLight: ApproachingTrafficLight = useMemo(() => ({
+    id: 999999,
+    state: 1, // Red
+    remainingTime: 14.5,
+    distance: 65,
+    totalCycleTime: 30,
+    cycleProgress: 0.5,
+    pos: [0, 0, 0],
+    nodeUids: []
+  }), []);
+
   // Load cities once
   useEffect(() => {
     loadAllCities();
+  }, []);
+
+  const [detectedServer, setDetectedServer] = useState<string>('sim1');
+
+  // Auto-detect active TruckersMP server from session
+  useEffect(() => {
+    let cancelled = false;
+    const detectServer = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(`${API_URL}/truckersmp/my-session`, { headers, timeout: 5000 });
+        if (cancelled) return;
+        const serverName = (res.data as any)?.server_name;
+        if (!serverName) return;
+        const lower = String(serverName).toLowerCase();
+        let mapped = 'sim1';
+        if (lower.includes('promods')) mapped = 'eupromods1';
+        else if (lower.includes('simulation 2') || lower.includes('sim 2')) mapped = 'sim2';
+        else if (lower.includes('us') || lower.includes('arc2') || lower.includes('arcade')) mapped = 'arc2';
+        else if (lower.includes('simulation 1') || lower.includes('sim 1')) mapped = 'sim1';
+        setDetectedServer(mapped);
+      } catch {}
+    };
+    detectServer();
+    const interval = setInterval(detectServer, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   // Poll traffic data for notifications
@@ -321,18 +439,30 @@ const OverlayPage: React.FC = () => {
     const fetchTrafficForOverlay = async () => {
       if (settings.cityEntryNotify === false && settings.trafficJamNotify === false) return;
       try {
-        const server = settings.trafficServer || 'sim1';
-        const res = await axios.get(`${API_URL}/trucky/traffic?server=${server}&game=ets2`);
-        if (Array.isArray(res.data?.response)) {
+        const server = (settings.trafficServer && settings.trafficServer !== 'sim1')
+          ? settings.trafficServer
+          : (detectedServer || 'sim1');
+
+        let res: any = null;
+        try {
+          res = await axios.get(`https://api.truckyapp.com/v2/traffic?server=${encodeURIComponent(server)}&game=ets2`, { timeout: 8000 });
+        } catch {
+          try {
+            res = await axios.get(`${API_URL}/trucky/traffic?server=${encodeURIComponent(server)}&game=ets2`, { timeout: 8000 });
+          } catch {}
+        }
+        if (Array.isArray(res?.data?.response)) {
           trafficDataRef.current = res.data.response;
         }
-      } catch (e) { }
+      } catch (e) {
+        console.warn("Traffic fetch error:", e);
+      }
     };
 
     fetchTrafficForOverlay();
     const interval = setInterval(fetchTrafficForOverlay, 25000);
     return () => clearInterval(interval);
-  }, [settings.cityEntryNotify, settings.trafficJamNotify, settings.trafficServer]);
+  }, [settings.cityEntryNotify, settings.trafficJamNotify, settings.trafficServer, detectedServer]);
 
   // Telemetry position check for City Entry & Traffic Jam Warning
   useEffect(() => {
@@ -344,21 +474,40 @@ const OverlayPage: React.FC = () => {
 
     // 1. City Entry Check
     if (settings.cityEntryNotify !== false) {
-      const closest = findClosestCity(px, pz, 3000);
+      const closest = findClosestCity(px, pz, 3800);
       if (closest && closest.city) {
         const cityKey = closest.city.gameName.toLowerCase();
         if (lastCityGameNameRef.current !== cityKey) {
           lastCityGameNameRef.current = cityKey;
 
           let playersInCity = 0;
-          trafficDataRef.current.forEach((countryItem: any) => {
-            (countryItem.locations || []).forEach((loc: any) => {
-              const matchedCity = findCity(loc.name);
-              if (matchedCity && matchedCity.gameName.toLowerCase() === cityKey) {
-                playersInCity = Math.max(playersInCity, loc.players || 0);
-              }
+          if (trafficDataRef.current && trafficDataRef.current.length > 0) {
+            trafficDataRef.current.forEach((countryItem: any) => {
+              (countryItem.locations || []).forEach((loc: any) => {
+                const matchedCity = findCity(loc.name);
+                if (matchedCity && (
+                  matchedCity.gameName.toLowerCase() === cityKey ||
+                  matchedCity.realName.toLowerCase() === closest.city.realName.toLowerCase()
+                )) {
+                  playersInCity = Math.max(playersInCity, loc.players || 0);
+                }
+              });
             });
-          });
+          }
+
+          // Live telemetry detection from OPCGameBridge shared memory
+          const localNearbyVehicles = (telemetry as any)?.nearbyVehicles;
+          if (Array.isArray(localNearbyVehicles)) {
+            const localTmpTrucks = localNearbyVehicles.filter((v: any) => (v.isTmp || !v.isAi) && !v.isTrailer).length;
+            if (localTmpTrucks > 0) {
+              playersInCity = Math.max(playersInCity, localTmpTrucks + 1);
+            }
+          }
+
+          // In multiplayer, ensure at least 1 player (the driver) is counted
+          if (playersInCity === 0 && ((telemetry as any)?.isTruckersMp || (telemetry as any)?.gameType === 2)) {
+            playersInCity = 1;
+          }
 
           setOverlayNotify({
             id: `city-${Date.now()}`,
@@ -371,16 +520,25 @@ const OverlayPage: React.FC = () => {
             setOverlayNotify(current => current?.id.startsWith('city-') ? null : current);
           }, 6000);
         }
+      } else {
+        // Hysteresis: clear city tracking when clearly outside city radius (> 6500m)
+        const farCheck = findClosestCity(px, pz, 6500);
+        if (!farCheck) {
+          lastCityGameNameRef.current = null;
+        }
       }
     }
 
     // 2. Traffic Jam Proximity Warning
     if (settings.trafficJamNotify !== false && trafficDataRef.current.length > 0) {
-      const SPECIAL_ROAD_COORDS: Record<string, [number, number]> = {
-        "alpen road": [47.263, 11.395],
-        "c-d road": [51.050, 4.350],
-        "cd road": [51.050, 4.350],
-        "calais - duisburg": [51.050, 4.350],
+      const SPECIAL_ROAD_GAME_COORDS: Record<string, [number, number]> = {
+        "alpen road": [2855.88, 16475.88],
+        "c-d road": [-22070, -5725],
+        "cd road": [-22070, -5725],
+        "calais - duisburg": [-22070, -5725],
+        "truckersmp hq": [11634.92, -1841.87],
+        "channel tunnel": [-32000, -6500],
+        "folkestone": [-33321.94, -7884.35],
       };
 
       const now = Date.now();
@@ -391,9 +549,11 @@ const OverlayPage: React.FC = () => {
             let gameZ: number | null = null;
 
             const locLower = (loc.name || '').toLowerCase().trim();
-            if (SPECIAL_ROAD_COORDS[locLower]) {
-              const city = findCity(loc.name);
-              if (city) { gameX = city.x; gameZ = city.z; }
+            const cleanRoadKey = locLower.replace(/\s*\((City|Road|Port|POI|HQ)\)/i, '').trim();
+            if (SPECIAL_ROAD_GAME_COORDS[locLower]) {
+              [gameX, gameZ] = SPECIAL_ROAD_GAME_COORDS[locLower];
+            } else if (SPECIAL_ROAD_GAME_COORDS[cleanRoadKey]) {
+              [gameX, gameZ] = SPECIAL_ROAD_GAME_COORDS[cleanRoadKey];
             } else {
               const city = findCity(loc.name);
               if (city) { gameX = city.x; gameZ = city.z; }
@@ -409,7 +569,7 @@ const OverlayPage: React.FC = () => {
                 if (now - lastWarned > 180000) { // Warn once every 3 minutes per location
                   lastWarnedTrafficJamsRef.current[loc.name] = now;
 
-                  const cleanName = loc.name.replace(/\s*\((City|Road)\)/i, '');
+                  const cleanName = loc.name.replace(/\s*\((City|Road|Port|POI|HQ)\)/i, '');
                   setOverlayNotify({
                     id: `traffic-${Date.now()}`,
                     type: 'traffic',
@@ -427,7 +587,7 @@ const OverlayPage: React.FC = () => {
         });
       });
     }
-  }, [telemetry?.posX, telemetry?.posZ, telemetry?.connected, settings.cityEntryNotify, settings.trafficJamNotify]);
+  }, [telemetry?.posX, telemetry?.posZ, telemetry?.connected, (telemetry as any)?.nearbyVehicles, settings.cityEntryNotify, settings.trafficJamNotify]);
 
   // Absolute forced transparency on body, html, and root elements, and prevent right-click context menu
   useEffect(() => {
@@ -481,7 +641,8 @@ const OverlayPage: React.FC = () => {
           event: { x: 40, y: 310 },
           drivers: { x: 40, y: 440 },
           spotify: { x: 40, y: 580 },
-          gameMap: { x: 40, y: 740 }
+          gameMap: { x: 40, y: 740 },
+          trafficLight: { x: 440, y: 130 }
         });
       };
       ipcRenderer.on('overlay-positions-reset', resetListener);
@@ -543,6 +704,16 @@ const OverlayPage: React.FC = () => {
             }
           } catch (err) { }
         }
+      } else if (e.key === 'openpipeclub_app_appearance') {
+        try {
+          const parsed = JSON.parse(e.newValue || '');
+          if (parsed && parsed.accentColor) {
+            setSettings(prev => ({
+              ...prev,
+              customAccentColor: prev.style === 'custom' ? prev.customAccentColor : parsed.accentColor
+            }));
+          }
+        } catch (err) { }
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -561,7 +732,8 @@ const OverlayPage: React.FC = () => {
       event: { x: 40, y: 310 },
       drivers: { x: 40, y: 440 },
       spotify: { x: 40, y: 580 },
-      gameMap: { x: 40, y: 740 }
+      gameMap: { x: 40, y: 740 },
+      trafficLight: { x: 440, y: 130 }
     };
     if (savedPos) {
       try {
@@ -1123,20 +1295,29 @@ const OverlayPage: React.FC = () => {
         gameY={telemetry?.posZ ?? (telemetry as any)?.gameY}
         heading={telemetry?.heading}
         routeWaypoints={(telemetry as any)?.routeWaypoints}
+        nearbyVehicles={(telemetry as any)?.nearbyVehicles}
         source={telemetry?.source || undefined}
         dest={telemetry?.dest || undefined}
         destCompany={(telemetry as any)?.dest_company || (telemetry as any)?.destCompany || undefined}
         navDistance={telemetry?.navDistance || undefined}
         connected={telemetry?.connected ?? false}
-        accentColor={
-          settings.style === 'carbon' ? '#f59e0b' :
-            settings.style === 'minimal' ? '#ffffff' :
-              settings.style === 'custom' ? (settings.customAccentColor || '#f59e0b') :
-                '#f59e0b'
-        }
+        accentColor={activeAccent}
         width={mapW}
         height={mapH}
       />
+    );
+  };
+
+  const renderTrafficLight = () => {
+    const lightToDisplay = approachingLight || (!isLocked ? previewTrafficLight : null);
+    if (!lightToDisplay) return null;
+    return (
+      <div className="w-full h-full flex items-center justify-center p-1">
+        <TrafficLightWidget
+          trafficLight={lightToDisplay}
+          variant={settings.trafficLightVariant || 'compact'}
+        />
+      </div>
     );
   };
 
@@ -1160,14 +1341,18 @@ const OverlayPage: React.FC = () => {
   };
 
   const hideWidgets = isLocked && telemetry && telemetry.paused;
+
   const showContent = shouldShowOverlay();
 
   return (
     <div
       ref={containerRef}
-      className="w-screen h-screen overflow-hidden relative select-none"
+      className={`relative w-screen h-screen overflow-hidden select-none ${c.container} transition-colors duration-300`}
       style={{
-        background: isLocked ? 'transparent' : 'rgba(0, 0, 0, 0.15)',
+        width: '100vw',
+        height: '100vh',
+        background: 'transparent',
+        backgroundColor: 'transparent',
         willChange: 'transform, opacity',
         opacity: showContent ? 1 : 0,
         pointerEvents: 'none',
@@ -1177,7 +1362,7 @@ const OverlayPage: React.FC = () => {
       {/* Visual Alignment Grid (only visible when unlocked) */}
       {!isLocked && (
         <div className="absolute inset-0 pointer-events-none opacity-20" style={{
-          backgroundImage: 'radial-gradient(rgba(245, 158, 11, 0.15) 1px, transparent 1px)',
+          backgroundImage: `radial-gradient(rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2) 1px, transparent 1px)`,
           backgroundSize: '24px 24px'
         }} />
       )}
@@ -1186,8 +1371,17 @@ const OverlayPage: React.FC = () => {
 
       {/* Setup Mode Info Banner */}
       {!isLocked && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-[#f59e0b]/30 px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#f59e0b] flex items-center gap-2 justify-center">
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border px-4 py-2 rounded-xl text-center shadow-lg z-50 pointer-events-none"
+          style={{
+            borderColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.35)`,
+            boxShadow: `0 8px 24px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.25)`
+          }}
+        >
+          <p
+            className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2 justify-center"
+            style={{ color: activeAccent }}
+          >
             <Unlock size={12} className="animate-pulse" /> Vorschaumodus
           </p>
         </div>
@@ -1204,15 +1398,38 @@ const OverlayPage: React.FC = () => {
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] pointer-events-auto"
           >
-            <div className={`px-5 py-3 rounded-2xl border backdrop-blur-2xl shadow-2xl flex items-center gap-3.5 ${
-              overlayNotify.type === 'traffic'
-                ? 'bg-zinc-950/95 border-red-500/50 text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)]'
-                : 'bg-zinc-950/95 border-amber-500/50 text-white shadow-[0_10px_30px_rgba(245,158,11,0.35)]'
-            }`}>
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                overlayNotify.type === 'traffic' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
-              }`}>
-                {overlayNotify.type === 'traffic' ? <AlertTriangle size={20} className="animate-pulse" /> : <MapPin size={20} />}
+            <div
+              className={`px-5 py-3 rounded-2xl border backdrop-blur-2xl flex items-center gap-3.5 ${
+                overlayNotify.type === 'traffic'
+                  ? 'bg-zinc-950/95 border-red-500/50 text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)]'
+                  : 'bg-zinc-950/95 text-white'
+              }`}
+              style={
+                overlayNotify.type === 'traffic'
+                  ? undefined
+                  : {
+                      borderColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.5)`,
+                      boxShadow: `0 10px 30px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.45)`,
+                    }
+              }
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={
+                  overlayNotify.type === 'traffic'
+                    ? undefined
+                    : {
+                        backgroundColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2)`,
+                        color: activeAccent,
+                        boxShadow: `0 0 15px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.25)`,
+                      }
+                }
+              >
+                {overlayNotify.type === 'traffic' ? (
+                  <AlertTriangle size={20} className="animate-pulse text-red-400" />
+                ) : (
+                  <MapPin size={20} />
+                )}
               </div>
               <div>
                 <h4 className="text-xs font-black uppercase tracking-wider text-white">
@@ -1241,9 +1458,11 @@ const OverlayPage: React.FC = () => {
               widget === 'event' ? (settings.showEvent && (nextEvent || !isLocked)) :
                 widget === 'spotify' ? settings.showSpotify :
                   widget === 'gameMap' ? settings.showGameMap :
-                    settings.showDrivers;
+                    widget === 'trafficLight' ? (settings.showTrafficLight ?? true) :
+                      settings.showDrivers;
 
         if (!isEnabled) return null;
+        if (widget === 'trafficLight' && isLocked && !approachingLight) return null;
 
         let content = null;
         let dimensions = 'w-auto h-auto';
@@ -1264,6 +1483,9 @@ const OverlayPage: React.FC = () => {
           dimensions = '';
         } else if (widget === 'gameMap') {
           content = renderGameMap();
+          dimensions = '';
+        } else if (widget === 'trafficLight') {
+          content = renderTrafficLight();
           dimensions = '';
         }
 
@@ -1306,10 +1528,10 @@ const OverlayPage: React.FC = () => {
                 boxShadow: isLocked && settings.bgOpacity === 0 ? 'none' : undefined,
                 border: isLocked && settings.bgOpacity === 0 ? 'none' : undefined,
                 // Custom accent properties
-                '--custom-accent': settings.customAccentColor || '#f59e0b',
-                '--custom-border': `${settings.customAccentColor || '#f59e0b'}33`,
-                '--custom-glow': `${settings.customAccentColor || '#f59e0b'}80`,
-                '--custom-glow-subtle': `${settings.customAccentColor || '#f59e0b'}26`,
+                '--custom-accent': activeAccent,
+                '--custom-border': `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2)`,
+                '--custom-glow': `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.5)`,
+                '--custom-glow-subtle': `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.15)`,
               } as React.CSSProperties}
             >
 
@@ -1319,7 +1541,13 @@ const OverlayPage: React.FC = () => {
               {settings.style === 'carbon' && <div className="carbon-pattern" />}
               {/* Grab handle overlay (only visible when unlocked) */}
               {!isLocked && (
-                <div className="absolute inset-0 bg-primary/[0.02] border border-[#f59e0b]/20 rounded-[inherit] pointer-events-none group-hover:border-[#f59e0b]/40 transition-colors" />
+                <div
+                  className="absolute inset-0 rounded-[inherit] pointer-events-none transition-colors border"
+                  style={{
+                    backgroundColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.02)`,
+                    borderColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.25)`,
+                  }}
+                />
               )}
               {content}
             </div>
@@ -1331,12 +1559,12 @@ const OverlayPage: React.FC = () => {
         position="top-center"
         toastOptions={{
           style: {
-            background: 'rgba(13, 15, 23, 0.35)',
+            background: 'rgba(13, 15, 23, 0.85)',
             backdropFilter: 'blur(24px) saturate(210%) contrast(105%)',
             WebkitBackdropFilter: 'blur(24px) saturate(210%) contrast(105%)',
-            border: '1px solid rgba(255, 255, 255, 0.13)',
+            border: `1.5px solid rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.35)`,
+            boxShadow: `0 10px 30px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.3)`,
             color: '#f8fafc',
-            boxShadow: 'none',
           },
           className: 'custom-toast',
         }}

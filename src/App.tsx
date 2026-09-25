@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Download, CheckCircle, AlertTriangle, ChevronRight, Monitor } from 'lucide-react';
+import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Download, CheckCircle, AlertTriangle, ChevronRight, Monitor, SlidersHorizontal, HelpCircle } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import OverlayPage from './pages/Overlay';
+import SpotlightTour from './components/SpotlightTour';
 
 // Lazy load heavy components
 const Map = lazy(() => import('./pages/Map'));
@@ -21,55 +22,71 @@ const Chat = lazy(() => import('./pages/Chat'));
 const AfkBot = lazy(() => import('./pages/AfkBot'));
 const OverlaySettings = lazy(() => import('./pages/OverlaySettings'));
 const Applications = lazy(() => import('./pages/Applications'));
-const Database = lazy(() => import('./pages/Database').then(m => ({ default: m.DatabasePage })));
 
 import { useAuth } from './context/AuthContext';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { apiService } from './services/api';
 import { API_URL, API_BASE_URL, getAvatarUrl } from './config';
 import { toast } from 'sonner';
+import { getActiveEventRoute } from './utils/activeNavigation';
 
 const PAGE_ORDER = [
   'dashboard',
   'events',
   'news',
   'chat',
+  'map',
   'gallery',
   'statistiken',
   'team',
   'afkbot',
-  'profile',
-  'reports',
+  'overlay-settings',
   'admin',
   'applications',
-  'database'
+  'reports',
+  'profile'
 ];
 
 const slideVariants = {
   enter: (direction: number) => ({
-    x: direction > 0 ? '100%' : '-100%'
+    x: direction > 0 ? '100%' : '-100%',
+    opacity: 0
   }),
   center: {
-    x: 0
+    x: 0,
+    opacity: 1
   },
   exit: (direction: number) => ({
-    x: direction < 0 ? '100%' : '-100%'
+    x: direction > 0 ? '-100%' : '100%',
+    opacity: 0
   })
 };
 
 function App() {
   const { user, loading, logout, hasRole } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [pageState, setPageState] = useState({ current: 'dashboard', prev: null as string | null });
+  const [prevPage, setPrevPage] = useState('dashboard');
+  const [direction, setDirection] = useState(1);
 
-  useEffect(() => {
-    setPageState(prev => (prev.current === currentPage ? prev : { current: currentPage, prev: prev.current }));
+  // Synchronously ensure direction is always accurate before render
+  if (currentPage !== prevPage) {
+    const prevIdx = PAGE_ORDER.indexOf(prevPage);
+    const currIdx = PAGE_ORDER.indexOf(currentPage);
+    const newDir = currIdx >= prevIdx ? 1 : -1;
+    if (newDir !== direction) {
+      setDirection(newDir);
+    }
+    setPrevPage(currentPage);
+  }
+
+  const navigateTo = useCallback((page: string) => {
+    if (page === currentPage) return;
+    const prevIdx = PAGE_ORDER.indexOf(currentPage);
+    const nextIdx = PAGE_ORDER.indexOf(page);
+    setDirection(nextIdx >= prevIdx ? 1 : -1);
+    setPrevPage(page);
+    setCurrentPage(page);
   }, [currentPage]);
-
-
-  const prevIdx = PAGE_ORDER.indexOf(pageState.prev || 'dashboard');
-  const currIdx = PAGE_ORDER.indexOf(pageState.current);
-  const direction = currIdx >= prevIdx ? 1 : -1;
 
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | number | 'me'>('me');
@@ -82,6 +99,23 @@ function App() {
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>('dark');
   const [navbarMode, setNavbarMode] = useState<'text' | 'icon' | 'hamburger'>('text');
   const [pendingNewsCreate, setPendingNewsCreate] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (user && !loading) {
+      try {
+        const completed = localStorage.getItem('opc_onboarding_completed');
+        if (completed !== 'true') {
+          const timer = setTimeout(() => {
+            setShowOnboarding(true);
+          }, 800);
+          return () => clearTimeout(timer);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [user, loading]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -128,6 +162,14 @@ function App() {
         const { ipcRenderer } = window.require('electron');
         if (ipcRenderer) {
           ipcRenderer.send('app-ready');
+          // Synchronisiere gespeicherte Overlay- und CarPlay-Einstellungen direkt beim Start
+          const savedOverlay = localStorage.getItem('openpipeclub_overlay_settings');
+          if (savedOverlay) {
+            try {
+              const parsed = JSON.parse(savedOverlay);
+              ipcRenderer.send('overlay-settings-changed', parsed);
+            } catch (e) { }
+          }
         }
       } catch (e) { }
     }
@@ -199,6 +241,16 @@ function App() {
         ipcRenderer.invoke('rpc-status').then(setRpcActive).catch(() => { });
         const listener = (_: any, status: boolean) => setRpcActive(status);
         ipcRenderer.on('rpc-status-changed', listener);
+
+        const initialConvoy = getActiveEventRoute();
+        if (initialConvoy) {
+          ipcRenderer.send('rpc-set-active-convoy', {
+            eventId: initialConvoy.eventId,
+            eventTitle: initialConvoy.eventTitle,
+            startCity: initialConvoy.startCity,
+            endCity: initialConvoy.endCity,
+          });
+        }
 
         const rpcErrorListener = (_: any, errorType: string) => {
           if (errorType === 'eperm') {
@@ -567,28 +619,28 @@ function App() {
     switch (n.type) {
       case 'chat':
       case 'chat_group':
-        setCurrentPage('chat');
+        navigateTo('chat');
         break;
       case 'news':
-        setCurrentPage('news');
+        navigateTo('news');
         break;
       case 'event':
-        setCurrentPage('events');
+        navigateTo('events');
         break;
       case 'application':
-        setCurrentPage('applications');
+        navigateTo('applications');
         break;
     }
   };
 
   const viewProfile = (id: string | number) => {
     setSelectedMemberId(id);
-    setCurrentPage('profile');
+    navigateTo('profile');
   };
 
   const viewOnMap = (id: string | number) => {
     setTargetMapId(id);
-    setCurrentPage('map');
+    navigateTo('map');
   };
 
   const getAvatarUrlLocal = (url?: string) => getAvatarUrl(url);
@@ -625,7 +677,7 @@ function App() {
     { id: 'statistiken', name: 'Statistiken', icon: Route },
     { id: 'team', name: 'Team', icon: Users },
     { id: 'afkbot', name: 'AFK Bot', icon: Bot },
-    { id: 'overlay-settings', name: 'Overlay', icon: Monitor },
+    { id: 'overlay-settings', name: 'Einstellungen', icon: SlidersHorizontal },
   ];
 
   if (canSeeAdmin) {
@@ -656,7 +708,7 @@ function App() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`${navbarMode === 'hamburger' ? 'block' : 'hidden'} p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-[#f59e0b]/20 hover:border-amber-400 transition-all`}
+              className={`${navbarMode === 'hamburger' ? 'block' : 'hidden'} p-2 text-slate-300 hover:text-white bg-[#0f111a]/60 backdrop-blur-md rounded-xl border border-primary/20 hover:border-primary transition-all`}
               onClick={() => setMenuOpen(!menuOpen)}
               data-testid="hamburger-btn"
             >
@@ -678,11 +730,11 @@ function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentPage(item.id)}
+                  onClick={() => navigateTo(item.id)}
                   title={item.name}
                   className={`transition-all duration-300 whitespace-nowrap flex items-center justify-center ${navbarMode === 'icon'
-                    ? `p-2 rounded-xl ${isActive ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`
-                    : `px-2.5 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-amber-400 bg-white/5' : 'text-slate-300 hover:text-white hover:bg-white/10'}`
+                    ? `p-2 rounded-xl ${isActive ? 'text-primary bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`
+                    : `px-2.5 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${isActive ? 'text-primary bg-white/5' : 'text-slate-300 hover:text-white hover:bg-white/10'}`
                     }`}
                 >
                   {navbarMode === 'icon' ? <Icon size={16} className="shrink-0" /> : item.name}
@@ -695,7 +747,7 @@ function App() {
         {/* Right side: telemetry status, notifications, controls */}
         <div className="flex items-center gap-3 shrink-0" style={{ WebkitAppRegion: 'no-drag' }}>
           {/* Combined Status Pill */}
-          <div className="hidden md:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
+          <div id="tour-status-pills" className="hidden md:flex flex-row bg-[#080a14]/65 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1 gap-3 items-center shadow-md">
             <div className="flex flex-row gap-2 border-r border-white/10 pr-3">
               <div className="flex items-center gap-1.5" title={rpcActive ? "Discord RPC Aktiv" : "Discord RPC Aus"}>
                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${rpcActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse' : 'bg-red-500'}`}></span>
@@ -707,6 +759,18 @@ function App() {
               <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest leading-none">SDK</span>
             </div>
           </div>
+
+          {/* Driver Onboarding / App Tour */}
+          <motion.button
+            id="onboarding-tour-btn"
+            onClick={() => setShowOnboarding(true)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="p-2 rounded-xl text-slate-400 hover:text-primary hover:bg-primary/10 transition-all relative"
+            title="Hilfe & App-Tour starten"
+          >
+            <HelpCircle size={18} />
+          </motion.button>
 
           {/* Bell */}
           <motion.button
@@ -736,7 +800,7 @@ function App() {
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 380, damping: 28 }}
                   className="fixed w-80 frosted-card !rounded-2xl !p-0 shadow-[0_40px_100px_rgba(0,0,0,0.9)] z-[100] overflow-hidden"
-                  style={{ top: notifPos.top, right: notifPos.right, border: "2px solid rgba(245,158,11,0.2) !important", background: "rgba(13,15,23,0.48) !important", backdropFilter: "blur(30px) saturate(210%) contrast(105%) !important", WebkitBackdropFilter: "blur(30px) saturate(210%) contrast(105%) !important" }}
+                  style={{ top: notifPos.top, right: notifPos.right, border: "2px solid rgba(var(--app-accent-rgb, 245, 158, 11), 0.25) !important", background: "rgba(13,15,23,0.48) !important", backdropFilter: "blur(30px) saturate(210%) contrast(105%) !important", WebkitBackdropFilter: "blur(30px) saturate(210%) contrast(105%) !important" }}
                 >
                   <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                     <div className="flex items-center gap-2">
@@ -777,7 +841,7 @@ function App() {
           {/* User Profile */}
           {user && (
             <button
-              onClick={() => { setCurrentPage('profile'); setSelectedMemberId('me'); }}
+              onClick={() => { setSelectedMemberId('me'); navigateTo('profile'); }}
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-white/5 transition-all group shrink-0"
               title={user.username}
             >
@@ -831,19 +895,35 @@ function App() {
 
       {/* Main Content */}
       <main className="relative z-10 h-screen w-full overflow-hidden transition-all duration-300 ease-in-out">
-        <div className="w-full h-full">
+        <div className="w-full h-full relative overflow-hidden">
           <AnimatePresence initial={false} mode="wait" custom={direction}>
           <motion.div
             key={currentPage}
             custom={direction}
-            variants={slideVariants}
+            variants={
+              showOnboarding
+                ? {
+                    enter: { opacity: 0, x: 0 },
+                    center: { opacity: 1, x: 0 },
+                    exit: { opacity: 0, x: 0 },
+                  }
+                : slideVariants
+            }
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{
-              x: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-              exit: { x: { duration: 0.1, ease: [0.16, 1, 0.3, 1] } }
-            }}
+            transition={
+              showOnboarding
+                ? { duration: 0.18, ease: 'easeOut' }
+                : {
+                    x: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+                    exit: {
+                      x: { duration: 0.1, ease: [0.16, 1, 0.3, 1] },
+                      opacity: { duration: 0.1 }
+                    }
+                  }
+            }
               className={
                 currentPage === 'map'
                   ? "absolute inset-0 w-full h-full overflow-hidden"
@@ -859,18 +939,17 @@ function App() {
                 <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             }>
-              {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={setCurrentPage} onNewsCreate={() => { setPendingNewsCreate(true); setCurrentPage('news'); }} telemetry={telemetry} />}
+              {currentPage === 'dashboard' && <Dashboard onViewProfile={viewProfile} onNavigate={navigateTo} onNewsCreate={() => { setPendingNewsCreate(true); navigateTo('news'); }} telemetry={telemetry} onOpenOnboarding={() => setShowOnboarding(true)} />}
               {currentPage === 'team' && <Team onViewProfile={viewProfile} />}
               {currentPage === 'statistiken' && <Stats />}
-              {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} onNavigate={setCurrentPage} />}
+              {currentPage === 'admin' && canSeeAdmin && <Admin onViewProfile={viewProfile} onNavigate={navigateTo} />}
               {currentPage === 'applications' && hasRole(['admin', 'management']) && <Suspense fallback={<div>Lädt...</div>}><Applications /></Suspense>}
-              {currentPage === 'database' && isAdmin && <Database onBack={() => setCurrentPage('admin')} />}
               {currentPage === 'events' && <Events selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
               {currentPage === 'map' && <Map onViewProfile={viewProfile} initialSelectedId={targetMapId} onClearInitialId={() => setTargetMapId(null)} theme={theme} />}
               {currentPage === 'news' && <News selectedId={selectedId} onClearSelectedId={() => setSelectedId(null)} openCreate={pendingNewsCreate} onConsumeCreate={() => setPendingNewsCreate(false)} />}
               {currentPage === 'gallery' && <Gallery />}
               {currentPage === 'chat' && <Chat selectedChannelId={selectedId} onClearSelectedId={() => setSelectedId(null)} />}
-              {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => setCurrentPage('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
+              {currentPage === 'profile' && <Profile memberId={selectedMemberId} onBack={() => navigateTo('dashboard')} telemetry={telemetry} onViewOnMap={viewOnMap} />}
               {currentPage === 'afkbot' && <AfkBot />}
               {currentPage === 'reports' && <Reports />}
               {currentPage === 'overlay-settings' && <OverlaySettings />}
@@ -923,15 +1002,25 @@ function App() {
                 </button>
               </div>
               <div className="flex flex-col gap-2 overflow-y-auto no-scrollbar pr-2 no-drag">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowOnboarding(true);
+                  }}
+                  className="w-full text-left px-4 py-3.5 rounded-xl flex items-center gap-3.5 transition-all duration-300 no-drag pointer-events-auto bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 mb-1"
+                >
+                  <Compass size={20} className="animate-spin-slow" />
+                  <span className="text-sm font-bold font-['Unbounded'] uppercase tracking-wider">App-Einführung</span>
+                </button>
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => {
-                      setCurrentPage(item.id);
+                      navigateTo(item.id);
                       setMenuOpen(false);
                     }}
                     className={`w-full text-left px-4 py-4 rounded-xl flex items-center gap-4 transition-all duration-300 no-drag pointer-events-auto ${currentPage === item.id
-                      ? 'bg-amber-400/10 text-amber-400 font-bold'
+                      ? 'bg-primary/10 text-primary font-bold'
                       : 'text-slate-300 hover:text-white hover:bg-white/5'
                       }`}
                   >
@@ -1129,6 +1218,14 @@ function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* On-Page Spotlight Tour */}
+      <SpotlightTour
+        isActive={showOnboarding}
+        currentPage={currentPage}
+        onNavigate={navigateTo}
+        onClose={() => setShowOnboarding(false)}
+      />
     </div >
   );
 }

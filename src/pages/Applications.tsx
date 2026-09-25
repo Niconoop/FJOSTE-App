@@ -42,13 +42,13 @@ const ApplicationCard = ({ app, onAction }: any) => {
   };
 
   return (
-    <motion.div variants={staggerChild} className="frosted-card !p-0 overflow-hidden border border-white/5 shadow-xl bg-[#000000] border-2 border-[#f59e0b]/20">
+    <motion.div variants={staggerChild} className="frosted-card !p-0 overflow-hidden border border-white/10 shadow-xl bg-[#000000] hover-glow hover:border-primary transition-all">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left p-5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors hover-glow"
       >
-        <div className="w-12 h-12 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center shrink-0">
-          <UserIcon className="w-6 h-6 text-amber-400" />
+        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+          <UserIcon className="w-6 h-6 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
@@ -60,8 +60,8 @@ const ApplicationCard = ({ app, onAction }: any) => {
           <div className="flex items-center gap-4 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
             <span className="flex items-center gap-1"><Clock size={12} /> {app.age} Jahre</span>
             <span className="flex items-center gap-1"><MessageSquare size={12} /> {app.discord_id}</span>
-            {app.truckersmp_info && <span className="flex items-center gap-1 text-amber-400/70"><UserIcon size={12} /> TMP</span>}
-            {app.trucklinemp_info && <span className="flex items-center gap-1 text-amber-400/70"><UserIcon size={12} /> TLMP</span>}
+            {app.truckersmp_info && <span className="flex items-center gap-1 text-primary/70"><UserIcon size={12} /> TMP</span>}
+            {app.trucklinemp_info && <span className="flex items-center gap-1 text-primary/70"><UserIcon size={12} /> TLMP</span>}
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -101,7 +101,7 @@ const ApplicationCard = ({ app, onAction }: any) => {
                           {app.truckersmp_info.avatar && (
                             <img src={app.truckersmp_info.avatar} alt="TMP Avatar" className="w-10 h-10 rounded-lg border border-white/10 shrink-0" />
                           )}
-                          <p className="text-xs font-black text-amber-400 uppercase tracking-widest select-none">TruckersMP Info</p>
+                          <p className="text-xs font-black text-primary uppercase tracking-widest select-none">TruckersMP Info</p>
                         </div>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between border-b border-white/5 pb-1">
@@ -186,7 +186,7 @@ const ApplicationCard = ({ app, onAction }: any) => {
                           {app.trucklinemp_info.user?.image && (
                             <img src={app.trucklinemp_info.user.image} alt="TLMP Avatar" className="w-10 h-10 rounded-lg border border-white/10 shrink-0" />
                           )}
-                          <p className="text-xs font-black text-amber-400 uppercase tracking-widest select-none">Truckline MP Info</p>
+                          <p className="text-xs font-black text-primary uppercase tracking-widest select-none">Truckline MP Info</p>
                         </div>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between border-b border-white/5 pb-1">
@@ -255,7 +255,7 @@ const ApplicationCard = ({ app, onAction }: any) => {
                     value={note}
                     onChange={e => setNote(e.target.value)}
                     placeholder="Notiz (optional, wird bei Ablehnung an Discord gesendet)"
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300 min-h-[80px]"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 outline-none transition-all duration-300 min-h-[80px]"
                   />
                   <div className="flex gap-3">
                     <button
@@ -344,13 +344,13 @@ const Applications = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">Bewerbungen</h1>
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-primary uppercase tracking-tight italic">Bewerbungen</h1>
         </div>
         <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Verwalte die Bewerbungen neuer Fahrer für dein VTC.</p>
       </div>
 
-      <div className="flex items-center gap-1 bg-black/40 backdrop-blur-xl p-1 rounded-xl border-2 border-[#f59e0b]/20 w-fit">
+      <div className="flex items-center gap-1 bg-black/40 backdrop-blur-xl p-1 rounded-xl border-2 border-primary/20 w-fit">
         {[
           { id: "all", label: `Alle (${apps.length})` },
           { id: "pending", label: `Offen (${apps.filter(a => a.status === "pending").length})` },
@@ -375,7 +375,7 @@ const Applications = () => {
       >
         {loading ? (
           [1, 2, 3].map(i => (
-            <div key={i} className="frosted-card !p-0 overflow-hidden border-2 border-[#f59e0b]/20 animate-pulse">
+            <div key={i} className="frosted-card !p-0 overflow-hidden border-2 border-primary/20 animate-pulse">
               <div className="w-full text-left p-5 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center shrink-0" />
                 <div className="flex-1 min-w-0 space-y-2">

@@ -2,6 +2,819 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.7.63] - 2026-09-22
+
+### 🔍 Perfekte Ausrichtung für Statistiken, Team-Karten & Fahrerprofil
+  - **📊 Exakte Passform der Statistiken-KPIs ([Stats.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Stats.tsx), [SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Höhen-Abschneidung behoben**: `#tour-stats-container` liegt nun präzise direkt auf dem 6-Spalten-KPI-Grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`).
+    - **Vollständige Karten-Umrahmung**: Der leuchtende Spotlight-Rahmen umschließt nun alle 6 KPI-Karten (Fahrer, Jobs, Gesamt KM, Umsatz, Fracht, Max Level) in voller Höhe, ohne mitten durch die Zahlen abzuschneiden.
+  - **👥 Fokussierung der Team-Fahrer-Karte ([Team.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Team.tsx), [SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Kein gigantischer Leerraum mehr**: `#tour-team-container` wurde von der riesigen Überschrift "Unsere Mitglieder" entfernt und gezielt auf die **erste Team-Fahrerkarte** (Inhaber/Fahrer mit Avatar, Krone, Name, Rolle, KM & Umsatz) gelegt.
+    - **Perfektes Andocken**: Das Erklärfenster dockt nun rechts neben der Fahrerkarte an und erklärt passgenau: *"Hier lernst du deine Kollegen und Ansprechpartner kennen."*
+  - **👤 Zuverlässige Profil-Erkennung & Observer ([Profile.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Profile.tsx), [SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Sichtbarkeit bei Ladezeiten**: `#tour-profile-container` wurde sowohl in der Skeleton-Ladeanzeige als auch in der echten Profil-Infoleiste verankert.
+    - **MutationObserver & aktiver ResizeObserver**: Ein globaler `MutationObserver` in [SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx) erkennt das Eintreffen asynchroner API-Daten sofort und dockt den Spotlight-Rahmen ohne Timeouts oder Verluste direkt an das Element an.
+    - **Positionierung**: Das Erklärfenster positioniert sich nun ergonomisch unterhalb der Profil-Infoleiste.
+
+## [1.7.62] - 2026-09-22
+
+### 🎯 Fix für Einflug-Animation des Erklärfensters (Kein Einfahren mehr von oben links)
+  - **✨ Direkte Verankerung am Zielelement ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Ursache behoben**: `top` und `left` des Erklärfeldes wurden zuvor als Framer-Motion-Animationseigenschaft (`animate={{ top, left }}`) übergeben, ohne dass in `initial` Ausgangswerte gesetzt waren. Dadurch nahm Framer Motion standardmäßig die Koordinaten `(0, 0)` an und animierte das Kärtchen bei jedem Schrittstart quer über den Bildschirm von ganz oben links zur Zielposition.
+    - **Statische Verankerung via Style & sanftes Vor-Ort-Einblenden**: Die Koordinaten `top` und `left` sind nun direkt im `style`-Objekt des Fensters hinterlegt. Das Kärtchen wird dadurch vom ersten Render-Frame an millimetergenau an der Zielposition neben dem Element gerendert und blendet mit einem dezenten, edlen Spring-Effekt (`y: 8 -> 0`, `opacity: 0 -> 1`, `scale: 0.96 -> 1`) sanft an Ort und Stelle auf.
+    - **Spotlight-Cutout-Initialisierung**: Auch der Spotlight-Ring initialisiert nun direkt seine Zielkoordinaten im `initial`-Block, wodurch jegliche Flugbahn aus der linken oberen Ecke vollständig unterbunden ist.
+
+## [1.7.61] - 2026-09-22
+
+### 🚀 Perfekte Spotlight-Präzision & Butterweiche Spring-Animation
+  - **✨ Wiederherstellung der nahtlosen Spring-Gleit-Animation ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Beseitigung des 120-FPS-State-Spams**: Die vorherige `requestAnimationFrame`-Schleife, die bei jedem Frame `setTargetRect` und `setPopoverPos` aufgerufen und dadurch die Framer-Motion-Physik kontinuierlich unterbrochen hatte, wurde entfernt.
+    - **Reine Framer-Motion Spring-Physik (`stiffness: 260, damping: 25`)**: Der Spotlight-Rahmen gleitet nun wieder in einer perfekten, unterbrechungsfreien Flugbahn elegant von Element zu Element und morpht flüssig zwischen Kreis und Card-Form.
+    - **Schlanke Settle-Checkpoints (200 ms & 450 ms)**: Statt permanenter State-Updates wird die Zielposition einmalig angesprungen und nach Auslaufen des Smooth-Scrollings präzise nachjustiert.
+  - **🔘 Zentrierte Kreis-Passform für Icons ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Exakter Radius & Abstand**: Für Icon-Buttons wie die Benachrichtigungsglocke (`#notif-bell`) wird ein symmetrisches Padding von 6 px und `borderRadius: 9999` verwendet. Der leuchtende Kreis sitzt nun zentriert auf der Glocke und schneidet den benachbarten Fahrer-Avatar nicht mehr an.
+  - **⚡ Beseitigung der Seitenwechsel-Verschiebung ([App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx), [SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Kein 800-ms-Horizontalsliden während der Tour**: In [App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx) wird bei aktiver Onboarding-Tour auf das 800 ms lange `x: 100%`-Hereinsliden verzichtet und stattdessen eine direkte, saubere Fade-Transition (`opacity: 0.18s, x: 0`) genutzt. Neue Seiten erscheinen sofort an ihren echten X/Y-Koordinaten, sodass der Zielrahmen nicht mehr während der Bewegung falsch erfasst wird.
+    - **Sanfter Übergang via `isNavigatingPage`**: Während des schnellen Seitenwechsels blendet die Tour kurz aus (`opacity: 0`) und springt erst auf der neuen Seite auf das Ziel auf, wodurch zuckende Zwischenpositionen verhindert werden.
+  - **🎯 Präzise Zielcontainer-Fokussierung**:
+    - **Profil ([Profile.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Profile.tsx))**: `#tour-profile-container` von der 3.000-Pixel-Hauptseite auf die schwebende Info-Leiste (Distanz, Fahrten, Punkte) verlegt.
+    - **Overlay-Einstellungen ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**: `#tour-overlay-container` vom riesigen Formular auf die 4-Tab-Leiste (Overlay, CarPlay, App, TMP UI) verlegt.
+    - **Team ([Team.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Team.tsx))**: `#tour-team-container` auf den Statistik-Header gelegt, damit das Element auch während des API-Ladens verlässlich im DOM auffindbar ist.
+    - **Statistiken ([Stats.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Stats.tsx))**: `#tour-stats-container` auch auf den Skeleton-Loader gelegt, um Ladezeit-Versatz auszuschließen.
+
+## [1.7.60] - 2026-09-22
+
+### 💫 Wiederherstellung der flüssigen Spring-Animation & Passgenaue Spotlight-Maße
+  - **✨ Morphing & Perfekte Element-Umrahmung ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Wiederherstellung der fließenden Spring-Transition**: Der ununterbrochene `<motion.div>`-Spotlight animiert nun wieder kontinuierlich `top`, `left`, `width`, `height` und `borderRadius` per Spring-Physik (`stiffness: 280, damping: 26`). Beim Klick auf "Weiter" gleitet und morpht der Rahmen nahtlos von Button zu Card.
+    - **Passgenaue Abmessungen ohne Versatz**: Falsche Mindestbreiten-Erzwingungen (`Math.max(60, ...)`) wurden vollständig entfernt. Icons wie die Benachrichtigungsglocke werden nun mit exakter zentrierter Kreisform (`borderRadius: 9999`) umrahmt, ohne nach rechts in den Avatar zu ragen.
+    - **Inner-Scroll-Container-Reset**: Da in der App nicht `window`, sondern der innere Container `.overflow-y-auto` scrollt, wird nun beim Seitenwechsel `el.scrollTop = 0` auf allen Scrollcontainern aufgerufen, wodurch jede neue Seite sauber von ganz oben beginnt.
+
+## [1.7.59] - 2026-09-22
+
+### 🎯 Präzise Positions-Nachführung & Scroll-Synchronisation
+  - **✨ Dynamisches Live-Tracking des Tour-Spotlights ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - **60/120 Hz Continuous RAF-Tracking**: Nach jedem Seitenwechsel oder Schrittwechsel wird die exakte Position des Zielelements für 1200 ms per `requestAnimationFrame` auf jedem Frame aktualisiert. Dadurch gleitet der Spotlight-Rahmen live mit der CSS-Einfahr-Animation (`animate-in duration-500`) und dem Smooth-Scroll mit, ohne zu versetzen.
+    - **Beseitigung von CSS-Transitions-Lag**: Die CSS-Klasse `transition-all duration-300` am Spotlight-Rahmen wurde entfernt, sodass Positions- und Größenanpassungen ohne 300 ms Verzögerung direkt an den DOM-Koordinaten haften.
+    - **Automatischer Scroll-Reset bei Seitenwechsel**: Beim Springen auf eine neue Unterseite wird der Window-Scroll sofort auf `top: 0` zurückgesetzt, damit keine alten Scroll-Offsets der vorherigen Seite vererbt werden.
+    - **Gezielte Umrahmung auf der Events-Seite**: `#tour-events-list` umschließt in [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx) jetzt ausschließlich den Bereich "Anstehende Events" und nicht mehr die gesamte Seite inklusive vergangener Events.
+    - **Header-Schutz & Viewport-Clamping**: Die Y-Position des Erklärkärtchens ist nach oben hin fest auf mindestens 76 px geclampt, wodurch das Kärtchen unter keinen Umständen mehr oben abgeschnitten werden oder hinter der Navigationsleiste verschwinden kann.
+
+## [1.7.58] - 2026-09-22
+
+### 🐛 Stabilitäts-Fix: Seitenwechsel & Erklärmodul-Sichtbarkeit
+  - **✨ Fix für verschwindendes Erklärfeld bei Unterseiten ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - **`isNavigating`-State-Lock beseitigt**: Beim automatischen Seitenwechsel (z.B. von Dashboard auf Events) wurde durch den React-Render-Zyklus der Timeout für `isNavigating(false)` vorzeitig gelöscht, wodurch das Erklärfeld fälschlicherweise dauerhaft ausgeblendet blieb. Die Bedingung wurde entfernt, da Framer-Motion `AnimatePresence` Seitenübergänge ohnehin reibungslos animiert.
+    - **Robustes Polling für Ladezeiten**: Das Finden der Ziel-Elemente nach einem Seitenwechsel erfolgt nun über ein Intervall-Polling (alle 70 ms bis zu 35 Versuche = 2,5 s). Dadurch wartet die Tour geduldig, bis asynchrone Daten und Komponenten vollständig im DOM gemountet sind.
+    - **Fail-Safe Fallback**: Sollte ein Ziel-Element selbst nach dem Polling noch nicht auffindbar sein, zentriert sich das Kärtchen automatisch im Viewport, statt zu verschwinden, sodass der Fahrer die Tour immer weiterführen kann.
+    - **Sofortiges Mounting von `#tour-events-list`**: In [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx) wurde der ID-Wrapper um die gesamte Event-Zone gelegt, sodass das Element auch während des API-Ladens (`loading`) sofort im DOM existiert.
+
+## [1.7.57] - 2026-09-22
+
+### 🎨 Farbkorrektur: Dynamisches Theme statt Amber in der App-Tour
+  - **✨ Beseitigung aller statischen Amber-Farben in der Spotlight-Tour ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Spotlight-Ausschnitt & Ping-Animation**: Feste `rgba(245, 158, 11, ...)` und `border-amber-400` durch die dynamische CSS-Variable `var(--primary, #0ea5e9)` sowie `var(--primary-glow)` ersetzt. Der Fokus-Ring passt sich nun perfekt an das gewählte Theme (z.B. Blau/Cyan) an.
+    - **Kompaktes Erklärfeld (Popover)**: Rahmenfarbe, Schattierung und die oberseitige Akzentlinie nutzen jetzt `var(--primary)` und `var(--primary-glow)`.
+    - **Badges & Infoboxen**: Kategorie-Pille und Fahrer-Tipp-Boxen verwenden Farb-Mixings auf Basis von `var(--primary)` statt fixer Amber-Töne.
+    - **Checkbox "Nicht mehr anzeigen"**: Explizites Styling mit `accentColor: 'var(--primary)'` integriert, wodurch das Häkchen in der eingestellten Theme-Farbe dargestellt wird.
+    - **"Weiter / Fertig"-Button**: Auf `var(--primary)` und `var(--primary-glow)` vereinheitlicht.
+  - **📱 Header & Dashboard ([App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx), [Dashboard.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Dashboard.tsx), [DriverOnboardingModal.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/DriverOnboardingModal.tsx))**:
+    - Kompass-Tour-Buttons im Header, Mobile Drawer und auf der Dashboard-Startseite von `text-amber-400` / `bg-amber-500/10` auf `text-primary` / `bg-primary/10` umgestellt.
+    - Globale Input-Regel in [index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css) für `input[type="checkbox"]` und `input[type="radio"]` erweitert (`accent-color: var(--primary)`).
+
+## [1.7.56] - 2026-09-22
+
+### 🧭 Interaktive On-Page Spotlight-Tour & Fahrer-Einführung
+  - **✨ Direkte On-Page-Hervorhebung mit Erklärung im kleinen Feld ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx), [App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx), [Dashboard.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Dashboard.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx), [News.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/News.tsx), [Chat.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Chat.tsx), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [Gallery.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Gallery.tsx), [Stats.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Stats.tsx), [Team.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Team.tsx), [AfkBot.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/AfkBot.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [Profile.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Profile.tsx))**:
+    - **Direkt auf der Seite erklärt**: Die Tour springt live zur jeweiligen Unterseite, scrollt das relevante Element in den Fokus und hebt es mit einem leuchtenden goldenen Spotlight-Ring (`border-amber-400`, abgedunkelte Umgebung per Riesen-Box-Shadow) hervor.
+    - **Kompaktes Erklärfeld direkt daneben**: Ein kleines, schwebendes Frosted-Glass-Kärtchen dockt sich dynamisch an das hervorgehobene Element an und erklärt dessen Nutzen in leicht verständlicher Sprache.
+    - **Strikter Fokus auf normale Fahrer**: Erklärt ausschließlich für Fahrer zugängliche Kernfunktionen. Keine Erwähnung von Admin-Bereichen, Benutzerverwaltung oder Event-/News-Erstellung.
+    - **17 geführte On-Page Stationen**:
+      1. **Header - Telemetrie-Pills**: Statusanzeigen für Discord RPC und In-Game SCS Telemetrie-Plugin (SDK).
+      2. **Header - Info-Zentrale**: Benachrichtigungen bei Tourstarts, Frachtankunft und Club-Updates.
+      3. **Dashboard - Fahrer-Zentrale**: Begrüßungskarte mit Level, Rang und Schnellzugriff.
+      4. **Dashboard - Tages-KPIs**: Kilometer, erledigte Fahrten und Bruttoumsatz des aktuellen Tages.
+      5. **Dashboard - Nächste Events**: Sofortige Vorschau anstehender Konvois auf der Startseite.
+      6. **Dashboard - Neueste News**: Schnellübersicht aktueller Mitteilungen direkt im Dashboard.
+      7. **Events - Konvoi-Liste & Teilnahme**: 1-Klick Zu-/Absage und GPS-Routenübernahme ins Spiel.
+      8. **News - Community-Beiträge**: Neuigkeiten und Patch-Notes lesen, liken und kommentieren.
+      9. **Chat - Funk-Kanäle**: Allgemein-Kanal, thematische Räume und private Direktnachrichten (DMs).
+      10. **Live-Karte - Steuerung & Staus**: Karten-Ebenen, Serverauswahl und Stauwarnungen (z.B. C-D Road).
+      11. **Live-Karte - Fahrerliste**: Schnelle Ortung und Kamera-Fokus auf aktive Clubkollegen.
+      12. **Galerie - Aufnahmen**: Screenshots der Community, Likes und eigener Fotoupload.
+      13. **Statistiken - Fahrtenbuch**: Automatische Erfassung aller Touren, Tonnage, Erlöse und Monats-Rankings.
+      14. **Team - Mitglieder**: Speditionsteam, Fahrerprofile und Discord-/Steam-Links.
+      15. **AFK Bot - Schutz**: Verhindert Server-Timeouts auf vollen TruckersMP-Servern bei Raststätten-Pausen.
+      16. **Einstellungen - Overlay & CarPlay**: Ingame-HUD (F9), Cockpit-Armaturenbrett für Tablets und Personalisierung.
+      17. **Profil - Fahrerakte**: Avatar, Social-Links, LKW-Garage und Auszeichnungen.
+    - **Intelligente Positionierung**: Das kleine Feld positioniert sich automatisch oben, unten, links oder rechts vom markierten Element und passt sich an Monitorgröße und Scroll-Position an.
+    - **Volle Tastatur- & Maussteuerung**: Weiter mit Pfeil-Rechts / Enter, Zurück mit Pfeil-Links, Beenden mit Escape oder X-Button.
+    - **Aufruf & Persistenz**: Automatischer Erststart bei neuen Fahrern (`localStorage.getItem('opc_onboarding_completed')`), "Nicht mehr anzeigen"-Option und jederzeit erneut startbar über die Kompass-Buttons im Header, Mobile-Menü und Dashboard.
+
+## [1.7.55] - 2026-09-21
+
+### 🚚 Integration des offiziellen TruckersMP GameClientSDK & Reaktivierung der Spieleranzeige
+  - **🗺️ Auslesen der Mehrspieler-Trucks über das offizielle SDK ([traffic.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.cpp), [dllmain.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/dllmain.cpp))**:
+    - Das bisherige Memory-Pattern-Scanning nach `base_ctrl` und Fahrzeuglisten wurde durch das offizielle C++17 [TruckersMP GameClientSDK](https://github.com/TruckersMP/GameClientSDK) abgelöst, da die Speicheroffsets durch das neue ETS2-Update ungültig wurden.
+    - `OPCGameBridge.dll` (v1.1.0) registriert sich direkt beim TruckersMP-Client über `truckersmp_init` und empfängt Mehrspieler-Ereignisse.
+    - Synchronisation auf dem Haupt-Thread über `session.Render().OnPreRender` (~20 Hz) mit Fallback auf `frame_start`.
+    - Vollständige Erfassung von globalen 3D-Koordinaten (`position.x`, `position.y`, `position.z`), Rotation (`heading`), Geschwindigkeit, Bounding-Boxen und echten TruckersMP-Spieler-IDs.
+    - Der eigene LKW wird automatisch über `GetLocalPlayer()` ausgefiltert, damit die eigene Markierung auf der Karte nicht verdoppelt wird.
+    - Volle Kompatibilität mit dem Shared Memory Buffer `Local\OPCTrafficData` für MapLibre (`GameMapWidget.tsx`), CarPlay und Ingame-Overlay.
+
+## [1.7.54] - 2026-09-19
+
+### 🏙️ Behebung der „0 Spieler in der Stadt“-Anzeige im Ingame-Overlay & verbesserte Stadt-Erkennung
+  - **🐛 Direkte Trucky-Verkehrsdatenabfrage & Proxy-Fallback ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - Die Stadt-Einfahrt-Prüfung rief zuvor `${API_URL}/trucky/traffic` auf, was im Cloudflare-Worker-Backend einen 404-Fehler erzeugte und die Verkehrsdatenliste dauerhaft leer ließ (`playersInCity = 0`).
+    - Abfrage erfolgt nun direkt über die offizielle Trucky Traffic API (`https://api.truckyapp.com/v2/traffic?server=...&game=ets2`) mit automatischem Fallback auf den neuen Backend-Proxy.
+    - Dynamische Server-Erkennung: Ermittelt automatisch den aktiven TruckersMP-Server (z. B. Simulation 1, Simulation 2, ProMods, Arcade) aus der aktiven Sitzung.
+  - **⚡ Live-Sensorik & Multiplayer-Ermittlung ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - Einbindung der Shared-Memory-Telemetrie (`Local\OPCTrafficData` via `OPCGameBridge`): Werden in der Sichtweite echte TruckersMP-Spieler-LKW (`isTmp`) detektiert, fließen diese live als Minimum in die Spieleranzahl der Stadt ein.
+    - Im Mehrspielermodus wird bei erkannter Stadt garantiert mindestens `1 Spieler` (der Fahrer selbst) anstelle von irreführenden `0 Spieler` angezeigt.
+  - **🌍 Erweiterte Stadt- & Namenserkennung ([ets2Cities.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/data/ets2Cities.ts))**:
+    - `findCity` bereinigt nun neben `(City)` und `(Road)` auch Suffixe wie `(Port)`, `(POI)` und `(HQ)`.
+    - Diakritische Normalisierung (z. B. `Timişoara`, `Bihać`, `Niš`, `Zürich`) und Unterstützung von Underscore-Bezeichnungen (`banja_luka`, `veliko_tarnovo`, `sosnovy_bor`).
+    - Integriertes Alias-Wörterbuch für internationale und mehrsprachige Bezeichnungen (`Munich` → `München`, `Cologne` → `Köln`, `Vienna` → `Wien`, `Belgrade` → `Beograd`, `Venice` → `Venezia`, etc.).
+    - Bereinigung von falschen Substring-Matches (z. B. verhinderte Fehltreffer von `Venice` auf `Nice`).
+  - **🚗 Präzise Stau-Warnung & Hysterese ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - Hysterese bei Stadteinfahrten: Benachrichtigung triggert bei Einfahrt (≤ 3.800 m) und setzt die Stadt erst zurück, wenn man sich deutlich außerhalb befindet (> 6.500 m), wodurch Randflackern auf Autobahnumfahrungen eliminiert wird und ein erneutes Einfahren zuverlässig erkannt wird.
+    - Spezielle Straßenkoordinaten (`alpen road`, `c-d road`, `calais - duisburg`, `truckersmp hq`) in Spielkoordinaten hinterlegt, sodass Stau-Warnungen auf Brennpunktstrecken exakt auslösen.
+  - **🌐 Backend-Proxy-Routen ([routes_desktop.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/backend/app/routes_desktop.py), [server.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/backend/server.py))**:
+    - Neue Proxy-Endpunkte `/api/trucky/traffic` und `/api/trucky/traffic/servers` im Worker-Backend mit automatischem Browser-User-Agent und 20-Sekunden-Cache.
+
+## [1.7.53] - 2026-09-19
+
+### 🔤 Markante Schriftart 'Unbounded' (App-Überschriften) in TruckersMP
+  - **✨ Unbounded für Ingame & Live-Simulator ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - TruckersMP nutzt nun auf Nutzerwunsch die selbe Schriftart wie die Überschriften der App: **Unbounded**.
+    - Bei aktivierter Ingame-Schriftart kopiert `tmp-apply-skin` die Datei `Unbounded.ttf` in die Schriftarten-Zieldateien (`shared_mod/fonts/`).
+    - Der Live-Simulator in `OverlaySettings.tsx` rendert Fenstertitel, Servernamen und Bedienelemente dynamisch mit `font-unbounded`.
+    - Einstellungskarte auf `Unbounded (App-Überschriften)` aktualisiert.
+
+## [1.7.52] - 2026-09-19
+
+### 🖼️ Layout-Anpassung & Behebung der Vorlagen-Bildübernahme
+  - **✨ 1:1 Cockpit-Layout nach Original-Screenshot ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - **Oben links**: Einstellungen- und Autoren-Buttons (`settings.png`, `authors.png`) authentisch in das Shell-Layout eingebettet.
+    - **Obere Bildmitte**: Das OPC Firmenlogo (`truckers_white_final.png`) sitzt nun oberhalb der Anmeldemaske zentriert im oberen Drittel.
+    - **Unten links**: ModDB "MOD OF THE YEAR 2014"-Wappen und "60 FPS"-Anzeige hinzugefügt.
+    - **Unten rechts**: Versionsbezeichnung `0.2.6.0.0 Alpha`.
+    - **Anmeldemaske**: Feine, halbtransparente Optik mit maskierten Feldern und originalen Button-Designs.
+  - **🚫 Keine Vorlagenbilder mehr kopiert ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Der bereitgestellte Vorlagenordner `TMP UI - Open Pipe Club` wird strikt nur als strukturelles Vorbild verstanden und nicht als Asset-Quelle.
+    - Alle automatischen Fallbacks auf Vorlagenbilder (`server_item_*.png`, `background*.png`) in `tmp-get-info` und `tmp-apply-skin` wurden vollständig entfernt.
+    - Es werden ausschließlich Grafiken ins Spiel injiziert, die der Nutzer explizit in der App hinterlegt hat.
+
+## [1.7.51] - 2026-09-19
+
+### 🎮 Authentische TruckersMP-Vorschau (Serverauswahl & Anmeldemenü), 7680 × 864 px Banner & Typografie
+  - **✨ 1:1 Live-Simulator für TruckersMP ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - **Serverauswahl ("Select the server")**: Exakter Nachbau des Spielfensters inklusive Titelleiste, 6 Servern (Simulation 1 & 2, [US], [Asia], Arcade, ProMods), originalen TMP-Icons (`collisions.png`, `speedlimiter.png`, `cars_for_players.png`), schlanker Schriftarten, feiner Spieleranzahl (`2123 / 3500`), rotem Auslastungsbalken, interaktivem blauen Auswahlrahmen und "Join the server!"-Button.
+    - **Anmeldemenü ("Login to your account")**: 16:9-Vollbildvorschau mit offiziellem Firmenbanner (`truckers_white_final.png`) oben links, zentriertem Login-Fenster mit maskierten Passwörtern, Checkboxen und originaler Alpha-Versions-Warnung unten.
+    - Direkter Umschalter zwischen beiden Ansichten im Simulator-Header.
+  - **🐛 Bugfix: Dateiauswahldialog für Serverlisten-Banner ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Ein unbeabsichtigter Aufruf von `openImageFileDialog` wurde korrigiert: Der native IPC-Dialog `tmp-pick-image` wird nun zuverlässig aufgerufen.
+  - **📐 Native Banner-Auflösung 7680 × 864 px ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Die Dimensionen der Serverlisten-Banner (`server_item_{0..4}.png` / `_sel.png`) wurden auf das native Format 7680 × 864 px (ca. 8,888:1) angepasst.
+    - Zuschneide-Editor (Crop-Modal) und Generator rendern und exportieren verlustfrei in 7680 × 864 px.
+  - **🔤 Ingame-Typografie-Korrektur ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Die breite Navbar- und Überschriften-Schriftart `Unbounded` wurde vollständig aus der Ingame-Simulation entfernt, da TruckersMP ein schlankes, neutrales Sans-Schriftbild nutzt.
+    - Auch im Mod-Export wird `Unbounded` nicht mehr für Spielfonts verwendet, sondern eine wohlproportionierte, saubere Typografie garantiert.
+
+## [1.7.50] - 2026-09-19
+
+### ⚙️ Discord RPC: Angepasster Status-Text für Overlay-Einstellungen
+  - **🔄 RPC-Text geändert ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Wenn der Nutzer sich im Tab `Overlay Settings` befindet, zeigt die Discord-RPC nun `⚙️ Passt die Einstellungen an` statt des bisherigen `⚙️ Passt Overlay & App an`.
+
+## [1.7.49] - 2026-09-19
+
+### 📐 Interaktiver Bildausschnitt-Editor für Serverlisten-Banner
+  - **✨ Vertikales Verschieben & Drag-to-Crop ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Beim Auswählen eines Bildes sowie über den Button `Ausschnitt anpassen` öffnet sich der neue interaktive Zuschneidedialog.
+    - Nutzer können das Bild mit der Maus nach oben oder unten ziehen (`cursor-grab` / `cursor-grabbing`), um den sichtbaren Bildausschnitt (1280 × 280) festzulegen.
+    - Schieberegler mit Sofortvorschau (0% bis 100%), Schnellwahltasten `[Oben (0%)]`, `[Mitte (50%)]`, `[Unten (100%)]` sowie Zoom-Steuerung (1.0x bis 2.5x).
+    - Einblendbares TruckersMP-Serverleisten-Overlay zum Prüfen der Text- und Statusanzeigen.
+    - Präzises Canvas-Zuschneiden auf 1280 × 280 px.
+
+## [1.7.48] - 2026-09-19
+
+### 🚛 Offizielles Firmenbanner & 5 Serverlisten-Banner (Normal & Ausgewählt)
+  - **✨ Passendes Firmenbanner ohne Custom-Upload-Zwang ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Das offizielle Open Pipe Club Firmenbanner wurde im passgenauen Format für TruckersMP erstellt (`truckers_white_final.png` mit 1600 × 391 px und `truckers_white_final_small.png` mit 800 × 195 px) inklusive Club-Logo, Cyber-Glow und Unbounded/Outfit Typografie.
+    - Die Option für manuellen Custom-Upload wurde entfernt. Der Nutzer wählt nun direkt und klar zwischen dem **offiziellen Open Pipe Club Firmenbanner** und dem **Standard TruckersMP-Banner**.
+  - **✨ Serverlisten-Banner für Server 1 bis 5 ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Umschaltbar zwischen **Club-Banner** und **Standard TMP Server-Banner**.
+    - Pro Server (Server 1 bis 5) stehen nun jeweils zwei Grafiken zur Verfügung:
+      1. **Nicht ausgewählt (Normal)**: `server_item_{0..4}.png`
+      2. **Ausgewählt (Selected)**: `server_item_{0..4}_sel.png`
+    - Neue Generator-Funktion `⚡ Aus Normalbild generieren`: Errechnet auf Knopfdruck aus der normalen Servergrafik automatisch die abgedunkelte und mit der gewählten UI-Akzentfarbe akzentuierte Ausgewählt-Grafik.
+  - **✨ TruckersMP Live-Simulator erweitert**:
+    - Menüleiste zeigt das aktive Firmenbanner.
+    - Interaktiver Server-Wähler `[S1] [S2] [S3] [S4] [S5]` mit Umschaltung zwischen Normal- und Ausgewählt-Zustand per Mausklick.
+
+## [1.7.47] - 2026-09-19
+
+### 🚚 Firmenbanner-Option, App-Schriftarten in TruckersMP & Vorlagen-Entfernung
+  - **✨ Vorlage-Button & automatische Zwangsvorlagen entfernt ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Der Button "Vorlage" wurde vollständig entfernt.
+    - Die 7 Standardvorlagen werden nicht mehr ungefragt in die Slot-Liste geladen; stattdessen startet der Nutzer mit den aktuell installierten Hintergründen oder mit einer sauberen leeren Slot-Liste samt "+ Jetzt Bilder hinzufügen"-Schaltfläche.
+    - Die Slots sind übersichtlich als `Hintergrund #{n}` benannt ohne Vorlagen-/Custom-Unterscheidung.
+  - **✨ Firmenbanner vs. Standard TruckersMP Banner ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Neue Option zur Wahl des Serverlisten-Banners (`shared_mod/ui/server_item_*.png`):
+      - **Open Pipe Club Firmenbanner**: Zeigt das offizielle Club-Banner auf allen Serverlisten-Tabs an.
+      - **Eigenes Banner**: Nutzer können eine eigene Datei für ihr Firmenbanner auswählen.
+      - **Standard TruckersMP-Banner**: Entfernt die benutzerdefinierten Server-Items, sodass TruckersMP automatisch seine originalen Vanilla-Banner lädt.
+  - **✨ Ingame-Schriftart aus App & Webseite (`Unbounded` & `Outfit`) ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - TruckersMP kann nun mit den Schriftarten der Open Pipe Club App und Webseite betrieben werden (`shared_mod/fonts/`):
+      - `Unbounded` für markante Headlines, Servernamen und Titelleisten.
+      - `Outfit` für Menüs, Buttons, Statusanzeigen und UI-Beschriftungen.
+      - Beinhaltet Fallback auf die Standard TruckersMP Schriftart (OpenSans).
+  - **✨ Aktualisierter TruckersMP Live-Simulator**:
+    - Zeigt die ausgewählten Schriftarten (`font-unbounded` / `font-outfit`) und das gewählte Server-Banner in Echtzeit in der interaktiven Vorschau an.
+
+## [1.7.46] - 2026-09-19
+
+### 🎨 Volle dynamische Farb- & Glow-Unterstützung im TruckersMP UI-Tab
+  - **✨ Amber-Reste eliminiert & Custom-Farbauswahl optimiert ([src/pages/OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - **Individuelle Preset-Farben**: Die Preset-Buttons (z. B. Apple Blau, Racing Rot, Cyber Cyan) leuchten beim Auswählen exakt in ihrer eigenen Farbe (`borderColor`, `backgroundColor`, `boxShadow`), anstelle des vorherigen hartcodierten Amber-Glows (`rgba(245,158,11,0.25)`).
+    - **Vollständiges Custom-Theming**: Alle Cards, Hover-Glows, Überschriften, Icons, Code-Badges, Slot-Highlights und Aktions-Buttons ("In TruckersMP anwenden", "+ Bild(er) hinzufügen") passen sich sofort der ausgewählten Farbe `tmpColor` an.
+    - **Direkte HEX-Eingabe & Custom-Indikator**: Direkteingabe für Farbcodes (z. B. `#007aff`) und optische Status-Hervorhebung der Custom-Schaltfläche bei Nicht-Preset-Farben.
+    - **Verbesserte Skin-Engine**: `recolorTmpSkin` erfasst alle gesättigten Pixelelemente in `ui_skin.png` und konvertiert sie fehlerfrei in den Zielfarbton.
+
+## [1.7.45] - 2026-09-19
+
+### 🚚 Neuer Tab 'TruckersMP UI' in den Overlay-Einstellungen
+  - **✨ Anpassung von Hintergrundbildern & UI-Farbe ([src/pages/OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Dynamischer Hintergrund-Manager**: Beliebig viele Menü-Hintergrundbilder (`background0.png`, `background1.png`, usw.) per Multi-Select hinzufügen, austauschen, duplizieren oder löschen.
+    - **Echtzeit-Farbanpassung**: Farbpaletten-Schnellauswahl und stufenloser Colorpicker mit automatischer Recoloring-Engine für `ui_skin.png`.
+    - **TruckersMP Live-Simulator**: Interaktiver Simulator des Menüs mit Live-Hintergrundwechsel und eingefärbter UI.
+    - **1-Klick-Installation**: Automatische Erkennung des TruckersMP-Datenordners und direktes Schreiben nach `ets2_mod/ui` und `shared_mod/ui`.
+    - **⚡ Performance-Boost**: Disk- & Memory-Caching für Thumbnails (`tmp_thumb_cache`) und Vermeidung von gigantischen Base64-Strings über IPC beseitigt Ruckler beim Laden von 8K-Bildern vollständig. 40ms-Debounce auf der Color-Picker-Recoloring-Engine.
+
+## [1.7.44] - 2026-09-19
+
+### 🎨 Custom Farbton & Glow für alle Overlay-Benachrichtigungen
+  - **✨ Dynamischer Akzent & Glow ([src/pages/Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [src/main.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/main.tsx), [src/index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css))**:
+    - Das Top-Banner für Städte-Benachrichtigungen (`overlayNotify`), der Vorschaumodus-Banner, die Toaster-Benachrichtigungen und `.toast-resumed` leuchten nun in der gewählten Custom-Akzentfarbe statt im starren Amber-Glow.
+    - Die CSS-Root-Variablen (`--primary`, `--primary-glow`, etc.) werden live im Overlay-Fenster synchronisiert und OverlayPage wurde mit `ThemeProvider` umschlossen.
+
+## [1.7.43] - 2026-09-19
+
+### 🚚 Spieler-Limit im CarPlay & Ingame-Karte aufgehoben
+  - **✨ Bis zu 1.024 umgebende TruckersMP-Fahrzeuge simultan ([electron/telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs), [electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Die Schleifenbeschränkung von 50 Fahrzeugen im Shared-Memory-Reader (`Local\OPCTrafficData`) wurde auf 1.024 Fahrzeuge erweitert.
+    - Alle in Renderreichweite befindlichen TruckersMP-Fahrer werden nun ohne Abschneiden live an die MapLibre-Kartenkomponente übergeben und dargestellt.
+    - C# Telemetrie-Bridge `opc-telemetry-bridge.exe` wurde mit den neuen Puffergrößen kompiliert.
+
+## [1.7.42] - 2026-09-19
+
+### 📍 Präzise Standort-Ermittlung auf der Live-Karte (Dresden-Fehler behoben)
+  - **✨ Echtzeit-Koordinatenauflösung für alle Fahrer ([src/pages/Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx))**:
+    - **Fahrer-Detailkarte**: Die Infokarte der Live-Karte löst den aktuellen Fahrerstandort nun dynamisch über `findClosestCity` direkt aus den Spielkoordinaten auf (analog zur Profilseite), anstatt sich auf veraltete oder fehlerhaft zugewiesene Backend-Textwerte zu verlassen.
+    - **Fahrerliste & Filter**: Auch in der Fahrerliste der Seitenleiste sowie im Suchfilter wird der präzise ermittelte Standort angezeigt.
+    - **Backend-Verbesserung**: `routes_desktop.py` priorisiert die 2D-Kartenachse und vermeidet Fehlabgleiche mit der Höhenachse; Salzburg und umliegende Städte wurden zur Fallback-Städteliste hinzugefügt.
+
+## [1.7.41] - 2026-09-18
+
+### 💬 Wording-Optimierung im Discord-RPC (Entfernung von "sichtet" & "Neuigkeiten")
+  - **✨ Zeitgemäße & sympathische Status-Texte ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Events**: `📅 Konvois & Events` statt `Sichtet Events & Konvois`
+    - **News**: `📰 Liest die Club-News` statt `Liest VTC-Neuigkeiten`
+    - **Team**: `👥 Fahrer & Team-Übersicht` statt `Sichtet das Fahrer-Team`
+
+## [1.7.40] - 2026-09-18
+
+### 📱 Ausführliche & dynamische Discord-RPC Texte für alle App-Seiten
+  - **✨ Präzise Seitentexte & Unterseiten-Kontext ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Dashboard**: `📊 Im Fahrer-Dashboard`
+    - **Karte**: `🗺️ Erkundet die Live-Karte`
+    - **Events & Konvois**: `📅 Sichtet Events & Konvois` bzw. `🗺️ Plant eine Konvoi-Route` (beim Erstellen/Planen)
+    - **Chat / Funk**:
+      - Gruppenkanäle: `💬 Funk: #general` (dynamischer Kanalname)
+      - Direktnachrichten: `💬 Schreibt mit [Fahrername]`
+      - Allgemein: `💬 Im Firmenfunk & Chat`
+    - **Fahrer-Profile**:
+      - Eigenes Profil: `👤 Bearbeitet eigenes Profil`
+      - Fremdes Profil: `👤 Profil von [Fahrername]`
+    - **Statistiken**: `📈 Prüft VTC-Statistiken`
+    - **Galerie**: `📸 In der Foto-Galerie`
+    - **News**: `📰 Liest VTC-Neuigkeiten`
+    - **Team**: `👥 Sichtet das Fahrer-Team`
+    - **Einstellungen**: `⚙️ Passt Overlay & App an`
+    - **AFK-Bot**: `🤖 Anti-AFK Assistent aktiv`
+    - **Bewerbungen**: `📝 Prüft Bewerbungen`
+    - **Schadensberichte**: `📑 Liest Schadensberichte`
+    - **Admin & Management**: `🛡️ Im Management-Bereich`
+    - **Datenbank**: `🗄️ Verwaltet Datenbank`
+
+## [1.7.39] - 2026-09-18
+
+### 🎮 Modernisierung & Verschönerung des Discord Rich Presence (RPC) Status
+  - **🚛 Fahrzeug- & Serverfokus bei aktiver Fahrt ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Zeile 1 (Status)**: `🚛 Scania S-Serie • 🌐 Simulation 1` (Formatierte LKW-Markennamen wie `Scania S-Serie`, `Volvo FH16`, `MAN TGX` statt unschöner interner Rohdaten wie `scania s_2016`).
+    - **Zeile 2 (Strecke & Fracht)**: `📍 Hamburg ➔ München (320 km) • 📦 Diesel` mit elegantem Pfeil (`➔`) und automatischer Anzeige der verbleibenden Navigationsdistanz.
+    - **Leerfahrt / Freeroam**: `🚛 Scania S-Serie • 🌐 Simulation 1` / `🛣️ Auf Achse • ⚡ 85 km/h` bzw. `🅿️ Rastplatz / Leerfahrt`.
+    - **Spielpause**: `⏸️ Scania S-Serie • 🌐 Simulation 1` / `📍 Hamburg ➔ München • ⏸️ Pausiert`.
+  - **🏢 Ausführlicher Drivers-Hub-Status außerhalb des Spiels ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Zeile 1**: `🏢 Open Pipe Club • Drivers Hub`
+    - **Zeile 2**: Dynamischer Seitenstatus mit passenden Emojis (z. B. `🗺️ Plant eine Konvoi-Route`, `📊 Im Dashboard`, `📅 Sichtet Events & Konvois`, `💬 Im Firmenfunk & Chat`, `📈 Prüft Fahrer-Statistiken`, `📸 In der Foto-Galerie`).
+  - **🛡️ 128-Zeichen-Schutz ([electron/main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Automatisches Kürzen überlanger Fracht- oder Städtekombinationen, um Abstürze oder stille Ablehnungen durch die Discord-API zuverlässig zu verhindern.
+
+## [1.7.38] - 2026-09-18
+
+### 🎯 Vereinheitlichte GPS-Pins für Start/Ziel & Beseitigung von Schatten-Banding
+  - **🚫 Behebung des schwarzen Schatten-Rings / Bandings am Himmel ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Ursache*: Zuvor wurden 5 diskrete Striche mit runden Linienenden (`lineCap = 'round'`) und sehr großen Breiten (bis zu 540 px) gezeichnet, wodurch um den Startpunkt Hamburg konzentrische, sichtbare Abstufungs-Ringe (Color-Banding) den dunklen Kartenhintergrund über den Himmel legten.
+    - *Lösung*: Die Maskierung nutzt nun echte Gauss'sche Weichzeichnung (`filter = blur(...)`) in kompakterer Breite (140 px). Der Übergang ist mathematisch absolut stufenlos, seidenweich und erzeugt keinerlei sichtbare Ringe oder Schattenkuppeln mehr am Himmel.
+  - **📍 Exakte Positionierung an den echten Routen-Endpunkten ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Start- und End-Koordinaten werden jetzt direkt an den ersten und letzten Scheitelpunkt der tatsächlichen Vektor-Routenlinie gekoppelt (`routeLngLatCoords[0]` & `routeLngLatCoords[last]`).
+    - Das Ziel sitzt nun präzise an der Endspitze der Route (und nicht mehr mitten auf der Strecke in Salzburg, wenn die Route bis zu einem Depot/Euroacres weiterführt).
+  - **💎 Integrierte, moderne GPS-Pin-Badges ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Statt drei separater, kollidierender Elemente (Kreis, schwebende Kapsel, drunterstehende Stadt) gibt es nun pro Punkt ein elegantes, kompaktes Gesamtkunstwerk:
+      - **Zielscheiben-Ring auf der Straße**: Ein leuchtender Anker-Ring (Grün für Start, Weiß für Ziel) markiert punktgenau die Straße.
+      - **Schwebende Kapsel mit Zeigerspitze**: Zeigt mit einer präzisen Dreiecksspitze direkt auf den Straßenpunkt (automatisch nach oben zeigend, falls zu nah am oberen Bildschirmrand).
+      - **Integrierter Aufbau**: Links das Icon (`▶` im grünen Kreis oder `🏁` im Zielflaggen-Kreis), daneben `START`/`END`, eine feine Trennlinie und der passende Stadtname (`HAMBURG` / `SALZBURG`).
+      - Keine Überlappungen oder abgeschnittenen Ränder mehr.
+
+## [1.7.37] - 2026-09-18
+
+### 🌫️ Echter 100% bis 0% Karten-Fade-Out & Ausgewogene Hintergrund-Helligkeit
+  - **✨ Weicher Alpha-Fade-Out von 100 % (sichtbar) bis 0 % (unsichtbar) ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Bisher*: Das Straßennetz wurde vollflächig über den gesamten Canvas gezeichnet und nur durch ein transparentes Schwarz-Overlay leicht gedämpft, wodurch Straßen in weit entfernten Regionen überall sichtbar blieben.
+    - *Neu mit Alpha-Maskierung (`destination-in`)*: Die Karte wird auf einem separaten Offscreen-Canvas gezeichnet und über mehrlagige, weichgezeichnete Korridor-Pinselstriche maskiert. Entlang der Route sind die Straßen zu 100 % gestochen scharf sichtbar; zu den Rändern hin verblasst das Straßennetz stufenlos bis auf 0 % (völlige Transparenz).
+    - An den Außenrändern ist nun ausschließlich das atmosphärische Scania-Hintergrundbild ohne störende Straßen-Netze zu sehen.
+  - **🚛 Ausgewogene Hintergrund-Helligkeit ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Überstrahlung des Scania-Artworks wurde korrigiert. Die Abdunklungs-Stufen wurden auf ein harmonisches Maß (46 % bis 70 %) angepasst, sodass Himmel und Sonnenuntergang nicht mehr blenden, während der Scania-Truck und seine Dachbeleuchtung stimmungsvoll zur Geltung kommen.
+  - **📍 Korridor-Beschränkung für schematische Städte ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Es werden nur noch Städte im Umkreis von ~130 km der Route gerendert und am Korridor-Rand sanft mit ausgeblendet, damit weit entfernte Orte (z. B. Kiel, Rostock, Linz, Praha) nicht vereinzelt im leeren Hintergrund schweben.
+  - **🏷️ Bereinigung von Depot-Codes bei Start und Ziel ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Bei internen Firmen-/Depotnamen (z. B. `AI`, `Euroacres`) wird nun automatisch die nächstgelegene echte Stadt (z. B. `HAMBURG`, `INNSBRUCK`) unter dem Start-/Ziel-Beacon angezeigt.
+
+## [1.7.36] - 2026-09-18
+
+### 🌟 Helleres Hintergrundbild, verfeinerte START/ZIEL-Badges & Seitlicher Akzentbalken
+  - **📐 Seitlicher Akzentbalken am Event-Widget ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Der obere horizontale Balken wurde entfernt und durch einen leuchtenden, vertikalen Akzentbalken an der linken Außenkante des Info-Widgets ersetzt.
+  - **🚛 Helleres & klar sichtbares Scania-Hintergrundbild ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Abdunklung des Hintergrunds wurde drastisch gelockert (Overlay von 76 % auf 22 % reduziert) und die Karten-Transparenz so abgestimmt, dass der Scania-Truck mit Kabine, Dachlampen und Landschaft klar und stimmungsvoll hinter dem Straßennetz leuchtet.
+    - Die Vignette wurde auf 25 % sanftes Ausblenden zurückgenommen.
+  - **🏁 Verschönerte & kollisionsfreie START- & ZIEL-Markierungen ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Kein Überlappen mehr*: Beacons und weiße Pill-Kapseln haben jetzt einen sauberen Abstand, sodass die Renn-Zielflagge und die grüne Bake vollständig rund und unbeschnitten bleiben.
+    - *Stadtnamen-Kollision behoben*: Städteknoten direkt an Start und Ziel werden nicht mehr doppelt unter den Badges gerendert, sondern sauber zentriert unterhalb der Baken platziert.
+    - *Premium-Design*: Glänzende weiße Kapseln mit tiefem Weichzeichnungs-Schatten, feiner Konturlinie und scharfem Kontrast.
+
+## [1.7.35] - 2026-09-18
+
+### 🔲 Bereinigung redundanter Maximieren-/Zentrieren-Buttons im Routenplaner
+  - **🚫 Entfernung des irreführenden quadratischen Zentrierungs-Buttons ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Problemursache*: Die Funktion `fitToRoute` nutzte fälschlicherweise das Maximieren-Symbol `<Maximize2 />`. Im Vollbildmodus wurde dieser Button neben „Route als Bild übernehmen“ angezeigt (obwohl das Fenster bereits maximiert war), und im eingebetteten Modus stand er direkt neben dem Button `Großansicht` (der ebenfalls `<Maximize2 />` trug). Dadurch schienen zwei Maximieren-Buttons nebeneinander zu existieren.
+    - *Lösung*: Die redundanten Buttons wurden entfernt. Im eingebetteten Modus gibt es nun ausschließlich die eindeutige Schaltfläche `Großansicht`, und im Vollbildmodus bleibt der Header sauber mit `Route als Bild übernehmen` und `Schließen`. Die Route zentriert sich weiterhin automatisch.
+
+## [1.7.34] - 2026-09-18
+
+### 🏙️ Entfernung doppelter Karten-Städte & Sanfterer Korridor-Fade-Out
+  - **🚫 Entfernung der doppelten Original-Kartenbeschriftungen ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Ebenen `ets2-cities-points` (oranger Kreis) und `ets2-cities-labels` (kleine untere Map-Schrift) wurden aus dem Map-Style entfernt.
+    - Dadurch existiert kein störender doppelter Stadtname mehr: Es wird ausschließlich der saubere, schematische TruckersMP-Knotenpunkt (weißer Kreis mit markanter Großbuchstaben-Schrift `BREMEN`) gerendert.
+  - **🌤️ Deutlich abgeschwächter & breiterer Fade-Out-Verlauf ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Der Korridor um die Route wurde von 400px auf 850px mehr als verdoppelt (`850px`, `550px`, `320px`, `150px`).
+    - Die Masken-Deckkraft wurde von 100 % hartem Schwarz auf ein dezentes 45 % Vignette-Overlay reduziert.
+    - Das umgebende Straßennetz und die Landschaft bleiben dadurch im gesamten Kartenausschnitt hell und klar erkennbar.
+
+## [1.7.33] - 2026-09-18
+
+### 💜 Wiederherstellung der lila Routenlinie & TruckersMP-Konvoi-Posterdesign
+  - **💜 Lila Routenlinie auf der Karte ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Routen-Vektorlinie (`planner-route-line`) erstrahlt wieder im satten, strahlenden Lila/Flieder (`#c084fc`) und der Außen-Glow (`planner-route-glow`) im tiefen Violett (`#a855f7`).
+    - Die Theme-Synchronisation überschreibt die Routenfarbe nicht mehr, sodass die Strecke stets mit perfektem lila Neon-Kontrast über Straßen und Landschaft leuchtet.
+
+  - **✨ Kinematisches TruckersMP-Konvoi-Poster in 4K ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - *Kinematischer Hintergrund*: Lädt und rendert das stimmungsvolle Scania-Truck-Artwork im Hintergrund mit abgedunkeltem, tiefblau-schwarzem Farbverlauf, sodass Straßen und Strecke im Vordergrund optimal leuchten.
+    - *Schematische Städte im U-Bahn-/Infografik-Stil*: Zeichnet im Streckengebiet automatisch prägnante, weiße Netzknoten-Punkte mit hochkontrastigen, serifenlosen Großbuchstaben-Stadtlabels (`KÖLN`, `FRANKFURT`, `STUTTGART`, `MÜNCHEN`, `SALZBURG`, `INNSBRUCK`, `GRAZ`, `KLAGENFURT`, etc.).
+    - *Direkte START- & ZIEL-Badges auf der Karte*:
+      - **START**: Leuchtend grünes Baken-Signal mit weißem Kapsel-Badge `START` direkt am Startort.
+      - **ZIEL**: Zielflaggen-Rennbake im Schachbrettmuster mit weißem Kapsel-Badge `🏁 END` am Zielort.
+      - **Zwischenstopps**: Nummerierte Punkte im Farbakzent der Spedition entlang des Routenverlaufs.
+    - *Rechts oben: Frosted Glass Event-Widget*:
+      - 📅 **Datum**: Formatiert (z. B. `14th September 2024`) mit Kalender-Vektor-Icon in Akzentfarbe.
+      - ⏰ **Uhrzeit**: Exakte UTC-Startzeit (z. B. `17:00 UTC`) mit Uhren-Vektor-Icon.
+      - 🛣️ **Distanz**: Zweisprachige Meilen- & Kilometeranzeige (z. B. `1188 km / 738 mi`) mit Richtungs-Schild-Icon.
+      - 🏷️ **Server / DLC**: Automatische Übernahme aus Event-Formular (`Base Game`, `Simulation 1`, etc.) mit Tag-Icon.
+    - *Unten: Cinema Lower-Third Konvoi-Banner*:
+      - Breites, dunkles Glasbanner mit oberer Lichtkante.
+      - Großer Titel: `OFFICIAL CONVOY` in sattem Weiß, kombiniert mit dem Monat/Eventnamen in leuchtender Akzentfarbe.
+      - Untertitel mit Streckenverlauf (`START ➔ ZIEL • ORGANIZED BY OPEN PIPE CLUB`).
+      - Rechte Ecke: Offizielles Open Pipe Club Truck-Logo mit VTC-Schriftzug.
+
+## [1.7.32] - 2026-09-18
+
+### 🛣️ Straßensnapping, Straßenplatzierungspflicht & Fortlaufende Wegpunkt-Nummerierung
+  - **🛣️ Platzierung von Wegpunkten nur noch auf Straßen ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Straßen-Validierung*: Bei Klick auf die Karte prüft MapLibre über `queryRenderedFeatures` mit einer 24px-Klicktoleranz, ob sich an der Klickstelle eine Straße, Fähre oder Stadt befindet (`ets2-roads`, `ets2-roads-casing`, etc.). Klicks abseits von Straßen (im Wasser, Bergen oder freiem Gelände) werden mit einem Toast-Hinweis abgewiesen (`„Wegpunkte können nur auf Straßen platziert werden.“`).
+    - *Exaktes Straßensnapping*: Wenn auf oder nahe einer Straße geklickt wird, berechnet `closestPointOnSegment` den exakt nächsten Punkt auf dem Fahrbahn-Vektor und dockt die Koordinaten direkt auf der Straßenmittellinie an.
+    - *Mauszeiger-Feedback*: Beim Bewegen des Cursors über Straßen verwandelt sich der Mauszeiger automatisch in einen Klick-Zeiger (`cursor: pointer`).
+  - **🔢 Fortlaufende Wegpunkt-Nummerierung ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Problemursache*: Der Karten-Klicklistener erfasste in seiner React-Closure stets den initialen, leeren `waypoints`-Zustand (`waypoints.length` war immer 0), wodurch ausnahmslos jeder gesetzte Punkt den Text `Wegpunkt 1` erhielt.
+    - *Lösung*: Synchronisation über `waypointsRef.current`. Neue Wegpunkte werden nun verlässlich fortlaufend nummeriert (`Wegpunkt 1`, `Wegpunkt 2`, `Wegpunkt 3`, ...), sofern sie nicht im Einzugsgebiet einer Stadt liegen.
+    - *Sequenz-Badges*: Die Zwischenstopp-Pins auf der Karte nummerieren die Stopps sauber durch (`1`, `2`, `3` ... zwischen `START` und `ZIEL`).
+
+
+### 🎨 Theme-Farben-Synchronisation & Kinematische Tiefschwarz-Vignette im Routenplaner
+  - **🌑 Verlauf nach außen ins absolute Tiefschwarz ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Das Masken-Overlay wurde von 72 % Transparenz auf 100 % deckendes Tiefschwarz (`#000000`) umgestellt.
+    - Mehrstufig gestaffelter, weichgezeichneter Korridor-Punch-Through (`360px`, `240px`, `140px`, `70px`) sorgt für einen seidig weichen Übergang, bei dem die Karte entlang der Strecke perfekt beleuchtet ist und nach außen hin nahtlos in tiefes Schwarz überblendet, ohne störendes Durchscheinen entfernter Straßen.
+  - **🎨 Vollständige Synchronisation mit der individuellen Fahrer-Akzentfarbe ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Wegpunkt-Pins*: Der Hover-Rahmen, der Ambient Glow sowie Zwischenstopp-Badges und Zielpunkte nutzen nun dynamisch `appearance.accentColor` aus `ThemeContext` statt hartcodiertem Bernstein/Orange.
+    - *„Route als Bild übernehmen“-Buttons*: Sowohl im Vollbild- als auch im eingebetteten Modus nutzen Hintergrund und Schatten nun exakt die benutzerdefinierte Akzentfarbe mit passendem Farb-Glow (`boxShadow: 0 0 25px rgba(accentRgb, 0.45)`).
+    - *Routenlinie auf der Karte*: Die Map-Layer `planner-route-glow` und `planner-route-line` passen sich in Echtzeit der Akzentfarbe an.
+  - **📐 Vergrößerte Infofelder & Farbanpassung im finalen 4K-Routenbild ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Header-Karte**: Breite auf `680px * S` und Höhe auf `145px * S` vergrößert, Akzentleiste und Club-/Organisator-Tag in Fahrerfarbe gerendert, Typografie auf `28px * S` vergrößert.
+    - **Untere Glaskarte**: Höhe auf `175px * S` vergrößert, Badges (`START` / `ZIEL`) auf `30px * S`, Städtenamen auf `26px * S`, Firmennamen auf `15px * S` und Verbindungspfeile `➔` vergrößert und in Akzentfarbe koloriert.
+    - **Distanz- & Fahrzeitkacheln**: Auf `210px * S` Breite und `88px * S` Höhe erweitert mit markanter `28px * S` `Unbounded`-Zahlenanzeige und akzentfarbenem Schein.
+
+
+### 🗺️ Routenplaner & Kartengrafik: Dynamischer Organisator, Fix für Wegpunkt-Verschiebung & Redesign der Wegpunkte & Infoleiste
+  - **Dynamischer Organisator im Routenbild ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - Das Prop `organizer` wird nun von der Event-Erstellung (`form.organizer`) an den `RoutePlanner` übergeben.
+    - Im Header-Banner des generierten Routenbildes wird nun der tatsächliche Organisator dynamisch angezeigt (z. B. `SPEDITION MUSTERMANN • OFFICIAL ROUTE`) anstatt des bisher hartcodierten Strings.
+    - Farbschema im Banner von Violett auf das clubweite Amber-Design (`#f59e0b`) mit feiner Akzentlinie angepasst.
+  - **🛡️ Fix: Keine Verschiebung der Wegpunkte beim Drüberhovern ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - *Problemursache*: Der Marker-Wurzelknoten `el` besaß `hover:scale-110 transition-transform`. Da MapLibre die Marker-Position über Inline-CSS `transform: translate3d(...)` steuert, überschrieb Tailwind beim Hovern die Transformationsmatrix und der Marker sprang ruckartig über den Bildschirm.
+    - *Lösung*: `hover:scale-110` und CSS-Transform-Klassen vom MapLibre-Wurzelknoten entfernt. Marker-Anchor auf `'bottom'` fixiert.
+    - *Hover-Effekt*: Der Hover-Zustand wird nun pixelgenau über `borderColor: #f59e0b` und `boxShadow` gesteuert – ohne Verschiebung oder Wackeln der Map-Koordinaten.
+  - **✨ Redesign der Wegpunkte & unteren Leiste ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Wegpunkt-Pins**: Integrierte Dark-Glassmorphism-Kapseln mit hohem Kontrast, Pill-Badges (`START` smaragdgrün, `ZIEL` rosarot, Zwischenstopps amber), klarer weißer Schrift, nach unten zeigender Pin-Pfeilspitze und leuchtendem Ziel-Punkt direkt auf der Straße.
+    - **Infoleiste im Routenbild**:
+      - Komplett neu strukturiert und an das OPC-Design angepasst (weg vom unpassenden Violett).
+      - Dynamische Breitenberechnung für Start und Ziel mit elegantem Amber-Pfeil `➔` und optionalem Zwischenstopps-Zähler (`+ X Stopps`).
+      - Neu gestaltete Distanz- und Fahrzeit-Kacheln mit bernsteinfarbenem Schein, abgerundeten Ecken und markanter `Unbounded`-Typografie.
+    - **Interaktive Cockpit-Leiste im Vollbildmodus**:
+      - Im Vollbild-Editor wird am unteren Bildschirmrand nun eine schwebende Glassmorphism-Cockpit-Leiste mit Live-Route (Start ➔ Ziel, Distanz in km, Fahrzeit in Min./Std.) eingeblendet.
+
+## [1.7.29] - 2026-09-18
+
+### 🗑️ Bereinigung: Entfernung der System-Tools- und Datenbank-Seiten
+  - **Entfernte Seiten ([Database.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Database.tsx), [SystemTools.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/SystemTools.tsx), [App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx))**:
+    - `src/pages/Database.tsx` und `src/pages/SystemTools.tsx` vollständig aus der App und dem Dateisystem entfernt.
+    - In `src/App.tsx` den Lazy-Import `const Database = lazy(...)`, den `PAGE_ORDER`-Eintrag `'database'` und das bedingte Rendern `{currentPage === 'database' && isAdmin && <Database ... />}` bereinigt.
+
+
+### ✨ App-weites einheitliches Hover-Design: Leuchtender Rahmen & Ambient Glow auf allen restlichen Seiten vervollständigt
+  - **Nachrüstung auf allen 5 betroffenen Bereichen ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [AfkBot.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/AfkBot.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [InviteCodes.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/InviteCodes.tsx), [Database.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Database.tsx), [index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css))**:
+    - **Overlay- & CarPlay-Einstellungen (`OverlaySettings.tsx`)**: Alle 18 Konfigurationskarten (System-Dienste, Design-Stil, Skalierung & Widgets, Status & Preview-Modus, HUD Details, CarPlay Simulator, CarPlay Aktivierung & Design, Web- & Tablet-URL, Zweitdisplay & Tablet-Nutzung, etc.) sowie die Sticky-Tab-Navigationsleiste wurden auf `hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all duration-300` synchronisiert.
+    - **Anti-AFK Bot (`AfkBot.tsx`)**: Status-Kachel, Hinweiskasten, Konfiguration und Nachrichten-Pools leuchten jetzt beim Drüberhovern im gewählten Akzent-Rahmen und Glow auf.
+    - **Events (`Events.tsx`)**: Die leeren Platzhalterkarten („Zurzeit sind keine Events geplant.“ und „Noch keine vergangenen Events.“) reagieren nun ebenfalls auf Hover.
+    - **Live-Karte (`Map.tsx`)**: Das Fahrer-Popup (`selectedDriver`) sowie dessen Detailbereiche besitzen nun den synchronisierten Leuchtrahmen.
+    - **CSS-Engine (`index.css`)**: Halbtransparente Randregeln wurden mit `:not(:hover)` ausgestattet, sodass Hover-Effekte überall mit 100 % Farbintensität greifen.
+
+## [1.7.27] - 2026-09-16
+
+### ✨ App-weites einheitliches Hover-Design: Leuchtender Rahmen & Ambient Glow synchronisiert
+  - **Konsistente Hover-Optik auf ausnahmslos allen App-Seiten ([index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css), [Dashboard.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Dashboard.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx), [News.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/News.tsx), [Gallery.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Gallery.tsx), [Team.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Team.tsx), [Stats.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Stats.tsx), [Reports.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Reports.tsx), [UsersManagement.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/UsersManagement.tsx), [Applications.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Applications.tsx), [Profile.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Profile.tsx))**:
+    - *Problemursache*: Auf manchen Seiten hatten Karten nur einen abgedunkelten Rahmen (oder 50 % `color-mix`), während andere nur einen Schatten-Glow ohne sichtbaren Rahmen aufwiesen.
+    - *Lösung*: Auf allen Seiten der App (`Dashboard`, `Events`, `News`, `Gallery`, `Team`, `Statistiken`, `Reports`, `Users`, `Bewerbungen` und `Profil`) wurden die Karten einheitlich auf `hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)]` synchronisiert.
+    - In `index.css` lösen alle Hover-Selektoren mit höchster Priorität synchron beide Effekte aus:
+      1. Leuchtender Akzentrahmen: `border-color: var(--primary) !important;`
+      2. Ausstrahlender Schein & Innenlicht: `box-shadow: 0 0 25px var(--primary-glow), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25) !important;`
+    - Die Web-Frontend-Stylesheets (`frontend/`) blieben davon unberührt und wurden im Originalzustand belassen.
+
+### 📅 Fix: Dynamischer Event-Organisator auf Dashboard & Event-Seite
+  - **Korrekte Auslese des Event-Organisators ([Dashboard.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Dashboard.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - Das Dashboard und die Event-Detailkarten zeigten zuvor statisch „Veranstaltet von Open Pipe Club“ oder „Externe Spedition“ an.
+    - Nun wird das tatsächlich bei der Eventerstellung gespeicherte Feld `organizer` bzw. `organisator` ausgelesen und formatiert angezeigt.
+
+## [1.7.26] - 2026-09-16
+
+### 🗺️ Gespeicherte Routen-Wegpunkte & Direktes Laden der Event-Route ins Navi / CarPlay
+  - **Neues Routenbild wird beim Bearbeiten sofort übernommen ([Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx), [routes_content.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/backend/app/routes_content.py), [images.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/backend/app/images.py))**:
+    - Versionsbasierter Cache-Busting-Parameter an Event-Bild-URLs verhindert veraltete Browser-Caches.
+    - Server priorisiert stets die aktuelle Datenbank-Bild-ID vor dem statischen Fallback.
+  - **Wegpunkt-Persistierung im Event-Routenplaner ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx), [Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - Wegpunkte werden in der D1-Datenbank (`custom_events.route_waypoints`) gespeichert.
+    - Beim Bearbeiten eines Events werden alle Zwischenstationen und Wegpunkte wieder in die Karte geladen, ohne dass die Strecke neu geklickt werden muss.
+  - **„Route ins Navi laden“-Feature für Fahrer ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [activeNavigation.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/activeNavigation.ts))**:
+    - Schnelltaste auf Event-Karten: „Route ins Navi laden“ / „✓ Route im Navi aktiv“.
+    - CarPlay empfängt die Route sofort, zentriert die Karte und visualisiert den Streckenverlauf auf allen Dashboards und MFD-Karten inklusive Abbrechfunktion.
+
+## [1.7.25] - 2026-09-16
+
+### 🗺️ Routenplaner-Vollbild als schwebendes Modal-Fenster
+  - **Modal-Ansicht statt Vollbild-Seitenüberdeckung ([Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die vergrößerte Ansicht des interaktiven Routengenerators im Event-Erstellungsdialog füllt nicht mehr den gesamten Bildschirm (`h-screen rounded-none max-w-none p-0`), sondern öffnet sich als modernes, schwebendes Modal (`max-w-6xl 2xl:max-w-7xl h-[88vh] rounded-3xl`).
+    - Abgedunkelter Backdrop mit Blur-Effekt und rundum sichtbarem Abstand sorgt für ein nahtloses Dialog-Erlebnis.
+    - Klick auf den Hintergrund oder Drücken von `Esc` schließt das Modal direkt und bringt den Nutzer zurück zum Formular.
+    - Schneller Schließen-Button und optimierte Steuerung im Header.
+    - Das Bildübernahme-Popup (`previewPending`) schwebt ebenfalls als formschöner Dialog vor der Karte.
+
+## [1.7.24] - 2026-09-13
+
+### 🚛 Erkennung von TruckersMP-Servern bei Auftragsabgabe & Discord RPC
+  - **Präzise Log-Erkennung ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Der Log-Parser in `getTruckersMPActiveServer` unterstützt nun sowohl `.txt`- als auch `.log`-Dateien (zuvor filterte er strikt auf `.log`, weshalb alle ETS2MP-Logs ignoriert wurden).
+    - Chat-Logs (`chat_YYYY_MM_DD_log.txt`) werden nun vorrangig analysiert, um den tatsächlichen Servernamen (z. B. `Simulation 1`, `Simulation 2`, `ProMods`) exakt auszulesen.
+    - Suffixe wie `server...` werden bereinigt und IP-Verbindungen (`141.94.x.x`) automatisch zugeordnet.
+  - **Prozess- & Umgebungs-Erkennung in Native Bridge ([telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs))**:
+    - Prüfung auf geladene `core_ets2mp.dll`/`core_atsmp.dll` im Spielprozess sowie TMP-Umgebungsfahrzeuge (`isTmp`) liefert `isTruckersMp: true` direkt im Telemetrie-Stream.
+  - **Auftrags- & Discord RPC Synchronisation**:
+    - Der Servername wird zu Auftragsbeginn fixiert (`activeJobServerName`) und bei der Übergabe verlässlich übermittelt.
+    - Discord RPC zeigt ab sofort `[Simulation 1]` (bzw. den jeweiligen Server) statt dauerhaft `[Singleplayer]`.
+
+## [1.7.23] - 2026-09-13
+
+### 🟣 Dunkleres Lila für die Navigationsroute
+  - **Sattes, edles Tiefviolett ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Routenfarbe (`accentColor`) wurde vom vormals hellen Fliederton (`#8b5cf6`) auf ein deutlich kräftigeres, dunkleres Lila (`#6d28d9` – Tailwind Violet 700) umgestellt.
+    - Synchronisiert auf allen drei CarPlay-Kartenansichten (Home Dashboard, maximierte Vollbild-Karte und MFD-Kombiinstrument).
+    - Der Kernstrang (`route-remaining-line`) und der darunterliegende Weichzeichnungs-Glow (`route-remaining-glow`) heben sich nun mit starkem Kontrast noch harmonischer von hellen und dunklen Fahrbahnoberflächen ab, während die weißen Abbiegepfeile gestochen scharf hervorstechen.
+
+### 🔵 Vergrößerte Mitspieler-Marker im selben Apple CarPlay Blau auf allen CarPlay-Karten
+  - **Identische Farbgebung zum eigenen Spielermarker ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Farbe der Mitspieler-Icons (`nearbyVehicleColor`) wurde vom vorherigen Violett (`#a855f7`) auf das markante Apple CarPlay Blau (`#007aff`) umgestellt – exakt identisch zum eigenen Fahrzeugmarker.
+    - Standardwert in `GameMapWidget.tsx` sowie in allen drei CarPlay-Kartenansichten in `CarPlay.tsx` (Home Dashboard, maximierte Karte und Kombiinstrument/MFD Tacho) auf `#007aff` vereinheitlicht.
+  - **Deutliche Vergrößerung & gestochen scharfe Erkennbarkeit**:
+    - Erhöhung der Canvas-Basisauflösung von vormals 32×32 px (64×64 Retina) auf 48×48 px (96×96 px Retina).
+    - Der Symbol-Durchmesser und der Richtungszeiger wurden um ~70 % vergrößert, ergänzt durch einen kräftigen Drop-Shadow mit feinem Glühen, eine scharfe weiße Kontrastumrandung (`1.8 * s`) und eine weiße interne Richtungsanzeige im Pfeilkopf.
+    - Skalierungs-Interpolation (`icon-size`) auf der MapLibre-Ebene `nearby-vehicles-layer` massiv angehoben (Zoom 4.5: 0.75 / ~36 px; Zoom 7: 1.05 / ~50 px; Zoom 9: 1.35 / ~65 px; Zoom 11: 1.65 / ~79 px; Zoom 13: 1.9 / ~91 px).
+    - Dadurch sind andere Trucker und KI-Fahrzeuge während der Fahrt im CarPlay-Cockpit selbst bei hohen Geschwindigkeiten und auf weite Distanz sofort glasklar sichtbar.
+
+## [1.7.22] - 2026-09-12
+
+### 🗺️ ETS2 Prefab-Debugger App (Weg C) für Kreuzungs-Geometrien eingerichtet
+  - **Karten-Inspektion für ETS2-Kreuzungen & Kreisverkehre ([packages/apps/prefabs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/apps/prefabs))**:
+    - **Daten-Vorverarbeitung & Performance-Turbo ([generate_prefab_options.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_prefab_options.ts))**:
+      - Statt im Browser bei jedem Seitenaufruf ~350 MB rohe JSON-Dateien (`europe-nodes.json` mit 1,5 Mio. Knoten) zu parsen, wurde ein schlanker Builder implementiert.
+      - Erzeugt eine 27 MB kompakte `europe-prefab-options.json` mit 2.408 vollständigen ETS2-Kreuzungen, PPD-Beschreibungen und WGS84-Geokoordinaten.
+    - **Vite & Projektions-Anpassung ([PrefabSelect.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/apps/prefabs/src/PrefabSelect.tsx), [vite.config.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/apps/prefabs/vite.config.ts))**:
+      - `PrefabSelect.tsx` auf europäische ETS2-Daten und `fromEts2CoordsToWgs84`-Projektion umgestellt.
+      - Vite Dev-Server auf Port 5175 gestartet: Ermöglicht die interaktive visuelle Begutachtung sämtlicher Kreuzungs-Modelle (Kurven, Lanes, Knoten, Fahrbahn-Polygone) mit direktem Hot-Reload bei Änderungen an [prefabs.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/libs/map/prefabs.ts).
+  - **🔄 Ansatz 1: Echte `navCurves` für Kreisverkehre aktiviert ([prefabs.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/packages/libs/map/prefabs.ts))**:
+    - **Beseitigung der geraden Kreuzungslinien**: Statt die starren, geraden 2D-Proxy-Mittellinien aus den SCS-`mapPoints` quer durch den Kreisverkehr zu ziehen, erzeugt `toRoadStringsAndPolygons` die Straßen nun direkt aus den realen `navCurves` (Fahrspuren der Spiel-KI via `calculateLaneInfo`).
+    - **Getrennte Fahrspuren & Ring-Geometrie**: Die Zufahrten verengen sich an den 4 Einmündungsknoten nicht mehr zu einem einzigen Punkt, sondern fächern sich natürlich in getrennte, tangential einmündende Einfahrts- und Ausfahrtsbögen auf. Der Kreisverkehr wird nun als echter, runder Verkehrsring gerendert.
+  - **☁️ Re-Kompilierung & Cloudflare R2 Sync ([upload_pmtiles_to_r2.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/upload_pmtiles_to_r2.py))**:
+    - `ets2.geojson` (195 MB) mit den verbesserten Kreisverkehr-Kurven neu generiert.
+    - Mittels `tippecanoe` in WSL zu einer hochauflösenden Vektorkachel-Datei `ets2.pmtiles` (95 MB, Zoom 4–13) kompiliert.
+    - Vollständiger Upload auf Cloudflare R2 (`open-pipe-club-storage/map/ets2.pmtiles`, `open-pipe-club-storage/ets2.pmtiles` und `open-pipe-club-storage/map_cache/ets2.pmtiles`) – ab sofort weltweit im Live-Betrieb und CarPlay verfügbar.
+
+## [1.7.21] - 2026-09-12
+
+### 🧭 Exakte CarPlay Kartenrotation, Breitere Straßen (TruckersMudgeon) & Harmonische Routenglättung
+  - **📐 Exakte geodätische Kartenrotation ohne Meridian-Verdrehung ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Ursache der Verdrehung**: Die ETS2-Spielkoordinaten basieren auf einer konischen Lambert-Projektion (*Lambert Conformal Conic* mit Zentralmeridian auf $15^\circ$ Ost). Durch die Konvergenz der Längengrade gegenüber der Web-Mercator-Kartenprojektion (EPSG:3857) wich die flache Heading-Umrechnung um wenige Grad von der tatsächlichen Straßenachse ab (in Deutschland $3^\circ-6^\circ$, in Frankreich/UK bis zu $10^\circ-12^\circ$).
+    - **Originale TruckersMudgeon-Lösung**: Einführung von `computeExactBearing`: Ein 1.000 m vorausschauender Richtungsvektor wird im Lambert-Projektionsraum berechnet und beide Punkte über `projectGameToLatLng` in geographische WGS84-Koordinaten transformiert. Der geodätische Azimut wird anschließend exakt berechnet – die CarPlay-Karte und der Navigationspfeil sind auf jedem Längengrad zu 100 % parallel zur Fahrbahn ausgerichtet.
+  - **🛣️ Originalgetreue Straßenbreiten aus dem TruckersMudgeon-Repository ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx))**:
+    - Die bisherige starre Zoom-10-Obergrenze von nur 9 px wurde durch die originale exponentielle TruckersMudgeon-Interpolation (`['exponential', 1.5], ['zoom'], 3, 0.8, 14, 30, 16, 150`) ersetzt.
+    - Casing-Ebene (`ets2-roads-casing`) auf `line-gap-width: roadLineWidth` und `line-join: bevel` umgestellt: Autobahnen, Schnellstraßen und Ortsstraßen erscheinen im typischen CarPlay-Zoom (11 bis 13) deutlich breiter, massiver und betten die Routenlinie sauber ein.
+  - **〰️ Winkel-geklemmte Routenglättung ohne Ausbuchtungen ([routeSmoother.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/routeSmoother.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Flawed Catmull-Rom ersetzt durch einen winkel-geklemmten kubischen Hermite-Spline-Algorithmus.
+    - **Keine Überschwinger an Abbiegungen**: Bei Manövern und Kreuzungen mit Winkeln $> 35^\circ$ wird die Tangente strikt entlang der Sehne geklemmt – dadurch schlägt die Route vor oder nach Kreuzungen niemals in den Gegenverkehr oder ins Gelände aus.
+    - **Fließende Kurven**: Straßenbögen mit leichten Winkeln ($1.5^\circ$ bis $35^\circ$) werden organisch mit 5-m-Intervallen geglättet, sodass die Route ohne kantige Polygone elegant dem Straßenverlauf folgt.
+    - Dynamisches Routenfortschritt-Slicing (`sliceRouteProgress`) direkt auf den geglätteten Koordinaten mit Referenz-Tracking (`fullRemainingCoordsRef`, `rawRouteCoordsRef`).
+
+## [1.7.20] - 2026-09-12
+
+### 🧭 CarPlay Navigations-Einstellung & 🔍 Intelligentes Auto-Hide der Karten-Suchleiste
+  - **Navigationsanweisungen ein-/ausschaltbar ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Neue Einstellung `carPlayShowNavInstructions` hinzugefügt (Standard: aktiviert).
+    - **In den CarPlay-Einstellungen**: Neuer Toggle *Navigations-Anweisungen* (mit 🧭 Kompass-Symbol) direkt in der CarPlay-Schaltzentrale; steuerbar per Touchscreen, Lenkrad-Buttons oder Tastatur.
+    - **In den App-Einstellungen (Tab 2 CarPlay Cockpit)**: Praktischer Schalter im CarPlay-Designbereich zum globalen Voreinstellen.
+    - **Reaktives Ausblenden**: Bei Deaktivierung werden Abbiegehinweise, Straßennamen und Spurempfehlungs-Overlays (`CarPlayNavOverlay`) auf allen CarPlay-Kartenansichten (Homescreen-Splitscreen sowie Vollbild-Karte) vollständig ausgeblendet.
+  - **Automatisches Ausblenden der Karten-Suchleiste bei aktiver Route ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Freie Sicht auf die Route**: Sobald ein Auftrag oder eine Route aktiv ist (entweder durch Telemetrie aus ETS2/ATS oder eine manuelle CarPlay-Zielauswahl), verschwindet die Suchleiste auf der maximierten Karte automatisch mit sanfter `AnimatePresence`-Animation.
+    - **Intelligente Rückkehr**: Sobald die Fracht abgeliefert, das Ziel erreicht oder die Route abgebrochen wird, blendet sich die Firmensuche direkt wieder ein.
+    - **Fokus- & Tastatur-Anpassung**: Die Pfeiltasten- und Enter-Navigation fokussiert bei aktiver Route direkt das Routen-Steuerungs-HUD (Abbrechen / Zielinfos), ohne den Fokus auf die ausgeblendete Suchleiste zu legen.
+
+## [1.7.19] - 2026-09-12
+
+### 🚦 Vertikales Ampel-Design (Top-to-Bottom)
+  - **Vertikale Ausrichtung ([TrafficLightWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TrafficLightWidget.tsx))**:
+    - **Realistische Signalleuchten-Optik**: Die Ampel wurde von der vorherigen horizontalen Linsenleiste auf ein 100% vertikales Ampel-Design umgestellt (Rot oben, Gelb in der Mitte, Grün unten).
+    - **Kompakt-Variante**: Schlankes 58-px-Chassis mit 28-px-Signallinsen, abgerundeten Ecken und direkt darunter integrierter kompakter Countdown- & Distanzanzeige.
+    - **Groß-Variante**: Breiteres 76-px-Anthrazit-Gehäuse mit 44-px-Linsen und vertikal angegliedertem Status-Badge für maximale Lesbarkeit bei hohen Bildschirmauflösungen.
+    - **Leuchtdioden & Glow**: Strahlende Farb-Glows für aktive Linsen und dezenter Transluzenz-Look für inaktive Linsen; pulsierender Gelb-Blinker für Vorwarnungen.
+  - **Layout- & Dimensions-Migration ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Standardabmessungen für das `trafficLight`-Widget im In-Game Overlay und Simulator von vormals horizontalen `190x64 px` auf vertikale `70x160 px` (Kompakt) bzw. `84x225 px` (Groß) umgestellt.
+    - Automatische Migration vorhandener lokaler Einstellungen (`localStorage`), falls noch die alten horizontalen Dimensionen hinterlegt waren.
+
+## [1.7.18] - 2026-09-12
+
+### 🚦 Overlay Ampel-Assistent & 🗂️ 2-Tab System für die Overlay-Einstellungen
+  - **🚦 Ampel-Assistent im In-Game Overlay ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - **Echtzeit-Ampel-Widget**: Das Ampel-Widget (`trafficLight`) ist nun vollständig als eigenständiges Overlay-Widget im transparenten In-Game HUD integriert.
+    - **Intelligentes Auto-Hide**: Im gesperrten Spielmodus (`isLocked`) nimmt das Widget auf freier Strecke 0 Pixel Platz ein. Erst bei Annäherung an eine Kreuzungsampel (≤ 150 m) schaltet es sich automatisch und flüssig zu und zeigt Phasenfarbe, Restzeit-Countdown in Sekunden und Meterdistanz.
+    - **Setup-Vorschau**: Im entsperrten Vorschaumodus (`!isLocked`) wird eine Demo-Ampel mit Countdown angezeigt, sodass Fahrer das Widget pixelgenau per Drag & Drop auf dem Desktop positionieren und skalieren können.
+    - **Optionale Design-Varianten**: Unterstützt wahlweise die platzsparende Kompakt-Leiste oder die große Signalleuchte.
+  - **🗂️ 2-Tab System für die Overlay-Einstellungen ([OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - **Architektur & Trennung**: Entflechtung der bisher überfrachteten Einstellungsseite in ein modernes, am Adminbereich (`Admin.tsx`) orientiertes 2-Tab-System mit Sticky-Navigation und sanften `AnimatePresence`-Übergängen.
+    - **Tab 1: In-Game Overlay**:
+      - Konzentration auf alle HUD-bezogenen Einstellungen: System-Dienste, Design-Stile (Neon, Carbon, Minimal, Custom Palette), Skalierung & Deckkraft.
+      - Schalter **Ampel-Assistent (Echtzeit)** in der Widget-Liste inklusive Auswahl zwischen kompakter HUD-Leiste und großem Signallicht.
+      - Desktop-Simulator mit Drag & Drop, Richtlinien-Snapping und Widget-Resizing.
+    - **Tab 2: CarPlay Cockpit**:
+      - Dedizierte Schaltzentrale für das CarPlay / Android Auto Zusatzfenster: Aktivierungsschalter, Farbthemen (Dunkel, Hell, Auto) und Text-Skalierung.
+      - 9 konfigurierbare Cockpit-Alerts (Tempo, Tank, Müdigkeit, Schaden, Auftrag, Musik, Chat, News, Events).
+      - Hotkey-Rekorder für Tastatur- und Lenkrad-Button-Belegungen.
+      - Interaktiver CarPlay Splitscreen Simulator und Multi-Display Setup-Guide.
+
+## [1.7.17] - 2026-09-12
+
+### ⚡ Umfassende Full-Stack Performance- & Speicheroptimierung
+  - **🚫 Beseitigung der redundanten 33-FPS-Wegpunkt-Klonung ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - **Flaschenhals**: Bisher hat der Electron-Hauptprozess den gecachten Wegpunkt-Array (bis zu 2.000 Punkte = 6.000 Zahlen) bei jedem Telemetrie-Tick (33 Hz) an das Payload-Objekt angehängt. Über `webContents.send` (IPC) führte der V8-Structured-Clone zu **~600.000 geklonten Heap-Objekten pro Sekunde** über 3 Fenster hinweg, was signifikante Garbage-Collection-Stotterer (GC-Spikes) und unkontrollierten RAM-Zuwachs verursachte.
+    - **Lösung**: Wegpunkte werden über IPC ab sofort ausschließlich dann übertragen, wenn sie tatsächlich neu berechnet bzw. von der Spiel-Bridge aktualisiert wurden (`routeWaypoints !== undefined`). In `CarPlay.tsx` und `Overlay.tsx` werden die Wegpunkte in stabilen Refs (`cachedRouteWaypointsRef`) gehalten, wodurch der IPC-Datendurchsatz um 99,9% sinkt und unnötige Re-Tessellierungen vermieden werden.
+    - **1-Hz-Drosselung für das Hauptfenster**: Da [App.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/App.tsx) Telemetrie nur einmal pro Sekunde darstellt, werden 33-Hz-IPC-Sendungen an `win` unterdrückt und auf 1 Hz bzw. Verbindungsstatus-Änderungen beschränkt.
+  - **🗺️ MapLibre WebGL-Optimierung & 95% weniger Tile-Queries ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Throttling von `map.queryRenderedFeatures`**: Die Ermittlung des Straßentyps (`freeway`, `divided`, `local`) zur Spurberechnung fragte bisher 33 Mal/s den WebGL-Kachelindex ab. Durch Throttling auf max. alle 500 ms (oder bei mehr als 20 m Positionsverschiebung) wurden 95% der teuren Kachelabfragen vom Haupt-Thread eliminiert.
+    - **Beseitigung toter Re-Render-Zyklen**: Der ungenutzte React-State `[approachingLight, setApproachingLight]` in `GameMapWidget.tsx` wurde entfernt. Der Callback `onApproachingTrafficLightChange` wird ab sofort nur noch gefeuert, wenn sich Ampel-ID, Status, Distanz oder Countdown tatsächlich ändern, statt 33 Mal/s neue Objektinstanzen zu erzeugen.
+    - **Intelligenter Instruktionsabgleich (`areInstructionsEqual`)**: `setNavInstruction` triggert React-Updates nur noch bei veränderten Navigationsanweisungen, Distanzen, Pfeilkonfigurationen oder Manövern (Reduktion von 33 FPS auf 1–2 Updates pro Sekunde).
+    - **Zero-Footprint bei 0 Umgebungsfahrzeugen**: Befinden sich keine fremden Fahrzeuge im Umkreis (z. B. im Singleplayer oder auf freier Strecke), werden GeoJSON-Updates und `map.triggerRepaint()` vollständig übersprungen.
+    - **Automatischer Idle-Sleep bei stehendem Fahrzeug**: Steht der LKW an einer roten Ampel oder auf dem Rastplatz, pausiert `map.jumpTo()` in der 60-FPS-Animationsschleife, wodurch die GPU-Last im Stillstand auf nahezu 0% absinkt.
+  - **🏎️ Zero-Allocation Memory-Reads in der C# Telemetrie-Bridge ([telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs))**:
+    - **Statische Puffer**: Die dynamischen Allokationen (`new byte[maxKdop * 8]`, `new byte[maxSem * 16]`, `new byte[0xC0]`, `new byte[7]`, `new byte[2MB]`) in `ReadSemaphoresFromGameProcess` wurden durch wiederverwendbare, vorallokierte Klassen-Puffer (`_kdopBuffer`, `_instBuffer`, `_ruleBuffer`, `_fastCheck`, `_scanChunk`) ersetzt.
+    - **Fast-Path JSON Escaping**: `EscapeJson` prüft Strings vorab auf Sonderzeichen. Standard-Strings (z. B. Städtenamen, LKW-Modelle, Frachtbezeichnungen) passieren ohne Allokation eines neuen `StringBuilder`.
+  - **⚡ React Component Memoization & Distanz-Filterung ([TrafficLightWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TrafficLightWidget.tsx), [CarPlayNavOverlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/CarPlayNavOverlay.tsx), [SpotifyWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotifyWidget.tsx), [trafficLightDetector.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/trafficLightDetector.ts))**:
+    - `TrafficLightWidget`, `CarPlayNavOverlay` und `SpotifyWidget` sind nun mit `React.memo` geschützt und rendern sich nur bei geänderten Daten neu.
+    - In `detectApproachingTrafficLight` filtert eine Distanz-Quadrat-Prüfung (`distSq > maxDistSq`) weit entfernte Ampeln vor der Berechnung von `Math.sqrt` ab.
+
+## [1.7.16] - 2026-09-12
+
+### 🚦 Echtzeit-Ampelerfassung & Große Ampel am Tempolimit-Platz in CarPlay
+  - **Direkte In-Memory-Extraktion & Telemetrie-Bridge ([telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs), [traffic.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.cpp))**:
+    - **Singleplayer-Fix in `traffic.cpp`**: Im Singleplayer war die Liste der fremden Mitspieler-Fahrzeuge leer (`listSize == 0`), wodurch die vorherige DLL-Routine vor Erreichen des Semaphore-Codes abbrach.
+    - **Struktur-Offset korrigiert**: In Prism3D liegt `placement_t` bei `actorPtr + 0x0028` (Offset 0x00 enthielt die VTable, wodurch unplausible Koordinaten entstanden).
+    - **Nativer Fallback-Scan (`ReadSemaphoresFromGameProcess`)**: `opc-telemetry-bridge.exe` liest die aktiven Kreuzungsampeln (Status, Restzeit, Weltkoordinaten) nun direkt und hochperformant via Pointer-Chains (`base_ctrl -> kdop -> prefabs -> semInst -> trafficRule`) aus dem ETS2-Prozessspeicher aus.
+  - **Nahbereichs-Erkennung an der Haltelinie ([trafficLightDetector.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/trafficLightDetector.ts))**:
+    - Die Erkennung deckt den Bereich von 0 bis 150 m vor dem Fahrzeug ab.
+    - Im Nahbereich (≤ 15 m) vor der Kreuzung wird das Winkelfenster dynamisch erweitert, sodass seitlich auf dem Bürgersteig stehende Ampelmasten an der Haltelinie nicht aus der Ansicht verschwinden.
+  - **Schlichtes 2D-Design in Anthrazit & Ruckelfreie Positionierung ([TrafficLightWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TrafficLightWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Entfernung des Karten-Pulsmarkers**: Der gelb/orangene pulsierende Kreis-Marker direkt vor der Pfeilspitze des LKW auf der Karte wurde vollständig entfernt (inklusive Bereinigung der Cleanup-Handler in [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx)).
+    - **Größere Dimensionen & Optimierte Lesbarkeit**: Die Ampel wurde für den Fahrersitz vergrößert (Gehäusebreite 76px, Linsendurchmesser 44px) und die Typografie im Info-Badge auf fette Monospace-Größe (`text-xs font-black`) angehoben, um Countdown und Distanz auf einen Blick mühelos zu erfassen.
+    - **Feste Positionierung ohne Wackeln**: Der Tempolimit- und Ampel-Slot in CarPlay besitzt nun eine feste Breite (`w-24`) mit zentrierter Achse. Zusammen mit fest breiten Elementen (`w-[76px]`) und `tabular-nums` bleibt die Ampel absolut starr an derselben Position fixiert und verschiebt sich nicht mehr horizontal, wenn sich der Countdown oder die Meteranzeige ändert.
+    - **Reines 2D-Anthrazit & Dreifarbige Linsen**: Das Gehäuse ist nun komplett in mattem Anthrazit-Kunststoff (`#202227` mit feiner Kontur `#333742`) gehalten. Die drei runden Farbpunkte (Rot, Gelb, Grün) bleiben permanent in ihren unverwechselbaren Farben sichtbar (leuchtend bei aktiver Phase, dezent abgetönt im Ruhezustand). Sämtliche 3D-Verläufe, Schuten, Glas-Spiegelungen und Glanzeffekte wurden entfernt.
+    - **Nahtloser Tempolimit-Wechsel**: Bei aktiver Ampel bleibt das Tempolimit als kompakte Plakette direkt darunter angedockt; nach Passieren der Ampel morpht die Anzeige verzögerungsfrei zum gewohnten Tempolimitschild zurück.
+
+## [1.7.15] - 2026-09-11
+
+### CarPlay Spuranzeige & Navigationsanweisungen
+  - **🏹 Neue Spurpfeil-Variationen & Kombinationspfeile ([CarPlayNavOverlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/CarPlayNavOverlay.tsx), [navInstructionEngine.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/navInstructionEngine.ts))**:
+    - **Geradeaus- & Abbiege-Kombinationspfeile (`straight-turn-right` ↑↱ & `straight-turn-left` ↰↑)**:
+      - Einführung vollwertiger StVO-konformer Kombinationspfeile für Kreuzungsspuren, auf denen sowohl geradeaus gefahren als auch im 90°-Winkel abgebogen werden darf.
+      - Echter 90°-Abzweig mit horizontalem Abbiegepfeil statt bloßer diagonaler Autobahngabelung.
+      - **Harmonische Pfeilgeometrie**: Der Abzweig-Knickpunkt wurde vertikal nach unten in die untere Schafthälfte (Höhe $y=12$) versetzt, sodass die Abbiegepfeilspitze eine klare vertikale Trennung von der oberen Geradeaus-Pfeilspitze aufweist und nicht mehr am oberen Pfeilkopf klebt.
+    - **Reale Spurbelegung an Kreuzungen (`buildLanes`)**:
+      - Auf 2-spurigen Straßen wird die rechte Fahrspur beim Rechtsabbiegen nun vorbildgetreu als `straight-turn-right` (↑↱, aktiv) dargestellt, während die linke Spur auf `straight` (↑, inaktiv) verbleibt.
+      - Beim Linksabbiegen auf 2-spurigen Straßen wird die linke Fahrspur als `straight-turn-left` (↰↑, aktiv) dargestellt.
+      - Auf 3- und mehrspurigen Kreuzungen werden mehrfache Abbiege- und Kombispuren (z. B. Geradeaus-/Rechtsspur neben reiner Rechtsabbiegespur) differenziert abgebildet.
+    - **Erweiterte Pfeilbibliothek**:
+      - `left-right` (↰↱): T-Kreuzungen mit geteiltem Links-/Rechts-Abbiegen.
+      - `straight-left-right` (↰↑↱): Universelle Mehrzweck-Spuren für alle Richtungen.
+      - `u-turn` (↶): Spezifischer CarPlay 180°-Wendesymbol-Spurpfeil.
+  - **⏱️ Beseitigung des vorzeitigen Umschaltens von Navigationsanweisungen (`navInstructionEngine.ts`)**:
+    - **Ursache**: Bisher wurden Manöver über die strikte Bedingung `tpIdx > bestIdx` gefiltert. Sobald der LKW den Scheitelpunkt (Apex) einer Kreuzung erreichte (`bestIdx == tpIdx`), wurde die Abbiegeanweisung sofort verworfen – der Fahrer befand sich noch mitten im Abbiegevorgang, als die Anweisung bereits auf das nächste Manöver oder "Dem Straßenverlauf folgen" umsprang.
+    - **Pass-Through Buffer (Nachlaufpuffer)**:
+      - Abbiegungen und U-Turns bleiben nun verlässlich auf `"Jetzt [Richtung] abbiegen"` mit aktiven Spurpfeilen aktiv, bis der LKW den Scheitelpunkt um mindestens **22 Meter** passiert hat und vollständig auf die neue Straße eingebogen ist.
+      - Autobahnausfahrten besitzen einen erweiterten Puffer von **30 Metern**, sodass die Ausfahrtsanweisung stabil bleibt, während das Fahrzeug auf die Verzögerungsspur/Rampe wechselt.
+      - Kreisverkehre werden nun anhand von `endDistAlong` ausgewertet und bleiben aktiv, bis der Fahrer die Ausfahrt des Kreisverkehrs um **18 Meter** hinter sich gelassen hat.
+  - **📐 Verfeinerte Kurven- & Abbiegeunterscheidung (`navInstructionEngine.ts`)**:
+    - Parametrisierte Krümmungsraten-Schwellenwerte (`CURVE_RATE_MAX = 0.40°/m`, `TURN_RATE_MIN = 1.1°/m`, `TURN_ANGLE_MIN = 20°`) zur präzisen Trennung weicher Kurvenverläufe von echten Abbiegemanövern.
+
+## [1.7.14] - 2026-09-11
+
+### CarPlay Karte & Sprite-Darstellung
+  - **🔷 Eintöniger blauer Spielermarker ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Der Spielermarker ist nun in einem sauberen, monochromen Apple CarPlay Blau (`#007aff`) gehalten.
+    - Bisherige Farbverläufe (Ice-Blue/Royal-Blue), weiße Mittelstreifen und Apex-Punkte wurden entfernt, um einen homogenen, minimalistischen Navigationspfeil mit prägnanter Kontur zu gewährleisten.
+  - **🗺️ Sprites & POIs über der Navigationsroute ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Die Navigationsroute (`route-traveled-line`, `route-remaining-glow`, `route-remaining-line` etc.) wird ab sofort unterhalb aller Karten-Sprites (`ets2-pois`, `ets2-companies`, `ets2-traffic`, `ets2-cities`, `nearby-vehicles-layer`) eingefügt.
+    - Symbole wie Tankstellen, Mautstationen, Andreaskreuze, Ampeln und Mitspieler-Fahrzeuge werden dadurch niemals von der Route verdeckt.
+  - **🚦 Beseitigung der doppelten Ampel am Andreaskreuz ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [MgmtMapPage.js](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/frontend/src/drivershub/pages/MgmtMapPage.js))**:
+    - **Ursache**: In ETS2/ATS-Kartendaten besitzen Bahnübergänge Blinklichter, die im Spiel-Prefab technisch als `semaphores` (Ampeln) geführt werden. Dadurch lagen an Bahnübergängen sowohl das Andreaskreuz (`railcrossing`) als auch eine Straßenampel (`trafficlight`) exakt am selben Koordinatenpunkt.
+    - **Lösung**: Durch Einführung einer Kollisionshierarchie (`symbol-sort-key`: `railcrossing: 1`, `trafficlight: 3`) mit deaktiviertem Overlap (`icon-allow-overlap: false`) blendet MapLibre an Bahnübergängen ausschließlich das Andreaskreuz ein und unterdrückt die darunterliegende Ampel zuverlässig.
+
+## [1.7.13] - 2026-09-11
+
+### CarPlay Navigation & Karten-Zentrierung
+  - **📍 Zentrierung von Spielermarker & Karte zwischen Anweisungsbox und Fensterkante ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Stabiles vertikales Padding für die große CarPlay-Karte**: Die Anbindung an `fullWidthInstructions` hatte das Top-Offset auf der Vollbildkarte (`carplay-max`) blockiert. Bei aktiven Navigationshinweisen wird nun ein exakt abgestimmtes Top-Padding von `150px` auf der großen Karte (und `140px` auf dem Home-Dashboard) gesetzt. Dadurch positioniert sich der Spielermarker vertikal harmonisch mittig zwischen der Anweisungsbox und der unteren Fensterkante.
+    - **Beseitigung des MapLibre-Laufzeitfehlers (`Attempting to run(), but is already running`)**: Das vorherige stufenlose Interpolieren des Paddings pro Animationsframe kollidierte mit dem internen Render-Runner von MapLibre GL. Durch Übergabe des diskreten, stabilen Padding-Wertes läuft der 60-FPS-Kamera-Follow vollkommen fehler- und ruckelfrei.
+    - **Recenter-Absicherung**: Sämtliche Re-Centering-Funktionen berücksichtigen das aktive Navigations-Padding.
+  - **🛣️ Spline-Glättung & Spur-Zentrierung der Navigationsroute ([routeSmoother.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/routeSmoother.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Centripetal Catmull-Rom Spline-Interpolation ($\alpha = 0.5$)**: Rohe In-Game-Wegpunkte aus dem ETS2-Speicher liegen in Autobahnkurven oft 40 bis 80 Meter auseinander. Reine geradlinige Sehnenverbindungen (Chords) schnitten Kurvenradien bisher ab und wichen bis zu 2 Meter von der Straßenmitte ab, sodass die Route zwischen den Fahrspuren lag oder kantig wirkte.
+    - **Exakter Kurvenverlauf auf der Straße**: Das neue Modul `routeSmoother.ts` interpoliert lange Kurvensegmente dynamisch alle ~6 Meter mit einer mathematisch beweisbar überschwingungsfreien Centripetal Catmull-Rom-Spline.
+    - **Spurtreue in Autobahnkurven**: Die Sehnentiefe wird von 2 Metern auf unter 3 Zentimeter reduziert, wodurch die Route sauber mittig in der befahrenen Spur verläuft.
+    - **Erhalt von 90°-Kreuzungen**: Strikte Abbiegewinkel (> 65°) an Kreuzungen oder Einmündungen bleiben unberührt, um ein Verzerren oder Schneiden von Gebäuden an Einmündungen zu verhindern.
+  - **🧭 Vollständige Überarbeitung der Navigationsanweisungen & Beseitigung falscher Abbiegehinweise ([navInstructionEngine.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/navInstructionEngine.ts), [CarPlayNavOverlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/CarPlayNavOverlay.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Beseitigung falscher "Scharf abbiegen"-Meldungen auf Autobahnen**: Bisher führte die bloße Erkennung eines Gesamtwinkels (> 22° bzw. > 60°) über ein 70m-Fenster dazu, dass normale Autobahnkurven bei 80 km/h fälschlicherweise als "Scharf rechts/links abbiegen" deklariert wurden und die Spuranzeige auf 90°-Abbiegepfeile umstellte.
+    - **Mathematische Krümmungsraten-Klassifizierung ($\kappa$)**: Durch die Einführung eines Dual-Window-Filters ($W = 8\text{m}$ für Kreuzungen, $W = 16\text{m}$ für Ausfahrten) wird die lokale Krümmungsrate $\kappa = \frac{\Delta\theta}{\Delta s}$ berechnet. Normale Straßen- und Autobahnkurven ($\kappa < 0.40^\circ/\text{m}$, Radius $> 140\text{m}$) werden sauber ignoriert – die Navigationsanweisung lautet dauerhaft `"Dem Straßenverlauf folgen"`.
+    - **Echte Kreisverkehr-Erkennung (Roundabout)**: Kontinuierliche zirkuläre Krümmungen ($25\text{m} - 180\text{m}$) werden als Kreisverkehr erkannt, die gefahrene Bogenrotation analysiert und die korrekte Ausfahrt (1. bis 4. Ausfahrt) berechnet: `"Im Kreisverkehr die 2. Ausfahrt nehmen"`.
+    - **Neue, dedizierte CarPlay SVG-Icons**:
+      - **Kreisverkehr-Icon**: Zeigt einen runden Kreisverkehrsbogen mit Ausfahrtspfeil und der exakten Ausfahrtnummer (1..4) im Zentrum auf bernsteinfarbenem Kontrasthintergrund.
+      - **Autobahn-Ausfahrt-Icon**: Authentischer CarPlay-Gabelungspfeil mit gerader Hauptspur und nach rechts/links abzweigender Ausfahrtsrampe.
+      - **U-Turn-Icon**: 180°-Wendesymbol.
+    - **Situationsgetreue Spurpfeil- & Ausfahrtsdarstellung (`buildLanes` & `renderLaneArrow`)**:
+      - **Autobahn-Ausfahrten (Rampen & Gabelungen)**: Zeigt bei Ausfahrten keine unpassenden 90°-Stadtkreuzungs-Winkelpfeile (`↱`) mehr, sondern exakte, schräg nach rechts/links abzweigende Ausfahrtsrampen-Pfeile (`↗` bzw. `↖`) sowie geteilte Geradeaus-/Ausfahrtspfeile (`↑↗`).
+      - **Mehrspurige Fahrbahnen (1–2 Abbiegespuren)**: Auf 3- oder 4-spurigen Straßen wird die reale Spurenaufteilung abgebildet:
+        - *2-spurige Ausfahrt / Autobahnkreuz*: linke Spur(en) geradeaus (`↑`, inaktiv), mittlere Spur geradeaus & Ausfahrt (`↑↗`, aktiv), rechte Spur reine Ausfahrt (`↗`, aktiv).
+        - *1-spurige Ausfahrt*: linke Spuren geradeaus (`↑`, inaktiv), rechte Spur Ausfahrt (`↗`, aktiv).
+        - *Mehrspuriges Kreuzungsabbiegen*: rechte 1–2 Spuren biegen ab (`↑↱` + `↱` bzw. `↰` + `↰↑`), Durchgangsspuren bleiben geradeaus.
+      - **High-Contrast Apple CarPlay Pfeildesign**: Aktive Spuren erstrahlen in reinem, leuchtendem Weiß (`#ffffff`) mit Glow-Effekt und 12% Vergrößerung (`scale(1.12)`). Inaktive Spuren sind dezent gedimmt (`rgba(255, 255, 255, 0.35)`). Zuvor blockierte fest codiertes `stroke="white"` in den SVGs die Farb- und Kontrastunterscheidung.
+      - **Exklusive Berücksichtigung der Spuren in eigener Fahrtrichtung (1-Spur-Erkennung)**:
+        - Auf normalen Landstraßen und Stadtstraßen (`roadType === 'local'`) mit nur 1 Fahrspur in Fahrtrichtung wird ab sofort **genau 1 Spurpfeil** eingeblendet (`[ ↑ ]` geradeaus, `[ ↱ ]` rechts, `[ ↰ ]` links).
+        - Der bisherige starre Fallback auf mindestens 2 Spuren (`currentLaneCount = 2`) wurde vollständig beseitigt. Gegenverkehrsspuren werden nicht mehr fälschlicherweise als zweite eigene Fahrspur gewertet.
+        - `GameMapWidget` fragt die gerenderten Vektorkarten-Features der Straße (`roadType: 'freeway' | 'divided' | 'local'`) live an der Spielerposition ab und übergibt die exakte Straßenklasse an die Anweisungs-Engine.
+      - **Tempolimit- & Geschwindigkeitsberücksichtigung**: `GameMapWidget` und `buildLanes` werten das aktuelle Tempolimit (`speedLimit`) und die Geschwindigkeit aus, um automatisch zwischen Autobahn-Spursituationen (3 Spuren) und Stadtstraßen (2–3 Spuren) zu unterscheiden.
+    - **Fahrrichtungs-Disambiguierung (`playerHeading`)**: Bei mehrspurigen Autobahnen, Autobahnkreuzen und parallelen Auf-/Abfahrten verhindert der Abgleich mit der Fahrtrichtung ein fehlerhaftes Aufschalten auf die Gegenfahrbahn.
+    - **Bereinigung der Karten-Overlays**: Weiße Abbiege-Kurven und Richtungspfeile werden nur noch an echten Manövern gezeichnet und überdecken nicht mehr normale Autobahnkurven.
+
+## [1.7.12] - 2026-09-11
+
+### CarPlay Visuals & Navigation ETA Calculation
+  - **🟣 Lila Mitspielerfarben auf der CarPlay-Karte ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Lila/Violett Retina-Zugmaschinen-Icon**: Das Fahrzeug-Icon (`nearby_truck_ico`) für Mitspieler und Umgebungsverkehr erstrahlt nun im leuchtenden Lila/Violett-Design (`#a855f7` Leuchtring, `#7e22ce` Kabinenkörper, `#c084fc` Akzente/Spiegel, gerichteter Lichtkegel mit getönter Scheibe und Scheinwerfern).
+    - **`nearbyVehicleColor`-Integration**: In `GameMapWidgetProps` integriert und auf allen CarPlay-Kartenansichten (Dashboard, maximierte Karte, Instrument-Cluster MFD) standardmäßig auf `#a855f7` gesetzt.
+  - **⏱️ Korrektur & Stabilisierung der Ankunftszeit-Berechnung (ETA) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Dynamischer Timescale für Stadtverkehr & Fernstraße**: Berücksichtigt den Stadtmaßstab von 1:3 in ETS2/ATS (bei Tempolimits ≤ 50 km/h) und 1:19/1:20 auf Autobahnen, wodurch Ankunftszeiten in Ortschaften nicht mehr auf 20 Sekunden kollabieren.
+    - **Ruckel- und Sprungfreie ETA**: Berechnung basiert auf geglätteter Richtgeschwindigkeit statt schwankender Momentanwerte. Halten vor Ampeln oder Kurven führt nicht mehr zum Verschwinden (`--:--`) oder zu stundenlangen Sprüngen der ETA.
+    - **Live-Zieldistanz bei manuellen Pins**: Die Distanz zählt bei gesetzten Zielmarkern (`customDest`) entlang der Route kontinuierlich herunter.
+    - **Behebung des 4.000 km Bugs**: Saubere Einheitenumrechnung verhindert das fehlerhafte Anzeigen von Distanzen unter 5 km als Tausenderwerte.
+
+## [1.7.11] - 2026-09-11
+
+### Production Build & Startup Crash Fixes
+  - **🛡️ ASAR-kompatible Ausführung der nativen Telemetrie-Bridge ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [package.json](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/package.json))**:
+    - **Behebung des sofortigen Absturzes (`spawn ENOENT`)**: Windows kann Binärdateien (`opc-telemetry-bridge.exe`) nicht direkt aus dem gepackten `app.asar`-Archiv via `child_process.spawn` ausführen. Wenn die App als Portable-Build oder Setup gestartet wurde, brach `spawn` mit `ENOENT` ab und riss die Anwendung über den globalen `uncaughtException`-Handler sofort in den Shutdown.
+    - **Automatische Extraktion & `asarUnpack`**: `package.json` entpackt `dist-electron/opc-telemetry-bridge.exe` und `dist-electron/telemetry-bridge.cs` nun automatisch via `asarUnpack` nach `app.asar.unpacked`. Sollte die Datei dennoch innerhalb des Archives angesprochen werden, extrahiert `main.ts` die Binärdaten sicher nach `userData/opc-telemetry-bridge.exe` auf die echte Festplatte.
+    - **Robustes Error Handling & PowerShell-Fallback**: Auf den Telemetrie- und SMTC-Prozessen wurden `.on('error')`-Handler registriert, sodass Spawn-Fehler abgefangen werden und automatisch ein sicherer Fallback auf das bewährte PowerShell-Script erfolgt, statt die App zu beenden.
+  - **🪟 Beseitigung von `ReferenceError: closeTachoWindow is not defined` ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Im `win.on('closed')`-Handler wurde noch die veraltete Tacho-Funktion aufgerufen, die beim Schließen des Fensters einen zweiten fatalen Crash auslöste. Dies wurde auf `closeCarPlayWindow()` korrigiert.
+
+## [1.7.10] - 2026-09-11
+
+### Fixes & Navigation Enhancements (Unten-Links Karten-HUD)
+  - **🧭 Vollständige Wiederherstellung des Unten-Links Navigations-HUDs ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Anzeige auf Home-Karten-Widget & maximierter Vollbild-Karte**: Das schwebende Navigations-HUD in der unteren linken Kartenecke wurde universell implementiert (`renderBottomNavHud`), sodass es sowohl auf dem CarPlay Home-Dashboard (`isHome = true`) als auch auf der Vollbild-Karte (`isHome = false`) sauber und reaktionsschnell zur Verfügung steht.
+    - **Beseitigung der In-Game-Routen-Blockade**: Das HUD war zuvor an `(pendingDest || customDest)` gebunden und verhielt sich für normale ETS2/ATS-Frachten und In-Game GPS-Routen unsichtbar. Nun erkennt das HUD aktive Navigationsdaten (`telemetry.navDistance`, `telemetry.navTime`, `routeWaypoints`, `dest`) sofort und schaltet sich automatisch zu.
+    - **Restkilometer-Anzeige (`formatDistance`)**: Exakte dynamische Distanzanzeige (in Metern unter 1.000 m, mit einer Dezimalstelle unter 10 km z. B. `3,4 km`, darüber in gerundeten Kilometern z. B. `142 km`).
+    - **Reisezeit in Minuten / Stunden (`formatRemainingTime`)**: Intelligente Umrechnung der in SCS-Telemetriesekunden übertragenen Spielzeit auf reale Fahrzeit unter Berücksichtigung des ETS2/ATS-Map-Timescales (Faktor 19 bzw. 20). Saubere Formatierung als `X Std. Y Min.` bzw. `Y Min.` (in Apple CarPlay Signalgrün `#34d399`).
+    - **Exakte Ankunfts-Uhrzeit (`formatETA`)**: Automatische Berechnung der voraussichtlichen realen Uhrzeit bei Ankunft (z. B. `Ankunft 19:45 Uhr`).
+    - **Click-Event-Isolation (`stopPropagation`)**: Klicks auf Navigationselemente im Dashboard-Karten-Widget (wie Routenstart oder Abbrechen) lösen kein versehentliches Maximieren der Karte mehr aus.
+
+## [1.7.9] - 2026-09-11
+
+### Performance & Memory Optimization (RAM-Halbierung auf unter 300 MB)
+  - **⚡ Native C# Standalone-Telemetrie-Bridge ([telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Ablösung von `powershell.exe`**: Das Auslesen der Shared Memory Telemetrie (`Local\SCSTelemetry`, `Local\OPCRouteData`, `Local\OPCTrafficData`) wurde aus dem speicherhungrigen PowerShell-Runtime-Host (80–110 MB) in ein natives, kompaktes 13.8 KB C#-Kompilat (`opc-telemetry-bridge.exe`) überführt.
+    - **Speichereinsparung**: Der Telemetrie-Bridge-Prozess verbraucht nun nur noch **~16 MB RAM** statt zuvor bis zu 110 MB (~85% Ersparnis).
+    - **Zero Allocation JSON Engine**: Direkte String-Serialisierung via `StringBuilder` ohne PowerShell-Pipeline- und GC-Churn.
+    - **Automatischer Windows-Compiler & Fallback**: Beim Start wird das Kompilat automatisch aus `telemetry-bridge.cs` via Microsoft .NET `csc.exe` erzeugt, inklusive sicherem PowerShell-Fallback bei fehlendem Compiler.
+    - **Adaptives Polling**: Im Leerlauf bzw. bei nicht laufendem Spiel drosselt der Telemetrie-Loop automatisch von 30ms auf 800ms, wodurch unnötiger CPU- und Speicheroverhead vollständig eliminiert wird.
+  - **🖥️ Chromium Renderer-Prozess-Sharing ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Bündelung via `disable-site-isolation-trials`**: Durch Deaktivierung der standardmäßigen Site-Isolation können Hauptfenster, CarPlay-Fenster und HUD-Overlay denselben Renderer-Prozess (`renderer-process-limit: 1`) und V8-Heap teilen, anstatt jeweils eigene 70–120 MB schwere Chromium-Prozesse zu reservieren.
+    - **V8-Heap-Decke & Aggressive GC**: Herabsetzung von `--max-old-space-size=256` auf **128 MB** in Kombination mit `--optimize-for-size` und freigeschaltetem `--expose-gc`. Verhindert das Aufstauen toter ephemerer Objekte im JavaScript-Heap.
+    - **Cache-Limits**: Festlegung von `--disk-cache-size=16777216` und `--media-cache-size=16777216` (16 MB) zur Vermeidung von unkontrolliertem In-Memory-Kachelgrowth.
+  - **🧹 Aktives Windows Working-Set Trimming ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **`trimAppMemory()` Integration**: Beim Minimieren von App-Fenstern, nach dem Schließen des Splash-Screens sowie periodisch alle 10 Minuten ruft Electron Windows `process.trimWorkingSet()` auf. Nicht mehr benötigte Speicherseiten werden sofort vom Betriebssystem freigegeben.
+  - **🗺️ MapLibre GL Tile-Cache Begrenzung & Doppel-Mount-Schutz ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx))**:
+    - **Kachel-Cache Obergrenzen**: `maxTileCacheSize: 15` in `GameMapWidget.tsx` und Reduktion von 80 auf 25 in `Map.tsx` verhindert, dass unbegrenzt Hunderte dekodierte Raster-DEM- und Vektorkacheln im GPU/RAM gehalten werden.
+    - **`fadeDuration: 0` & `collectResourceTiming: false`**: Beseitigt temporäre doppelte Texturspeicher während Kachelüberblendungen.
+    - **CarPlay Doppel-WebGL-Schutz**: Das Home-Karten-Widget in `CarPlay.tsx` wird beim Öffnen von maximierten Vollbild-Modals (`maximizedWidget`) temporär ungemountet. Dadurch läuft zu jedem Zeitpunkt maximal **ein** WebGL-Kartenkontext gleichzeitig im Fenster.
+
+## [1.7.8] - 2026-09-11
+
+### Features & Innovations
+  - **🧭 Echtzeit-Navigationsanweisungen & Kurvenanalyse für importierte In-Game-Routen ([navInstructionEngine.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/navInstructionEngine.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlayNavOverlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/CarPlayNavOverlay.tsx))**:
+    - **Behebung der Anweisungs-Blockade (`GameMapWidget.tsx`)**: Der Navigations-Guard blockierte die Anweisungserzeugung bisher mit `(!dest && !destCompany)`, falls keine offizielle Speditions-Frachtfahrt aktiv war (z. B. bei freier Fahrt, eigenem Wegpunkt-Pin oder TruckersMP-Navigation). Die Bedingung wurde korrigiert, sodass Anweisungen immer aktiv generiert werden, sobald Wegpunkte und Spielerkoordinaten vorliegen.
+    - **Neuer Kurven- & Abbiege-Detektor mit 35m-Distanzfenster (`navInstructionEngine.ts`)**: Bisher wurden benachbarte Einzelknoten verglichen, was bei dichten ETS2-Splines (nur 5°-12° Knick pro Segment) fast alle Kurven übersehen hat. Die neue Funktion `extractTurnsFromRouteCoords` analysiert die Richtungsänderung über ein 35-Meter-Vorausschau- und Rückschaufenster und bündelt Kurvenzüge zuverlässig auf ihren Scheitelpunkt (Apex).
+    - **Authentische CarPlay-Manöver & Countdown**: Dynamische Countdown-Texte ("Jetzt", "50 m", "120 m", "1.4 km"), präzise Abbiegehinweise ("Rechts abbiegen", "Scharf links abbiegen", "Ausfahrt rechts nehmen", "Wenden") und Fahrspur-Empfehlungen.
+    - **Zielankunft & SubText**: Anzeige von "Ziel erreicht" bei Distanzen < 35m zum Routenende sowie Straßen- und Zielort-Untertitel (`subText`) im CarPlay-Overlay-Banner.
+  - **🚚 Live TruckersMP Spieler- & Fahrzeugerkennung auf der CarPlay- & Overlay-Karte ([traffic.h](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.h), [traffic.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.cpp), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Natives C++ Plugin Memory Scanning (`OPCGameBridge`)**: Neues `traffic`-Modul mit AOB-Signaturscan (`nearby_non_ai_vehicles` & `base_ctrl`), das die internen `game_physics_vehicle_u`- und `game_trailer_actor_u`-Objekte der Prism3D-Engine im Spielerspeicher vollkommen crashsicher (`__try/__except`) ausliest.
+    - **Behebung der Struct-Auflösung (`traffic.cpp`)**: Die dynamische Fahrzeugliste `list_dyn_t` ist im `base_ctrl`-Objekt direkt eingebettet und kein Zeiger. Das fälschliche Auslesen via `readSafe` hatte die VTable als Pointer interpretiert, wodurch `count` immer 0 blieb. Dies wurde auf direkte Adressierung korrigiert inklusive Sentinel-Knoten-Absicherung.
+    - **Shared Memory Puffer (`Local\OPCTrafficData`)**: Schreibt Koordinaten, Rotation, Bounding Box und Typen bis zu 50 umgebender Fahrzeuge mit bis zu 10 FPS in ein Memory-Mapped-File.
+    - **Electron IPC Integration**: `main.ts` liest `Local\OPCTrafficData` über die PowerShell-.NET-Bridge aus und übergibt die `nearbyVehicles` mit jedem Telemetrie-Zyklus an das React-Frontend.
+    - **Echtzeit-MapLibre-Visualisierung**: `GameMapWidget.tsx` projiziert die Spielkoordinaten latenzfrei auf WGS84-Kartenpositionen und rendert rotierende, hochauflösende Cyan-Truck- und Amber-Trailer-Icons inklusive exakter Fahrtrichtung (`heading`).
+
+  - **⚡ Beseitigung von Rucklern & Perfomance-Optimierung im Karten- und Telemetrie-Loop ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **DOM-Churn im 60 FPS Render-Loop behoben (`GameMapWidget.tsx`)**: Das Spielerpfeil-Element wurde zuvor in jedem einzelnen `requestAnimationFrame`-Frame per `innerHTML` komplett neu geparst und zerstört. Das Pfeil-Element wird nun einmalig angelegt und nur noch über hardwarebeschleunigtes `style.transform` rotiert (Zero Allocation).
+    - **GeoJSON-Drosselung für umgebende Fahrzeuge (`GameMapWidget.tsx`)**: `source.setData()` auf MapLibre wurde zuvor bis zu 25 Mal pro Sekunde bei jedem Telemetrie-Paket ausgelöst, was die WebGL-Tessellierung überlastete. Dies wurde auf 10 Hz (100ms) gedrosselt.
+    - **Routen-Polyline Memoization (`GameMapWidget.tsx`)**: Die bis zu 2000 Routen-Wegpunkte werden nun gehasht und nur dann neu projiziert und als LineString in WebGL hochgeladen, wenn sich die Route tatsächlich verändert hat (statt 25x/Sekunde).
+    - **Persistente MMF-Handles & Sequenzprüfung (`main.ts`)**: `Local\OPCRouteData` und `Local\OPCTrafficData` werden in C# nicht mehr bei jedem 40ms-Tick neu geöffnet und disposed, sondern persistent gehalten. Unveränderte Wegpunkte werden in PowerShell nicht mehr redundant in 60KB große JSON-Strings serialisiert.
+
+  - **🗺️ Native In-Game GPS-Routenextraktion direkt aus dem Spielspeicher (ETS2LA-Methode) ([routedata.h](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/routedata.h), [routedata.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/routedata.cpp), [config.h](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/config.h), [OPCGameBridge.ini](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/OPCGameBridge.ini))**:
+    - **Direktes Auslesen der Spiel-GPS-Route**: Implementierung der Signatur- und Objektketten-Struktur aus *ETS2LA (Euro Truck Simulator 2 Lane Assist)*. Die aktive Route muss von der App nicht mehr ungenau selbst berechnet werden, sondern wird 1:1 direkt aus der internen Navigation der Prism3D-Engine (`game_ctrl` -> `gps_manager_t` -> `simple_route_source` -> `route_task` -> `physical_route_items`) ausgelesen.
+    - **AOB Signatur-Scanning**: Dynamisches Lokalisieren der `base_ctrl`-Instanz und des `gps_manager`-Offsets (`48 8d 88 ? ? ? ? 48 85 c9 74 ? 48 8b 01 48 8d 54`) für ETS2 1.50+ / 1.51+.
+    - **Präzise Koordinatenumrechnung & Subsampling**: Auslesen der exakten Wegpunkt-Knoten (`node_item_t.coords / 256.0f`). Bei langen Routen mit tausenden Abschnitten werden die Knoten gleichmäßig auf 2.000 Punkte interpoliert, sodass auch transkontinentale Strecken unterbrechungsfrei in voller Länge dargestellt werden.
+    - **Automatisches Umschalten im Frontend**: `GameMapWidget.tsx` erkennt die ausgelesene Spielroute automatisch (`routeWaypoints`), schaltet den clientseitigen Pathfinder komplett ab und rendert den originalen Pfad des Spiels.
+
+## [1.7.7] - 2026-08-30
+
+### Features & Bugfixes
+  - **🔔 Lückenlose Übermittlung von Fracht- & Routendaten beim Job-Abschluss ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Self-Contained Delivery Payload**: Der POST-Body für `event == "delivered"` enthält nun explizit `cargo`, `source_city`, `destination_city`, `source_company` und `destination_company`.
+    - **Sichere Webhook-Auslösung**: Stellt sicher, dass das Backend den BotGhost / Discord Webhook auch dann sofort und vollständig auslöst, wenn die Telemetrie-Sitzung zuvor unterbrochen war.
+
 ## [1.7.6] - 2026-08-29
 
 ### Features & Bugfixes

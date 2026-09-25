@@ -3,6 +3,24 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import electron from 'vite-plugin-electron'
 import { builtinModules } from 'node:module'
+import fs from 'node:fs'
+import path from 'node:path'
+
+function copyBridgePlugin() {
+  return {
+    name: 'copy-bridge-files',
+    closeBundle() {
+      try {
+        const srcExe = path.resolve(__dirname, 'electron/opc-telemetry-bridge.exe');
+        const srcCs = path.resolve(__dirname, 'electron/telemetry-bridge.cs');
+        const outDir = path.resolve(__dirname, 'dist-electron');
+        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+        if (fs.existsSync(srcExe)) fs.copyFileSync(srcExe, path.join(outDir, 'opc-telemetry-bridge.exe'));
+        if (fs.existsSync(srcCs)) fs.copyFileSync(srcCs, path.join(outDir, 'telemetry-bridge.cs'));
+      } catch (e) {}
+    }
+  };
+}
 
 function electronRendererPlugin() {
   const externals = [
@@ -82,6 +100,7 @@ export default defineConfig({
       },
     ]),
     electronRendererPlugin(),
+    copyBridgePlugin(),
   ],
   build: {
     chunkSizeWarningLimit: 1200,
@@ -89,11 +108,11 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('react')) return 'vendor-react';
+            if (id.includes('lucide-react')) return 'vendor-icons';
             if (id.includes('framer-motion')) return 'vendor-motion';
             if (id.includes('recharts')) return 'vendor-charts';
-            if (id.includes('maplibre-gl')) return 'vendor-map';
-            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('maplibre-gl') || id.includes('proj4')) return 'vendor-map';
+            if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
             return 'vendor';
           }
         }

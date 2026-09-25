@@ -11,3 +11,29 @@ export interface GameMapWidgetHandle {
 }
 
 export type MapTheme = 'dark' | 'light' | 'headlight';
+
+export interface NearbyTrafficVehicle {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+  speed?: number;
+  width?: number;
+  height?: number;
+  length?: number;
+  isTrailer?: boolean;
+  isTmp?: boolean;
+}
+
+export interface NearbySemaphore {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+  type: number; // 1 = traffic light, 2 = gate
+  state: number; // 0 = off, 1 = orange_to_red, 2 = red, 4 = orange_to_green, 8 = green, 32 = sleep
+  timeRemaining?: number;
+}
+

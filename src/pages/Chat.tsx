@@ -630,7 +630,7 @@ const Chat = ({ selectedChannelId, onClearSelectedId }: any) => {
       )}
 
       {/* Sidebar */}
-      <div className={`w-64 border-r border-white/5 bg-black/40 backdrop-blur-2xl flex flex-col shrink-0 transition-all duration-300 ${drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} absolute md:static top-0 bottom-0 z-40`}>
+      <div id="tour-chat-sidebar" className={`w-64 border-r border-white/5 bg-black/40 backdrop-blur-2xl flex flex-col shrink-0 transition-all duration-300 ${drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"} absolute md:static top-0 bottom-0 z-40`}>
         <div className="p-6 border-b border-white/5 flex items-center justify-between">
           <h2 className="font-unbounded text-[10px] font-black text-white uppercase tracking-widest italic">Kanäle</h2>
           <button onClick={() => setShowCreateGroup(true)} className="p-1.5 hover:bg-amber-400/10 rounded-lg text-amber-400 transition-all">

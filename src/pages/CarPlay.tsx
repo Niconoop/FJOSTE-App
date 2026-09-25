@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft } from 'lucide-react';
+
+import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
 import { searchDestinations, findCompany, findCity, type DestinationSearchResult } from '../data/ets2Cities';
 import { type SpeedcamAlertInfo } from '../data/ets2Speedcams';
+import { TrafficLightWidget } from '../components/TrafficLightWidget';
+import type { ApproachingTrafficLight } from '../utils/trafficLightDetector';
+import {
+  getActiveEventRoute,
+  clearActiveEventRoute,
+  ACTIVE_ROUTE_CHANGED_EVENT,
+  type ActiveEventRoute,
+} from '../utils/activeNavigation';
 
 interface Telemetry {
   connected: boolean;
@@ -49,6 +58,8 @@ interface Telemetry {
   waterTemperatureWarning?: boolean;
   batteryVoltageWarning?: boolean;
   routeWaypoints?: [number, number, number][] | [number, number][];
+  nearbyVehicles?: any[];
+  semaphores?: any[];
 }
 
 interface SmtcData {
@@ -67,6 +78,7 @@ interface OverlaySettings {
   carPlayTheme: 'dark' | 'light' | 'auto';
   carPlayMapTheme?: 'dark' | 'light' | 'auto';
   carPlayTextScale: 'small' | 'medium' | 'large';
+  carPlayShowNavInstructions?: boolean;
   carPlayHotkeys: {
     toggle: string;
     next: string;
@@ -81,6 +93,7 @@ const DEFAULT_SETTINGS: OverlaySettings = {
   carPlayTheme: 'dark',
   carPlayMapTheme: 'auto',
   carPlayTextScale: 'medium',
+  carPlayShowNavInstructions: true,
   carPlayHotkeys: {
     toggle: 'F9',
     next: 'Ctrl+Alt+Right',
@@ -90,7 +103,7 @@ const DEFAULT_SETTINGS: OverlaySettings = {
   }
 };
 
-const TABS = ['home', 'music', 'job', 'truck', 'settings'] as const;
+const TABS = ['home', 'map', 'music', 'job', 'truck', 'settings'] as const;
 type Tab = typeof TABS[number];
 
 interface RadioStation {
@@ -411,7 +424,7 @@ export default function CarPlayPage() {
       const saved = localStorage.getItem('opc_carplay_map_zoom');
       if (saved) {
         const parsed = parseFloat(saved);
-        if (!isNaN(parsed) && parsed >= 4 && parsed <= 12) return parsed;
+        if (!isNaN(parsed) && parsed >= 4 && parsed <= 13) return parsed;
       }
     } catch (e) {}
     return 9;
@@ -443,12 +456,16 @@ export default function CarPlayPage() {
   // Speed Camera (Blitzer) proximity alert state
   const [speedcamAlert, setSpeedcamAlert] = useState<SpeedcamAlertInfo | null>(null);
 
+  // Traffic Light (Ampel) proximity alert state
+  const [approachingTrafficLight, setApproachingTrafficLight] = useState<ApproachingTrafficLight | null>(null);
+
   // Focus and maximized state
   const [focusZone, setFocusZone] = useState<'sidebar' | 'content'>('sidebar');
   const [sidebarIndex, setSidebarIndex] = useState(0);
   const [contentIndex, setContentIndex] = useState(0);
   const [maximizedWidget, setMaximizedWidget] = useState<'map' | 'diagnostics' | null>(null);
   const [mfdMode, setMfdMode] = useState<number>(0);
+  const [mapTabFocus, setMapTabFocus] = useState<'map' | 'search' | 'bottom-nav'>('map');
 
   // Music Mode Sub-Tabs ('menu' | 'windows' | 'local' | 'radio')
   const [musicSubTab, setMusicSubTab] = useState<'menu' | 'windows' | 'local' | 'radio'>(() => {
@@ -712,6 +729,59 @@ export default function CarPlayPage() {
   const [maxMapFocus, setMaxMapFocus] = useState<'map' | 'search' | 'bottom-nav'>('map');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Route active state: true if custom navigation destination, active event route, or active in-game telemetry route
+  const [activeEventRoute, setActiveEventRouteState] = useState<ActiveEventRoute | null>(() => getActiveEventRoute());
+
+  const isRouteActive = Boolean(
+    activeEventRoute ||
+    customDest ||
+    (telemetry.connected && (
+      (telemetry.navDistance && telemetry.navDistance > 0) ||
+      (telemetry.navTime && telemetry.navTime > 0) ||
+      ((telemetry as any).routeWaypoints && (telemetry as any).routeWaypoints.length > 0) ||
+      (telemetry.dest && telemetry.dest.trim().length > 0 && telemetry.dest.toLowerCase() !== 'none')
+    ))
+  );
+
+  useEffect(() => {
+    const handleActiveRouteChange = (e: any) => {
+      const newRoute = e.detail ?? getActiveEventRoute();
+      setActiveEventRouteState(newRoute);
+      if (newRoute) {
+        showNotification({
+          title: '🏁 Event-Route geladen!',
+          message: `${newRoute.eventTitle}: ${newRoute.startCity} → ${newRoute.endCity}`,
+          icon: <Navigation size={18} />,
+          color: '#10b981',
+        });
+        setTimeout(() => {
+          mapWidgetRef.current?.recenter();
+          maxMapWidgetRef.current?.recenter();
+        }, 150);
+      }
+    };
+    window.addEventListener(ACTIVE_ROUTE_CHANGED_EVENT, handleActiveRouteChange);
+    return () => window.removeEventListener(ACTIVE_ROUTE_CHANGED_EVENT, handleActiveRouteChange);
+  }, []);
+
+  const effectiveRouteWaypoints = useMemo(() => {
+    if (activeEventRoute && activeEventRoute.gameCoords && activeEventRoute.gameCoords.length > 0) {
+      return activeEventRoute.gameCoords;
+    }
+    return telemetry.connected ? (telemetry as any).routeWaypoints : undefined;
+  }, [activeEventRoute, telemetry.connected, (telemetry as any).routeWaypoints]);
+
+  const effectiveDest = customDest ? customDest.dest : (activeEventRoute ? activeEventRoute.endCity : (telemetry.connected ? telemetry.dest : undefined));
+  const effectiveDestCompany = customDest ? customDest.destCompany : (activeEventRoute ? activeEventRoute.endCompany : (telemetry.connected ? telemetry.dest_company : undefined));
+  const effectiveSource = activeEventRoute ? (activeEventRoute.startCompany ? `${activeEventRoute.startCity} (${activeEventRoute.startCompany})` : activeEventRoute.startCity) : (telemetry.connected ? telemetry.source : undefined);
+
+  useEffect(() => {
+    if (isRouteActive) {
+      if (maxMapFocus === 'search') setMaxMapFocus('map');
+      if (mapTabFocus === 'search') setMapTabFocus('map');
+    }
+  }, [isRouteActive, maxMapFocus, mapTabFocus]);
+
   // In-Car notification banner state
   const [activeNotification, setActiveNotification] = useState<CarPlayNotification | null>(null);
   const notificationTimeoutRef = useRef<any>(null);
@@ -735,6 +805,7 @@ export default function CarPlayPage() {
   const [maxMapDims, setMaxMapDims] = useState({ w: 924, h: 290 });
   const mapWidgetRef = useRef<GameMapWidgetHandle>(null);
   const maxMapWidgetRef = useRef<GameMapWidgetHandle>(null);
+  const cachedRouteWaypointsRef = useRef<any>(null);
 
   useEffect(() => {
     if (!mapContainerRef) return;
@@ -775,45 +846,106 @@ export default function CarPlayPage() {
   }, []);
 
   const prevLiveRemainingRef = useRef<number | null>(null);
-  const liveRemainingRafRef = useRef<number | null>(null);
 
-  // Real-time ETA calculation based on current speed and remaining distance
+  // Helper to calculate realistic, stable remaining driving seconds based strictly on allowed speed
+  const calculateRemainingSeconds = () => {
+    const isATS = (telemetry as any)?.gameType === 2;
+    const highwayScale = isATS ? 20 : 19;
+
+    // Erlaubte Geschwindigkeit (speed limit) exclusively - NEVER momentary driving speed
+    const allowedSpeedKmh = telemetry.speedLimit && telemetry.speedLimit >= 20
+      ? Math.max(30, Math.min(130, telemetry.speedLimit))
+      : 80; // Standard Truck Legal Limit (80 km/h in Europe / default highway)
+
+    // In ETS2/ATS, cities have 1:3 scale (speed limit <= 50 km/h) while highways have 1:19/1:20 scale (speed limit >= 80 km/h)
+    const cityFactor = Math.max(0, Math.min(1, (80 - allowedSpeedKmh) / 30));
+    const dynamicScale = highwayScale - cityFactor * (highwayScale - 3);
+    const allowedSpeedMps = (allowedSpeedKmh * 1000) / 3600;
+
+    // Case 1: Custom Destination
+    if (customDest) {
+      let remMeters = customRouteInfo?.distanceMeters || 0;
+      const destCoords = customDest.destCompany
+        ? (findCompany(customDest.destCompany, customDest.dest) || findCity(customDest.dest))
+        : findCity(customDest.dest);
+
+      const pX = (telemetry as any)?.posX;
+      const pZ = (telemetry as any)?.posZ;
+
+      if (destCoords && pX != null && pZ != null) {
+        const dx = destCoords.x - pX;
+        const dz = destCoords.z - pZ;
+        const directDist = Math.hypot(dx, dz);
+        if (directDist > 0) {
+          const estimatedRoadDist = directDist * 1.25;
+          remMeters = remMeters > 0 ? Math.min(remMeters, estimatedRoadDist) : estimatedRoadDist;
+        }
+      } else if (telemetry.navDistance && telemetry.navDistance > 0) {
+        remMeters = telemetry.navDistance;
+      }
+
+      if (remMeters > 0) {
+        return Math.max(15, Math.round((remMeters / allowedSpeedMps) / dynamicScale));
+      }
+      return customRouteInfo?.durationSeconds || null;
+    }
+
+    // Case 2: In-Game SCS Navigation
+    // Calculate ETA strictly based on remaining distance and the legal allowed speed
+    if (telemetry.navDistance && telemetry.navDistance > 0) {
+      return Math.max(10, Math.round(telemetry.navDistance / (allowedSpeedMps * dynamicScale)));
+    }
+
+    // Fallback: If navDistance is not available, scale navTime from game
+    if (telemetry.navTime && telemetry.navTime > 0) {
+      return Math.max(10, Math.round(telemetry.navTime / dynamicScale));
+    }
+
+    return null;
+  };
+
+  // Real-time ETA calculation based on remaining distance and cruising speed
   useEffect(() => {
-    if (!telemetry.connected || telemetry.navDistance <= 0 || telemetry.speed < 5) {
+    const hasNav = Boolean(
+      telemetry.connected && (
+        (telemetry.navDistance && telemetry.navDistance > 0) ||
+        (telemetry.navTime && telemetry.navTime > 0) ||
+        customDest ||
+        ((telemetry as any).routeWaypoints && (telemetry as any).routeWaypoints.length > 0) ||
+        (telemetry.dest && telemetry.dest.trim().length > 0 && telemetry.dest.toLowerCase() !== 'none')
+      )
+    );
+
+    if (!hasNav) {
       setLiveRemainingSeconds(null);
       prevLiveRemainingRef.current = null;
       return;
     }
 
     const updateETA = () => {
-      const speedMps = telemetry.speed / 3.6;
-      if (speedMps <= 0) {
-        setLiveRemainingSeconds(null);
-        prevLiveRemainingRef.current = null;
-        return;
-      }
-      const remainingSeconds = telemetry.navDistance / speedMps;
-      const rounded = Math.max(0, Math.round(remainingSeconds));
-      if (prevLiveRemainingRef.current !== rounded) {
-        prevLiveRemainingRef.current = rounded;
-        setLiveRemainingSeconds(rounded);
+      const calcSec = calculateRemainingSeconds();
+      if (calcSec !== null && calcSec > 0) {
+        if (prevLiveRemainingRef.current === null || Math.abs(prevLiveRemainingRef.current - calcSec) >= 2) {
+          prevLiveRemainingRef.current = calcSec;
+          setLiveRemainingSeconds(calcSec);
+        }
       }
     };
 
     updateETA();
 
-    const tick = () => {
+    const interval = setInterval(() => {
+      setLiveRemainingSeconds(prev => {
+        if (prev !== null && prev > 1) {
+          return prev - 1;
+        }
+        return prev;
+      });
       updateETA();
-      liveRemainingRafRef.current = window.setTimeout(tick, 1000);
-    };
-    liveRemainingRafRef.current = window.setTimeout(tick, 1000);
+    }, 1000);
 
-    return () => {
-      if (liveRemainingRafRef.current) {
-        clearTimeout(liveRemainingRafRef.current);
-      }
-    };
-  }, [telemetry.connected, telemetry.navDistance, telemetry.speed]);
+    return () => clearInterval(interval);
+  }, [telemetry.connected, telemetry.navDistance, telemetry.navTime, telemetry.speedLimit, (telemetry as any).posX, (telemetry as any).posZ, customDest, customRouteInfo]);
 
   const pendingTelemetry = useRef<Telemetry | null>(null);
   const handleNavRef = useRef<(dir: string) => void>(() => {});
@@ -836,7 +968,8 @@ export default function CarPlayPage() {
   const getContentElementsCount = () => {
     if (activeTab === 'home') return 3;
     if (activeTab === 'music') return 3;
-    if (activeTab === 'settings') return 18;
+    if (activeTab === 'settings') return 19;
+    if (activeTab === 'map') return 1;
     return 0;
   };
 
@@ -895,7 +1028,7 @@ export default function CarPlayPage() {
         return { ...nav, leftRow: 2 };
       }
       if (nav.rightRow > 0) return { ...nav, rightRow: nav.rightRow - 1 };
-      return { ...nav, rightRow: 8 };
+      return { ...nav, rightRow: 9 };
     });
   };
 
@@ -905,7 +1038,7 @@ export default function CarPlayPage() {
         if (nav.leftRow < 2) return { ...nav, leftRow: nav.leftRow + 1 };
         return { ...nav, leftRow: 0 };
       }
-      if (nav.rightRow < 8) return { ...nav, rightRow: nav.rightRow + 1 };
+      if (nav.rightRow < 9) return { ...nav, rightRow: nav.rightRow + 1 };
       return { ...nav, rightRow: 0 };
     });
   };
@@ -950,6 +1083,7 @@ export default function CarPlayPage() {
     else if (contentIndex < 9) updateSetting('carPlayTextScale', ['small', 'medium', 'large'][contentIndex - 6] as any);
     else {
       const keys = [
+        'carPlayShowNavInstructions',
         'carPlayNotifySpeed',
         'carPlayNotifyFuel',
         'carPlayNotifyRest',
@@ -1003,7 +1137,7 @@ export default function CarPlayPage() {
     }
 
     if (dir === 'zoom-in') {
-      setCarPlayMapZoom(prev => Math.min(prev + 1, 12));
+      setCarPlayMapZoom(prev => Math.min(prev + 1, 13));
       return;
     }
 
@@ -1184,7 +1318,11 @@ export default function CarPlayPage() {
           return;
         }
         if (dir === 'right') {
-          setMaxMapFocus('search');
+          if (!isRouteActive) {
+            setMaxMapFocus('search');
+          } else {
+            setMaxMapFocus('bottom-nav');
+          }
           return;
         }
         if (dir === 'enter') {
@@ -1204,7 +1342,7 @@ export default function CarPlayPage() {
             }, 100);
             return;
           }
-          if (customDest) {
+          if (customDest || isRouteActive) {
             setMaxMapFocus('bottom-nav');
             return;
           }
@@ -1213,7 +1351,7 @@ export default function CarPlayPage() {
           searchInputRef.current?.focus();
           return;
         }
-        if (dir === 'up') { setCarPlayMapZoom(prev => Math.min(prev + 1, 12)); return; }
+        if (dir === 'up') { setCarPlayMapZoom(prev => Math.min(prev + 1, 13)); return; }
         if (dir === 'down') { setCarPlayMapZoom(prev => Math.max(prev - 1, 4)); return; }
         if (dir === 'back') {
           if (pendingDest) {
@@ -1246,8 +1384,8 @@ export default function CarPlayPage() {
     }
 
     if (focusZone === 'sidebar') {
-      if (dir === 'up') setSidebarIndex(prev => (prev - 1 + 5) % 5);
-      else if (dir === 'down') setSidebarIndex(prev => (prev + 1) % 5);
+      if (dir === 'up') setSidebarIndex(prev => (prev - 1 + 6) % 6);
+      else if (dir === 'down') setSidebarIndex(prev => (prev + 1) % 6);
       else if (dir === 'right') {
         const count = getContentElementsCount();
         if (count > 0) {
@@ -1255,7 +1393,7 @@ export default function CarPlayPage() {
           setContentIndex(0);
         }
       } else if (dir === 'enter') {
-        const tabList: Tab[] = ['home', 'music', 'job', 'truck', 'settings'];
+        const tabList: Tab[] = ['home', 'map', 'music', 'job', 'truck', 'settings'];
         setActiveTab(tabList[sidebarIndex]);
       }
       return;
@@ -1264,7 +1402,7 @@ export default function CarPlayPage() {
     const count = getContentElementsCount();
     if (activeTab === 'home') {
       if (contentIndex === 0) {
-        if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 12));
+        if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 13));
         else if (dir === 'down') setContentIndex(2);
         else if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(0); }
         else if (dir === 'right') { setContentIndex(1); }
@@ -1283,6 +1421,52 @@ export default function CarPlayPage() {
         else if (dir === 'up') setContentIndex(1);
         else if (dir === 'down') setContentIndex(1);
         else if (dir === 'enter') setMaximizedWidget('diagnostics');
+      }
+    } else if (activeTab === 'map') {
+      if (mapTabFocus === 'search') {
+        if (dir === 'left' || dir === 'back') {
+          setMapTabFocus('map');
+          return;
+        }
+        if (dir === 'down') {
+          setMapTabFocus('map');
+          return;
+        }
+        if (dir === 'up') {
+          setSearchSelectedIndex(0);
+          return;
+        }
+        if (dir === 'enter') {
+          openVirtualKeyboard('city');
+          searchInputRef.current?.focus();
+          return;
+        }
+        return;
+      }
+
+      if (mapTabFocus === 'bottom-nav') {
+        if (dir === 'up' || dir === 'right' || dir === 'back') {
+          setMapTabFocus('map');
+          return;
+        }
+        if (dir === 'enter') {
+          handleNavRef.current('cancel-route');
+          setMapTabFocus('map');
+          return;
+        }
+        return;
+      }
+
+      // mapTabFocus === 'map'
+      if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 16));
+      else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
+      else if (dir === 'left' || dir === 'back') { setFocusZone('sidebar'); setSidebarIndex(1); }
+      else if (dir === 'right') {
+        if (isRouteActive) {
+          setMapTabFocus('bottom-nav');
+        } else {
+          setMapTabFocus('search');
+        }
       }
     } else if (activeTab === 'music') {
       if (dir === 'back') {
@@ -1568,13 +1752,130 @@ export default function CarPlayPage() {
       console.warn('IPC renderer is not available.');
     }
 
-    if (!ipcRenderer) return;
+    // --- Web / Browser Mode Fallback (Tablet, Smartphone, Browser Window) ---
+    if (!ipcRenderer) {
+      const getCarPlayApiBase = (): string => {
+        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        const hostname = window.location.hostname || 'localhost';
+        const port = window.location.port;
+        if (port === '5173') {
+          return `${protocol}//${hostname}:8383`;
+        }
+        return `${protocol}//${hostname}${port ? `:${port}` : ':8383'}`;
+      };
+
+      const sseUrl = `${getCarPlayApiBase()}/api/carplay/stream`;
+      let eventSource: EventSource | null = null;
+      let telemetryRaf: number | null = null;
+
+      try {
+        eventSource = new EventSource(sseUrl);
+
+        eventSource.addEventListener('init', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.settings) setSettings(data.settings);
+            if (data.telemetry) {
+              if (data.telemetry.routeWaypoints) {
+                cachedRouteWaypointsRef.current = data.telemetry.routeWaypoints;
+              }
+              setTelemetry(data.telemetry);
+            }
+            if (data.media?.title) setMedia(data.media);
+          } catch (err) { }
+        });
+
+        eventSource.addEventListener('telemetry-update', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data) {
+              if (data.routeWaypoints !== undefined) {
+                cachedRouteWaypointsRef.current = data.routeWaypoints;
+              } else if (cachedRouteWaypointsRef.current) {
+                data.routeWaypoints = cachedRouteWaypointsRef.current;
+              }
+            }
+            pendingTelemetry.current = data;
+            if (!telemetryRaf) {
+              telemetryRaf = requestAnimationFrame(() => {
+                if (pendingTelemetry.current) {
+                  if (pendingTelemetry.current.connected) {
+                    setTelemetry(pendingTelemetry.current);
+                  } else {
+                    setTelemetry(prev => ({ ...prev, connected: false }));
+                  }
+                  pendingTelemetry.current = null;
+                }
+                telemetryRaf = null;
+              });
+            }
+          } catch (err) { }
+        });
+
+        eventSource.addEventListener('overlay-settings-updated', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data) setSettings(data);
+          } catch (err) { }
+        });
+
+        eventSource.addEventListener('smtc-update', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            setMedia(data?.title ? data : null);
+          } catch (err) { }
+        });
+
+        eventSource.addEventListener('carplay-action', (e: MessageEvent) => {
+          try {
+            const action = JSON.parse(e.data);
+            if (action === 'home') {
+              setActiveTab('home');
+              setFocusZone('sidebar');
+              setSidebarIndex(0);
+            } else if (action === 'next') {
+              setActiveTab(prev => {
+                const idx = TABS.indexOf(prev);
+                const nextTab = TABS[(idx + 1) % TABS.length];
+                const tabList: Tab[] = ['home', 'music', 'job', 'truck', 'settings'];
+                setSidebarIndex(tabList.indexOf(nextTab));
+                return nextTab;
+              });
+            } else if (action === 'prev') {
+              setActiveTab(prev => {
+                const idx = TABS.indexOf(prev);
+                const prevTab = TABS[(idx - 1 + TABS.length) % TABS.length];
+                const tabList: Tab[] = ['home', 'music', 'job', 'truck', 'settings'];
+                setSidebarIndex(tabList.indexOf(prevTab));
+                return prevTab;
+              });
+            } else if (action === 'toggle-blackout') {
+              handleToggleBlackout();
+            } else if (['up', 'down', 'left', 'right', 'enter', 'back'].includes(action)) {
+              handleNavRef.current(action);
+            }
+          } catch (err) { }
+        });
+      } catch (err) {
+        console.warn('CarPlay EventSource connection failed:', err);
+      }
+
+      return () => {
+        if (eventSource) eventSource.close();
+        if (telemetryRaf) cancelAnimationFrame(telemetryRaf);
+      };
+    }
 
     // Get initial state
     ipcRenderer.invoke('overlay-get-state').then((state: any) => {
       if (state) {
         if (state.settings) setSettings(state.settings);
-        if (state.telemetry && state.telemetry.connected) setTelemetry(state.telemetry);
+        if (state.telemetry && state.telemetry.connected) {
+          if (state.telemetry.routeWaypoints) {
+            cachedRouteWaypointsRef.current = state.telemetry.routeWaypoints;
+          }
+          setTelemetry(state.telemetry);
+        }
       }
     }).catch(() => {});
 
@@ -1582,9 +1883,30 @@ export default function CarPlayPage() {
       if (d?.title) setMedia(d);
     }).catch(() => {});
 
-    // Listen to updates
+    // Listen to updates with V-Sync aligned requestAnimationFrame (smooth 60 FPS driving motion)
+    let telemetryRaf: number | null = null;
     const telemetryListener = (_: any, data: Telemetry) => {
+      if (data) {
+        if (data.routeWaypoints !== undefined) {
+          cachedRouteWaypointsRef.current = data.routeWaypoints;
+        } else if (cachedRouteWaypointsRef.current) {
+          data.routeWaypoints = cachedRouteWaypointsRef.current;
+        }
+      }
       pendingTelemetry.current = data;
+      if (!telemetryRaf) {
+        telemetryRaf = requestAnimationFrame(() => {
+          if (pendingTelemetry.current) {
+            if (pendingTelemetry.current.connected) {
+              setTelemetry(pendingTelemetry.current);
+            } else {
+              setTelemetry(prev => ({ ...prev, connected: false }));
+            }
+            pendingTelemetry.current = null;
+          }
+          telemetryRaf = null;
+        });
+      }
     };
     ipcRenderer.on('telemetry-update', telemetryListener);
 
@@ -1754,6 +2076,7 @@ export default function CarPlayPage() {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      if (telemetryRaf) cancelAnimationFrame(telemetryRaf);
       ipcRenderer.removeListener('telemetry-update', telemetryListener);
       ipcRenderer.removeListener('overlay-settings-updated', settingsListener);
       ipcRenderer.removeListener('smtc-update', smtcListener);
@@ -1769,35 +2092,6 @@ export default function CarPlayPage() {
       setIsLoading(false);
     }, 1200);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Throttled telemetry loop (Optimized for maximum CPU/GPU efficiency)
-  const activeTabRef = useRef(activeTab);
-  useEffect(() => {
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
-
-  useEffect(() => {
-    let timerId: any = null;
-    const tick = () => {
-      if (pendingTelemetry.current) {
-        if (pendingTelemetry.current.connected) {
-          setTelemetry(pendingTelemetry.current);
-        } else {
-          setTelemetry(prev => ({ ...prev, connected: false }));
-        }
-        pendingTelemetry.current = null;
-      }
-
-      const currentTab = activeTabRef.current;
-      const intervalMs = (currentTab === 'home' || currentTab === 'truck') ? 100 : 1000;
-      timerId = setTimeout(tick, intervalMs);
-    };
-
-    tick();
-    return () => {
-      if (timerId) clearTimeout(timerId);
-    };
   }, []);
 
   // Telemetry notifications trigger effect
@@ -1933,51 +2227,240 @@ export default function CarPlayPage() {
 
   const sendMediaAction = (action: 'play-pause' | 'next' | 'prev') => {
     try {
-      const { ipcRenderer } = (window as any).require('electron');
-      ipcRenderer.send('carplay-media-control', action);
+      if ((window as any).require) {
+        const { ipcRenderer } = (window as any).require('electron');
+        if (ipcRenderer) {
+          ipcRenderer.send('carplay-media-control', action);
+          return;
+        }
+      }
     } catch (e) {}
+
+    // Fallback for Web/Browser mode
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    const port = window.location.port === '5173' ? '8383' : (window.location.port || '8383');
+    fetch(`${protocol}//${hostname}:${port}/api/carplay/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    }).catch(() => {});
   };
 
   // Format functions
-  const formatDistance = (dist: number, isKm = false) => {
+  const formatDistance = (dist: number | null | undefined, isKm = false) => {
     if (!dist || isNaN(dist) || dist <= 0) return '0 km';
-    const kmVal = isKm ? dist : (dist > 5000 ? dist / 1000 : dist);
+    if (dist < 1000 && !isKm) return `${Math.round(dist)} m`;
+    const kmVal = isKm ? dist : dist / 1000;
+    if (kmVal < 10) {
+      return `${kmVal.toFixed(1).replace('.', ',')} km`;
+    }
     return `${Math.round(kmVal).toLocaleString('de-DE')} km`;
   };
 
-  const formatRemainingTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds) || seconds <= 0) return '0m';
+  const formatRemainingTime = (seconds: number | null | undefined) => {
+    if (!seconds || isNaN(seconds) || seconds <= 0) return '0 Min.';
     const totalM = Math.max(1, Math.round(seconds / 60));
     const h = Math.floor(totalM / 60);
     const m = totalM % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
+    if (h > 0) {
+      return m > 0 ? `${h} Std. ${m} Min.` : `${h} Std.`;
+    }
+    return `${m} Min.`;
   };
 
-  const formatETA = (seconds: number) => {
-    if (!seconds || isNaN(seconds)) return '--:--';
+  const formatETA = (seconds: number | null | undefined) => {
+    if (!seconds || isNaN(seconds) || seconds <= 0) return '--:--';
     const etaDate = new Date(Date.now() + seconds * 1000);
-    return etaDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+    return etaDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
   };
 
   const getRemainingSeconds = () => {
-    if (customDest && customRouteInfo && customRouteInfo.distanceMeters > 0) {
-      if (telemetry.speed >= 10) {
-        const speedMps = telemetry.speed / 3.6;
-        return Math.max(0, Math.round(customRouteInfo.distanceMeters / speedMps));
-      }
-      return customRouteInfo.durationSeconds || Math.round(customRouteInfo.distanceMeters / (60 / 3.6));
-    }
-    if (data.navTime && data.navTime > 0) {
-      return data.navTime;
-    }
     if (liveRemainingSeconds !== null && liveRemainingSeconds > 0) {
       return liveRemainingSeconds;
     }
-    if (data.navDistance && data.navDistance > 0) {
-      return Math.round(data.navDistance / (60 / 3.6));
+    return calculateRemainingSeconds();
+  };
+
+  const renderBottomNavHud = (isHome = false, focused = false) => {
+    const remainingSec = getRemainingSeconds();
+    const remainingDist = (customDest && customRouteInfo?.distanceMeters)
+      ? (() => {
+          const destCoords = customDest.destCompany
+            ? (findCompany(customDest.destCompany, customDest.dest) || findCity(customDest.dest))
+            : findCity(customDest.dest);
+          const pX = (telemetry as any)?.posX;
+          const pZ = (telemetry as any)?.posZ;
+          if (destCoords && pX != null && pZ != null) {
+            const d = Math.hypot(destCoords.x - pX, destCoords.z - pZ) * 1.25;
+            return Math.min(customRouteInfo.distanceMeters, d);
+          }
+          return customRouteInfo.distanceMeters;
+        })()
+      : (data.navDistance && data.navDistance > 0 ? data.navDistance : null);
+
+    const hasInGameRoute = Boolean(
+      telemetry.connected && (
+        (data.navDistance && data.navDistance > 0) ||
+        (data.navTime && data.navTime > 0) ||
+        ((telemetry as any).routeWaypoints && (telemetry as any).routeWaypoints.length > 0) ||
+        (data.dest && data.dest.trim().length > 0 && data.dest.toLowerCase() !== 'none')
+      )
+    );
+
+    const hasNav = Boolean(pendingDest || customDest || activeEventRoute || hasInGameRoute);
+    if (!hasNav) return null;
+
+    const isDark = activeMapTheme === 'dark';
+    const bgStyle = isDark ? '#27272a' : '#ffffff';
+    const borderStyle = isDark ? '1px solid #3f3f46' : '1px solid #e4e4e7';
+    const textColor = isDark ? '#fafafa' : '#18181b';
+    const subtextColor = isDark ? '#a1a1aa' : '#71717a';
+    const dividerColor = isDark ? '#52525b' : '#d4d4d8';
+
+    // Case 1: Pending destination confirmation
+    if (pendingDest && !customDest) {
+      return (
+        <motion.div
+          key={isHome ? "home-pending-nav" : "bottom-pending-nav"}
+          initial={{ opacity: 0, y: 10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.96 }}
+          transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
+          onClick={(e) => e.stopPropagation()}
+           className={`absolute ${isHome ? 'bottom-2.5 left-2.5 max-w-[95%] p-2 gap-2 rounded-xl text-xs' : 'bottom-3 left-3 p-3 gap-3 rounded-2xl text-sm'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all ${
+             focused || (!isHome && maxMapFocus === 'bottom-nav') ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]' : ''
+           }`}
+          style={{ background: bgStyle, border: borderStyle }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <CompanyIcon
+              companyName={pendingDest.destCompany}
+              title={pendingDest.title}
+              type={pendingDest.destCompany ? 'company' : 'city'}
+              size={isHome ? 'md' : 'lg'}
+              activeMapTheme={activeMapTheme}
+            />
+            <div className="min-w-0">
+              <div className={`font-bold truncate ${textColor}`}>{pendingDest.title}</div>
+              <div className={`truncate text-[10px] md:text-xs ${subtextColor}`}>
+                {pendingDest.destCompany ? `Firma in ${pendingDest.dest}` : pendingDest.dest}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const dest = pendingDest;
+              setCustomDest(dest);
+              setPendingDest(null);
+              showNotification({
+                title: 'Route gestartet',
+                message: `Navigation zu ${dest.title} gestartet!`,
+                icon: <Navigation size={18} />,
+                color: '#3b82f6',
+              });
+              setTimeout(() => {
+                mapWidgetRef.current?.recenter();
+                maxMapWidgetRef.current?.recenter();
+              }, 100);
+            }}
+            className={`shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-bold ${isHome ? 'px-2.5 py-1 text-xs rounded-lg' : 'px-4 py-2 text-sm rounded-xl'} shadow-md transition-all cursor-pointer`}
+          >
+            Route starten
+          </button>
+        </motion.div>
+      );
     }
-    return null;
+
+    // Case 2: Active Navigation (Custom Route or In-Game Route)
+    const timeStr = remainingSec ? formatRemainingTime(remainingSec) : '--';
+    const distStr = remainingDist ? formatDistance(remainingDist) : '--';
+    const etaStr = remainingSec ? formatETA(remainingSec) : '--:--';
+
+    return (
+      <motion.div
+        key={isHome ? "home-bottom-nav" : "bottom-nav"}
+        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.96 }}
+        transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
+        onClick={(e) => e.stopPropagation()}
+        className={`absolute ${isHome ? 'bottom-2.5 left-2.5 px-3 py-2 gap-2.5 rounded-xl' : 'bottom-3 left-3 px-4 py-3 gap-3 rounded-2xl'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all select-none ${
+          !isHome && maxMapFocus === 'bottom-nav' ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]' : ''
+        }`}
+        style={{ background: bgStyle, border: borderStyle }}
+      >
+        {customDest || activeEventRoute ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              mapWidgetRef.current?.clearRoute();
+              maxMapWidgetRef.current?.clearRoute();
+              if (activeEventRoute) {
+                clearActiveEventRoute();
+                setActiveEventRouteState(null);
+                showNotification({
+                  title: 'Event-Route beendet',
+                  message: 'Die Route wurde aus dem Navi entfernt.',
+                  icon: <X size={18} />,
+                  color: '#ef4444',
+                });
+              }
+              setCustomDest(null);
+              setCustomRouteInfo(null);
+              setPendingDest(null);
+            }}
+            className={`${isHome ? 'w-7 h-7' : 'w-9 h-9'} rounded-full flex items-center justify-center transition-all shrink-0 hover:scale-110 active:scale-95 cursor-pointer ${
+              focused || (!isHome && maxMapFocus === 'bottom-nav') ? 'ring-2 ring-rose-400 scale-110' : ''
+            }`}
+            style={{
+              background: isDark ? '#3f3f46' : '#f4f4f5',
+              color: isDark ? '#e4e4e7' : '#18181b',
+            }}
+            title={activeEventRoute ? "Event-Route beenden" : "Navigation abbrechen"}
+          >
+            <svg width={isHome ? 14 : 18} height={isHome ? 14 : 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        ) : (
+          <div
+            className={`${isHome ? 'w-7 h-7' : 'w-8 h-8'} rounded-full bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30 shadow-[0_0_12px_rgba(59,130,246,0.3)]`}
+            title={data.dest ? `Ziel: ${data.dest}` : 'Navigation aktiv'}
+          >
+            <Navigation size={isHome ? 14 : 16} className="rotate-45" />
+          </div>
+        )}
+
+        <div className="w-px h-4 md:h-5" style={{ background: dividerColor }} />
+
+        {/* Remaining Time & Distance */}
+        <div className="flex items-center gap-1.5 md:gap-2">
+          {/* Time remaining */}
+          <span className={`${isHome ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-black font-mono tracking-tight text-emerald-400`}>
+            {timeStr}
+          </span>
+          <span className="text-xs font-bold" style={{ color: subtextColor }}>·</span>
+          {/* Distance remaining */}
+          <span className={`${isHome ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-black font-mono tracking-tight`} style={{ color: textColor }}>
+            {distStr}
+          </span>
+        </div>
+
+        <div className="w-px h-4 md:h-5" style={{ background: dividerColor }} />
+
+        {/* Arrival Time (ETA) */}
+        <div className="flex items-center gap-1">
+          <span className={`${isHome ? 'text-[10px]' : 'text-xs'} font-semibold font-mono uppercase tracking-wider`} style={{ color: subtextColor }}>
+            Ankunft
+          </span>
+          <span className={`${isHome ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-black font-mono tracking-tight`} style={{ color: textColor }}>
+            {etaStr}
+          </span>
+        </div>
+      </motion.div>
+    );
   };
 
   const formatMediaTime = (val: any, referenceDuration?: number) => {
@@ -2313,10 +2796,11 @@ export default function CarPlayPage() {
         <div className="flex flex-col gap-2.5">
           {[
             { id: 'home', icon: Home, label: 'Home' },
+            { id: 'map', icon: MapIcon, label: 'Karte' },
             { id: 'music', icon: Music, label: 'Musik' },
             { id: 'job', icon: Briefcase, label: 'Auftrag' },
             { id: 'truck', icon: Truck, label: 'LKW' },
-            { id: 'settings', icon: Settings, label: 'Settings' }
+            { id: 'settings', icon: Settings, label: 'Settings' },
           ].map((tab, idx) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -2377,9 +2861,9 @@ export default function CarPlayPage() {
             {/* --- HOME DASHBOARD TAB --- */}
             {activeTab === 'home' && (
               <div className="grid grid-cols-12 gap-3 h-full">
-                {/* Left Side: Map Widget */}
+                {/* Left Side: Map Widget – click to open full map tab */}
                 <div
-                  onClick={() => setMaximizedWidget('map')}
+                  onClick={() => { setActiveTab('map'); setSidebarIndex(5); }}
                   className={`col-span-7 h-full flex flex-col cursor-pointer transition-all duration-300 ${c.card} overflow-hidden ${
                     focusZone === 'content' && contentIndex === 0
                       ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.45)] z-20'
@@ -2387,31 +2871,38 @@ export default function CarPlayPage() {
                   } relative`}
                 >
                   <div ref={setMapContainerRef} className="flex-1 relative bg-black overflow-hidden rounded-[inherit]">
-                    <GameMapWidget
-                      ref={mapWidgetRef}
-                      gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
-                      gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
-                      heading={telemetry.connected ? telemetry.heading : undefined}
-                      currentSpeed={telemetry.connected ? telemetry.speed : 0}
-                      routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
-                      source={telemetry.connected ? telemetry.source : undefined}
-                      dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
-                      destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
-                      navDistance={telemetry.connected ? telemetry.navDistance : undefined}
-                      connected={telemetry.connected}
-                      themeMode={activeMapTheme}
-                      accentColor="#8b5cf6"
-                      width={mapDims.w}
-                      height={mapDims.h}
-                      mapId="carplay-home"
-                      zoom={carPlayMapZoom}
-                      onZoomChange={setCarPlayMapZoom}
-                      showInstructions
-                      fullWidthInstructions
-                      showSpeedcams={true}
-                      onSpeedcamAlert={setSpeedcamAlert}
-                      onRouteCalculated={setCustomRouteInfo}
-                    />
+                    {!maximizedWidget && (
+                      <GameMapWidget
+                        ref={mapWidgetRef}
+                        gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
+                        gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
+                        heading={telemetry.connected ? telemetry.heading : undefined}
+                        currentSpeed={telemetry.connected ? telemetry.speed : 0}
+                        speedLimit={telemetry.connected ? telemetry.speedLimit : 0}
+                        routeWaypoints={effectiveRouteWaypoints}
+                        source={effectiveSource}
+                        dest={effectiveDest}
+                        destCompany={effectiveDestCompany}
+                        navDistance={telemetry.connected ? telemetry.navDistance : undefined}
+                        connected={telemetry.connected}
+                        themeMode={activeMapTheme}
+                        accentColor="#6d28d9"
+                        width={mapDims.w}
+                        height={mapDims.h}
+                        mapId="carplay-home"
+                        zoom={carPlayMapZoom}
+                        onZoomChange={setCarPlayMapZoom}
+                        showInstructions={settings.carPlayShowNavInstructions !== false}
+                        fullWidthInstructions
+                        showSpeedcams={true}
+                        onSpeedcamAlert={setSpeedcamAlert}
+                        onRouteCalculated={setCustomRouteInfo}
+                        nearbyVehicles={telemetry.connected ? (telemetry as any).nearbyVehicles : undefined}
+                        nearbyVehicleColor="#007aff"
+                        semaphores={telemetry.connected ? (telemetry as any).semaphores : undefined}
+                        onApproachingTrafficLightChange={setApproachingTrafficLight}
+                      />
+                    )}
 
                     {/* Speedcam Warning Alert HUD Floating Banner (Home Dashboard) */}
                     <AnimatePresence>
@@ -2457,6 +2948,11 @@ export default function CarPlayPage() {
                           </div>
                         </motion.div>
                       )}
+                    </AnimatePresence>
+
+                    {/* Bottom-left Navigation HUD (Home Dashboard) */}
+                    <AnimatePresence>
+                      {renderBottomNavHud(true)}
                     </AnimatePresence>
                   </div>
                 </div>
@@ -3791,12 +4287,13 @@ export default function CarPlayPage() {
                       </div>
                     </div>
 
-                    {/* Right: Notifications (Scrollable with Auto-Scroll on Keyboard/Focus Navigation) */}
+                    {/* Right: Notifications & Navigation (Scrollable with Auto-Scroll on Keyboard/Focus Navigation) */}
                     <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-2xl p-3.5 flex flex-col justify-between shadow-xl min-h-0 overflow-hidden">
-                      <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block mb-2 shrink-0">Cockpit-Alerts</span>
+                      <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-widest block mb-2 shrink-0">Cockpit-Alerts & Navigation</span>
                       
                       <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin">
                          {[
+                           { key: 'carPlayShowNavInstructions', label: 'Navigations-Anweisungen', icon: '🧭' },
                            { key: 'carPlayNotifySpeed', label: 'Geschwindigkeitswarnung', icon: '⚠️' },
                            { key: 'carPlayNotifyFuel', label: 'Kraftstoffwarnung', icon: '⛽' },
                            { key: 'carPlayNotifyRest', label: 'Lenkzeitwarnung', icon: '🕐' },
@@ -3845,6 +4342,208 @@ export default function CarPlayPage() {
                 </div>
               </div>
             )}
+
+            {/* --- MAP TAB --- */}
+            {activeTab === 'map' && (
+              <div className={`w-full h-full relative overflow-hidden rounded-2xl bg-neutral-950 ${c.card}`}>
+                {/* Top Search Bar */}
+                <AnimatePresence>
+                  {!isRouteActive && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -20, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.96 }}
+                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      className="absolute top-4 left-4 z-50 flex flex-col gap-1.5 pointer-events-auto min-w-[380px] max-w-[520px]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          onClick={() => setMapTabFocus('search')}
+                          className={`relative flex-1 rounded-2xl transition-all ${
+                            mapTabFocus === 'search'
+                              ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                              : ''
+                          }`}
+                        >
+                          <Search size={18} className="absolute left-4 top-4 text-zinc-400" />
+                          <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={searchQuery}
+                            onFocus={() => { setMapTabFocus('search'); openVirtualKeyboard('city'); }}
+                            onClick={() => { setMapTabFocus('search'); openVirtualKeyboard('city'); }}
+                            onChange={(e) => { setSearchQuery(e.target.value); setSearchSelectedIndex(0); }}
+                            placeholder="Firma oder Stadt suchen..."
+                            className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/15 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium text-white placeholder-zinc-400 focus:outline-none focus:border-amber-500 shadow-2xl transition-all cursor-pointer"
+                          />
+                          {searchQuery && (
+                            <button
+                              onClick={() => { setSearchQuery(''); setSearchSelectedIndex(0); }}
+                              className="absolute right-3.5 top-3.5 text-zinc-400 hover:text-white cursor-pointer transition-colors"
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {searchQuery.trim().length > 0 && (
+                        <div className="w-full bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden max-h-80 overflow-y-auto divide-y divide-white/5">
+                          <div className="flex items-center gap-1.5 p-2 bg-white/[0.02] border-b border-white/10">
+                            <button onClick={() => { setSearchFilter('all'); setSearchSelectedIndex(0); }} className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${searchFilter === 'all' ? 'bg-blue-600 text-white font-bold shadow-md' : 'bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-white'}`}>Alle</button>
+                            <button onClick={() => { setSearchFilter('companies'); setSearchSelectedIndex(0); }} className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${searchFilter === 'companies' ? 'bg-blue-600 text-white font-bold shadow-md' : 'bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-white'}`}>Firmen</button>
+                            <button onClick={() => { setSearchFilter('cities'); setSearchSelectedIndex(0); }} className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${searchFilter === 'cities' ? 'bg-blue-600 text-white font-bold shadow-md' : 'bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-white'}`}>Städte</button>
+                          </div>
+                          {(() => {
+                            const allResults = searchDestinations(searchQuery);
+                            const filtered = allResults.filter(r => {
+                              if (searchFilter === 'companies') return r.type === 'company';
+                              if (searchFilter === 'cities') return r.type === 'city';
+                              return true;
+                            });
+                            if (filtered.length === 0) return <div className="p-4 text-center text-xs text-zinc-400 font-medium">Keine Treffer für "{searchQuery}"</div>;
+                            return filtered.map((item, idx) => {
+                              const isSelected = idx === searchSelectedIndex;
+                              return (
+                                <div
+                                  key={idx}
+                                  onClick={() => {
+                                    const dest = { dest: item.cityName, destCompany: item.companyName, title: item.title };
+                                    setPendingDest(dest);
+                                    setSearchQuery('');
+                                    setTimeout(() => {
+                                      const map = maxMapWidgetRef.current as any;
+                                      if (map && 'focusDestinationByGameCoords' in map) {
+                                        const company = findCompany(dest.destCompany || '', dest.dest);
+                                        if (company) { map.focusDestinationByGameCoords(company.x, company.z); }
+                                        else { const city = findCity(dest.dest); if (city) map.focusDestination(city.lng, city.lat); }
+                                      }
+                                    }, 50);
+                                  }}
+                                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all ${isSelected ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'}`}
+                                >
+                                  <CompanyIcon companyName={item.type === 'company' ? item.companyName : undefined} title={item.title} type={item.type} size="md" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-bold text-white truncate">{item.title}</div>
+                                    <div className="text-[11px] text-zinc-400 truncate">{item.subtitle}</div>
+                                  </div>
+                                  <div className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-zinc-500">{item.type === 'company' ? 'Firma' : 'Stadt'}</div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Full Map */}
+                <div ref={setMaxMapContainerRef} className="absolute inset-0">
+                  <GameMapWidget
+                    ref={maxMapWidgetRef}
+                    gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
+                    gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
+                    heading={telemetry.connected ? telemetry.heading : undefined}
+                    currentSpeed={telemetry.connected ? telemetry.speed : 0}
+                    speedLimit={telemetry.connected ? telemetry.speedLimit : 0}
+                    routeWaypoints={effectiveRouteWaypoints}
+                    source={effectiveSource}
+                    dest={effectiveDest}
+                    destCompany={effectiveDestCompany}
+                    navDistance={telemetry.connected ? telemetry.navDistance : undefined}
+                    connected={telemetry.connected}
+                    themeMode={activeMapTheme}
+                    accentColor="#6d28d9"
+                    width={maxMapDims.w}
+                    height={maxMapDims.h}
+                    mapId="carplay-maptab"
+                    zoom={carPlayMapZoom}
+                    onZoomChange={setCarPlayMapZoom}
+                    showInstructions={settings.carPlayShowNavInstructions !== false}
+                    showSpeedcams={true}
+                    onSpeedcamAlert={setSpeedcamAlert}
+                    onRouteCalculated={setCustomRouteInfo}
+                    nearbyVehicles={telemetry.connected ? (telemetry as any).nearbyVehicles : undefined}
+                    nearbyVehicleColor="#007aff"
+                    semaphores={telemetry.connected ? (telemetry as any).semaphores : undefined}
+                    onApproachingTrafficLightChange={setApproachingTrafficLight}
+                    onDestinationReached={() => {
+                      setCustomDest(null);
+                      setCustomRouteInfo(null);
+                      showNotification({
+                        title: 'Ziel erreicht! 🏁',
+                        message: 'Du bist erfolgreich an deinem Zielort angekommen.',
+                        icon: <CheckCircle size={18} />,
+                        color: '#10b981',
+                      });
+                    }}
+                  />
+                </div>
+
+                {/* Speedcam HUD */}
+                <AnimatePresence>
+                  {speedcamAlert && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                      transition={{ duration: 0.25 }}
+                      className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                    >
+                      <div className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${speedcamAlert.isSpeeding ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse' : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.4)]'}`}>
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'}`}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
+                          </svg>
+                        </div>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider font-mono">{speedcamAlert.isSpeeding ? '⚠️ GESCHWINDIGKEITSBLITZER' : '📷 FESTBLITZER VORAUS'}</span>
+                            <span className="text-[11px] font-black px-2 py-0.5 rounded bg-black/60 border border-white/10 font-mono text-white">in {speedcamAlert.distanceMeters} m</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11.5px] font-mono mt-0.5">
+                            <span className="text-zinc-300">Tempolimit: <strong className="text-white">{speedcamAlert.camera.speedLimit} km/h</strong> auf {speedcamAlert.camera.road}</span>
+                            {speedcamAlert.isSpeeding && <span className="text-rose-400 font-black">(+{speedcamAlert.overspeedKmh} km/h zu schnell!)</span>}
+                          </div>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-white border-2 border-rose-600 flex items-center justify-center text-slate-950 font-black text-xs font-mono shrink-0 shadow-md">{speedcamAlert.camera.speedLimit}</div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Speed Limit / Traffic Light HUD */}
+                <div className="absolute left-6 top-1/2 -translate-y-1/2 w-24 z-40 pointer-events-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)] flex flex-col items-center">
+                  <AnimatePresence mode="wait">
+                    {approachingTrafficLight ? (
+                      <motion.div key="hero-tl" initial={{ opacity: 0, scale: 0.82, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.82, y: -15 }} transition={{ type: 'spring', damping: 22, stiffness: 280 }} className="w-24 flex flex-col items-center gap-2">
+                        <TrafficLightWidget trafficLight={approachingTrafficLight} variant="large" />
+                        {telemetry.connected && telemetry.speedLimit > 0 && (
+                          <div className="w-12 h-12 rounded-full bg-white border-[4.5px] border-red-600 flex items-center justify-center text-slate-950 font-black text-sm shadow-[0_4px_16px_rgba(0,0,0,0.7)] font-sans tracking-tight shrink-0">{Math.round(telemetry.speedLimit)}</div>
+                        )}
+                      </motion.div>
+                    ) : (
+                      <motion.div key="speed-sign-maptab" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.85 }} transition={{ duration: 0.2 }} className="w-24 flex flex-col items-center">
+                        {telemetry.connected && telemetry.speedLimit > 0 ? (
+                          <svg width="78" height="78" viewBox="0 0 80 80" className={telemetry.speed > telemetry.speedLimit ? 'animate-pulse' : ''}>
+                            <circle cx="40" cy="40" r="36" fill="#ffffff" stroke={telemetry.speed > telemetry.speedLimit ? '#e11d48' : '#dc2626'} strokeWidth="7.5" />
+                            <text x="40" y="53" textAnchor="middle" fontSize="42" fontWeight="900" fontFamily="Arial, Helvetica, sans-serif" fill="#09090b" letterSpacing="-2">{Math.round(telemetry.speedLimit)}</text>
+                          </svg>
+                        ) : (
+                          <div className="w-16 h-16 rounded-full border-2 border-white/10 bg-black/40 flex items-center justify-center text-zinc-500 font-black text-xl font-mono">--</div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Bottom Nav HUD */}
+                <AnimatePresence>
+                  {renderBottomNavHud(false, mapTabFocus === 'bottom-nav')}
+                </AnimatePresence>
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -3860,9 +4559,17 @@ export default function CarPlayPage() {
             className="absolute inset-0 z-50 bg-[#090b11]/85 backdrop-blur-2xl flex flex-col"
           >
             <div ref={setMaxMapContainerRef} className="flex-1 relative overflow-hidden bg-neutral-950">
-              {/* Inline Top Search Input & Floating Results Dropdown (Only on Maximized Map) */}
-              <div className="absolute top-4 left-4 z-50 flex flex-col gap-1.5 pointer-events-auto min-w-[420px] max-w-[560px]">
-                <div className="flex items-center gap-2">
+              {/* Inline Top Search Input & Floating Results Dropdown (Only on Maximized Map, Hidden when route is active) */}
+              <AnimatePresence>
+                {!isRouteActive && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.96 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    className="absolute top-4 left-4 z-50 flex flex-col gap-1.5 pointer-events-auto min-w-[420px] max-w-[560px]"
+                  >
+                    <div className="flex items-center gap-2">
                   <div
                     onClick={() => setMaxMapFocus('search')}
                     className={`relative flex-1 rounded-2xl transition-all ${
@@ -4011,7 +4718,9 @@ export default function CarPlayPage() {
                     })()}
                   </div>
                 )}
-              </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <GameMapWidget
                 ref={maxMapWidgetRef}
@@ -4019,23 +4728,28 @@ export default function CarPlayPage() {
                 gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                 heading={telemetry.connected ? telemetry.heading : undefined}
                 currentSpeed={telemetry.connected ? telemetry.speed : 0}
-                routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
-                source={telemetry.connected ? telemetry.source : undefined}
-                dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
-                destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
+                speedLimit={telemetry.connected ? telemetry.speedLimit : 0}
+                routeWaypoints={effectiveRouteWaypoints}
+                source={effectiveSource}
+                dest={effectiveDest}
+                destCompany={effectiveDestCompany}
                 navDistance={telemetry.connected ? telemetry.navDistance : undefined}
                 connected={telemetry.connected}
                 themeMode={activeMapTheme}
-                accentColor="#8b5cf6"
+                accentColor="#6d28d9"
                 width={maxMapDims.w}
                 height={maxMapDims.h}
                 mapId="carplay-max"
                 zoom={carPlayMapZoom}
                 onZoomChange={setCarPlayMapZoom}
-                showInstructions
+                showInstructions={settings.carPlayShowNavInstructions !== false}
                 showSpeedcams={true}
                 onSpeedcamAlert={setSpeedcamAlert}
                 onRouteCalculated={setCustomRouteInfo}
+                nearbyVehicles={telemetry.connected ? (telemetry as any).nearbyVehicles : undefined}
+                nearbyVehicleColor="#007aff"
+                semaphores={telemetry.connected ? (telemetry as any).semaphores : undefined}
+                onApproachingTrafficLightChange={setApproachingTrafficLight}
                 onDestinationReached={() => {
                   setCustomDest(null);
                   setCustomRouteInfo(null);
@@ -4103,152 +4817,88 @@ export default function CarPlayPage() {
                 )}
               </AnimatePresence>
 
-              {/* Authentic European Speed Limit Sign (VZ 274 Realistic Proportion) */}
-              <div className="absolute left-6 top-1/2 -translate-y-1/2 z-40 pointer-events-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)]">
-                <svg
-                  width="78"
-                  height="78"
-                  viewBox="0 0 80 80"
-                  className={
-                    telemetry.connected && telemetry.speedLimit > 0 && telemetry.speed > telemetry.speedLimit
-                      ? 'animate-pulse'
-                      : ''
-                  }
-                >
-                  {/* Outer Red Ring */}
-                  <circle
-                    cx="40"
-                    cy="40"
-                    r="36"
-                    fill="#ffffff"
-                    stroke={
-                      telemetry.connected && telemetry.speedLimit > 0 && telemetry.speed > telemetry.speedLimit
-                        ? '#e11d48'
-                        : '#dc2626'
-                    }
-                    strokeWidth="7.5"
-                  />
-                  {/* Authentic Traffic Sign Number */}
-                  <text
-                    x="40"
-                    y="53"
-                    textAnchor="middle"
-                    fontSize="42"
-                    fontWeight="900"
-                    fontFamily="Arial, Helvetica, sans-serif"
-                    fill="#09090b"
-                    letterSpacing="-2"
-                  >
-                    {telemetry.connected && telemetry.speedLimit > 0 ? Math.round(telemetry.speedLimit) : '80'}
-                  </text>
-                </svg>
+              {/* Authentic European Speed Limit Sign (VZ 274) OR Large Traffic Light (Ampel) */}
+              <div className="absolute left-6 top-1/2 -translate-y-1/2 w-24 z-40 pointer-events-none drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)] flex flex-col items-center">
+                <AnimatePresence mode="wait">
+                  {approachingTrafficLight ? (
+                    <motion.div
+                      key="hero-traffic-light"
+                      initial={{ opacity: 0, scale: 0.82, y: 15 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.82, y: -15 }}
+                      transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+                      className="w-24 flex flex-col items-center gap-2"
+                    >
+                      <TrafficLightWidget
+                        trafficLight={approachingTrafficLight}
+                        variant="large"
+                      />
+                      {/* Docked Authentic Speed Limit Roundel when available */}
+                      {telemetry.connected && telemetry.speedLimit > 0 && (
+                        <div className="w-12 h-12 rounded-full bg-white border-[4.5px] border-red-600 flex items-center justify-center text-slate-950 font-black text-sm shadow-[0_4px_16px_rgba(0,0,0,0.7)] font-sans tracking-tight shrink-0">
+                          {Math.round(telemetry.speedLimit)}
+                        </div>
+                      )}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="standard-speed-limit"
+                      initial={{ opacity: 0, scale: 0.85 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.85 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-24 flex flex-col items-center"
+                    >
+                      {telemetry.connected && telemetry.speedLimit > 0 ? (
+                        <svg
+                          width="78"
+                          height="78"
+                          viewBox="0 0 80 80"
+                          className={
+                            telemetry.connected && telemetry.speedLimit > 0 && telemetry.speed > telemetry.speedLimit
+                              ? 'animate-pulse'
+                              : ''
+                          }
+                        >
+                          {/* Outer Red Ring */}
+                          <circle
+                            cx="40"
+                            cy="40"
+                            r="36"
+                            fill="#ffffff"
+                            stroke={
+                              telemetry.connected && telemetry.speedLimit > 0 && telemetry.speed > telemetry.speedLimit
+                                ? '#e11d48'
+                                : '#dc2626'
+                            }
+                            strokeWidth="7.5"
+                          />
+                          {/* Authentic Traffic Sign Number */}
+                          <text
+                            x="40"
+                            y="53"
+                            textAnchor="middle"
+                            fontSize="42"
+                            fontWeight="900"
+                            fontFamily="Arial, Helvetica, sans-serif"
+                            fill="#09090b"
+                            letterSpacing="-2"
+                          >
+                            {Math.round(telemetry.speedLimit)}
+                          </text>
+                        </svg>
+                      ) : (
+                        <div className="w-16 h-16 rounded-full border-2 border-white/10 bg-black/40 flex items-center justify-center text-zinc-500 font-black text-xl font-mono">--</div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
-              {(pendingDest || customDest) && (
-                <motion.div
-                  key="bottom-nav"
-                  initial={false}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 12, scale: 0.96 }}
-                  transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
-                  className={`absolute bottom-3 left-3 flex items-center gap-3 rounded-2xl px-4 py-3 z-40 bg-zinc-900 transition-all ${
-                    maxMapFocus === 'bottom-nav'
-                      ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]'
-                      : ''
-                  }`}
-                  style={{
-                    background: activeMapTheme === 'dark' ? '#27272a' : '#ffffff',
-                    border: activeMapTheme === 'dark' ? '1px solid #3f3f46' : '1px solid #e4e4e7',
-                    boxShadow: 'none',
-                  }}
-                >
-                {pendingDest && !customDest && (
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <CompanyIcon
-                        companyName={pendingDest.destCompany}
-                        title={pendingDest.title}
-                        type={pendingDest.destCompany ? 'company' : 'city'}
-                        size="lg"
-                        activeMapTheme={activeMapTheme}
-                      />
-                      <div className="min-w-0">
-                        <div className={`text-sm font-bold truncate ${activeMapTheme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{pendingDest.title}</div>
-                        <div className={`text-xs truncate ${activeMapTheme === 'dark' ? 'text-zinc-400' : 'text-gray-500'}`}>
-                          {pendingDest.destCompany ? `Firma in ${pendingDest.dest}` : pendingDest.dest}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const dest = pendingDest;
-                        setCustomDest(dest);
-                        setPendingDest(null);
-                        showNotification({
-                          title: 'Route gestartet',
-                          message: `Navigation zu ${dest.title} gestartet!`,
-                          icon: <Navigation size={18} />,
-                          color: '#3b82f6',
-                        });
-                        setTimeout(() => {
-                          mapWidgetRef.current?.recenter();
-                          maxMapWidgetRef.current?.recenter();
-                        }, 100);
-                      }}
-                      className={`shrink-0 bg-blue-600 hover:bg-blue-500 ${activeMapTheme === 'dark' ? 'text-white' : 'text-gray-900'} text-sm font-bold px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer ${
-                        maxMapFocus === 'bottom-nav' ? 'ring-2 ring-white' : ''
-                      }`}
-                    >
-                      Route starten
-                    </button>
-                  </div>
-                )}
-
-                {customDest && !pendingDest && (
-                  <>
-                    <button
-                      onClick={() => {
-                        mapWidgetRef.current?.clearRoute();
-                        maxMapWidgetRef.current?.clearRoute();
-                        setCustomDest(null);
-                        setCustomRouteInfo(null);
-                        setPendingDest(null);
-                      }}
-                      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
-                        maxMapFocus === 'bottom-nav' ? 'ring-2 ring-rose-400 scale-110' : ''
-                      }`}
-                      style={{
-                        background: activeMapTheme === 'dark' ? '#3f3f46' : '#f4f4f5',
-                        color: activeMapTheme === 'dark' ? '#e4e4e7' : '#18181b',
-                      }}
-                      title="Navigation abbrechen"
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-
-                    <div className="w-px h-5" style={{ background: activeMapTheme === 'dark' ? '#52525b' : '#d4d4d8' }} />
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-black font-mono tracking-tight" style={{ color: activeMapTheme === 'dark' ? '#fafafa' : '#18181b' }}>
-                        {getRemainingSeconds() ? formatRemainingTime(getRemainingSeconds()!) : '--'}
-                      </span>
-                      <span className="text-sm font-bold" style={{ color: activeMapTheme === 'dark' ? '#a1a1aa' : '#71717a' }}>·</span>
-                      <span className="text-base font-black font-mono tracking-tight" style={{ color: activeMapTheme === 'dark' ? '#fafafa' : '#18181b' }}>
-                        {formatDistance((customDest && customRouteInfo?.distanceMeters) ? customRouteInfo.distanceMeters : data.navDistance) || '--'}
-                      </span>
-                    </div>
-
-                    <div className="w-px h-5" style={{ background: activeMapTheme === 'dark' ? '#52525b' : '#d4d4d8' }} />
-
-                    <span className="text-base font-black font-mono tracking-tight" style={{ color: activeMapTheme === 'dark' ? '#fafafa' : '#18181b' }}>
-                      {getRemainingSeconds() ? formatETA(getRemainingSeconds()!) : '--:--'}
-                    </span>
-                  </>
-                )}
-              </motion.div>
-              )}
+              {/* Bottom-left Navigation HUD (Maximized Map) */}
+              <AnimatePresence>
+                {renderBottomNavHud(false)}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
@@ -4437,14 +5087,16 @@ export default function CarPlayPage() {
                         gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
                         gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
                         heading={telemetry.connected ? telemetry.heading : undefined}
-                        routeWaypoints={telemetry.connected ? (telemetry as any).routeWaypoints : undefined}
-                        source={telemetry.connected ? telemetry.source : undefined}
-                        dest={customDest ? customDest.dest : (telemetry.connected ? telemetry.dest : undefined)}
-                        destCompany={customDest ? customDest.destCompany : (telemetry.connected ? telemetry.dest_company : undefined)}
+                        currentSpeed={telemetry.connected ? telemetry.speed : 0}
+                        speedLimit={telemetry.connected ? telemetry.speedLimit : 0}
+                        routeWaypoints={effectiveRouteWaypoints}
+                        source={effectiveSource}
+                        dest={effectiveDest}
+                        destCompany={effectiveDestCompany}
                         navDistance={telemetry.connected ? telemetry.navDistance : undefined}
                         connected={telemetry.connected}
                         themeMode={activeMapTheme}
-                        accentColor="#8b5cf6"
+                        accentColor="#6d28d9"
                         width="100%"
                         height="100%"
                         mapId="tacho-mfd-map"
@@ -4452,6 +5104,9 @@ export default function CarPlayPage() {
                         onZoomChange={setCarPlayMapZoom}
                         showInstructions={false}
                         onRouteCalculated={setCustomRouteInfo}
+                        nearbyVehicles={telemetry.connected ? (telemetry as any).nearbyVehicles : undefined}
+                        nearbyVehicleColor="#007aff"
+                        semaphores={telemetry.connected ? (telemetry as any).semaphores : undefined}
                       />
                     </div>
                   )}
@@ -4874,19 +5529,23 @@ export default function CarPlayPage() {
             className="fixed inset-0 bg-black z-[9999998] flex flex-col items-center justify-center font-['Outfit',sans-serif] p-6 text-center select-none"
           >
             <div className="relative w-24 h-24 mb-5 flex items-center justify-center">
-              <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-2xl animate-pulse" />
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-amber-500/20 to-amber-600/5 border border-amber-500/30 flex items-center justify-center shadow-[0_0_35px_rgba(245,158,11,0.25)] relative">
-                <Truck className="w-10 h-10 text-amber-400 drop-shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+              <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse" />
+              <div className="w-20 h-20 rounded-3xl bg-zinc-950/80 border border-white/10 flex items-center justify-center shadow-[0_0_35px_var(--primary-glow)] relative p-3 overflow-hidden backdrop-blur-md">
+                <img
+                  src="logo.png"
+                  alt="Open Pipe Club Logo"
+                  className="w-full h-full object-contain drop-shadow-[0_0_12px_var(--primary-glow)]"
+                />
               </div>
             </div>
             <h1 className="text-2xl font-black font-['Unbounded',sans-serif] text-white tracking-wider uppercase mb-1">
               Open Pipe Club
             </h1>
-            <p className="text-[11px] font-bold text-amber-400 font-mono uppercase tracking-[0.3em] mb-7">
+            <p className="text-[11px] font-bold text-primary font-mono uppercase tracking-[0.3em] mb-7">
               CarPlay Dashboard
             </p>
             <div className="w-44 h-1.5 bg-white/10 rounded-full overflow-hidden relative shadow-inner">
-              <div className="absolute top-0 bottom-0 w-1/2 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 rounded-full animate-carplay-slide shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
+              <div className="absolute top-0 bottom-0 w-1/2 bg-primary rounded-full animate-carplay-slide shadow-[0_0_10px_var(--primary-glow)]" />
             </div>
             <span className="text-[11px] font-mono text-zinc-500 mt-3 animate-pulse">CarPlay wird gestartet...</span>
           </motion.div>

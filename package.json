@@ -1,7 +1,7 @@
 {
   "name": "open-pipe-club-app",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Open Pipe Club App",
   "author": "Open Pipe Club",
   "type": "module",
@@ -18,7 +18,9 @@
     "compression": "maximum",
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/discord-rpc/**"
+      "**/node_modules/discord-rpc/**",
+      "dist-electron/opc-telemetry-bridge.exe",
+      "dist-electron/telemetry-bridge.cs"
     ],
     "directories": {
       "output": "dist-app"
@@ -62,31 +64,14 @@
     }
   },
   "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/modifiers": "^9.0.0",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/joy": "^5.0.0-beta.52",
-    "@mui/material": "^9.0.1",
-    "@turf/bbox": "^7.3.5",
-    "@turf/bearing": "^7.3.5",
-    "@turf/clean-coords": "^7.3.5",
-    "@turf/helpers": "^7.3.5",
-    "@turf/length": "^7.3.5",
-    "@turf/nearest-point-on-line": "^7.3.5",
-    "@types/proj4": "^2.5.6",
-    "discord-rpc": "^4.0.1",
-    "mobx": "^6.15.4",
-    "mobx-react-lite": "^4.1.1",
-    "proj4": "^2.20.8",
-    "react-map-gl": "^8.1.1"
+    "discord-rpc": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/discord-rpc": "^4.0.10",
     "@types/node": "^24.12.2",
+    "@types/proj4": "^2.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -105,6 +90,7 @@
     "maplibre-gl": "^5.24.0",
     "pmtiles": "^4.4.1",
     "postcss": "^8.5.14",
+    "proj4": "^2.20.8",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-is": "^19.2.5",

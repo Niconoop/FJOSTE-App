@@ -73,6 +73,22 @@ function gameToLcc(gx: number, gz: number): [number, number] | null {
   ];
 }
 
+/**
+ * Converts SCS SDK telemetry orientation heading into ETS2 world Cartesian angle (radians in [-PI, PI]).
+ * In SCS SDK: heading is in unit circle [0.0, 1.0) where 0=North (-Z), 0.25=West (-X), 0.5=South (+Z), 0.75=East (+X).
+ * In ETS2 Cartesian space: angle 0 points East (+X), PI/2 points South (+Z), PI points West (-X), -PI/2 points North (-Z).
+ */
+export function scsHeadingToCartesianAngle(h: number): number {
+  if (h == null || isNaN(h)) return 0;
+  let norm = h;
+  if (Math.abs(norm) <= 1.0) {
+    norm = ((norm % 1.0) + 1.0) % 1.0;
+    const theta = (0.5 - norm) * Math.PI * 2 + Math.PI / 2;
+    return ((theta % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+  }
+  return ((h % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+}
+
 export interface GraphData {
   graph: Map<string, Neighbors>;
   serviceAreas: Map<string, unknown>;
@@ -117,6 +133,33 @@ class SpatialIndex {
     const arr = this.sectors.get(key) || [];
     arr.push(node);
     this.sectors.set(key, arr);
+  }
+
+  withinRadius(x: number, y: number, maxDist = 50): SectorNode[] {
+    const cx = Math.floor(x / SECTOR_SIZE);
+    const cy = Math.floor(y / SECTOR_SIZE);
+    const maxRadius = Math.ceil(maxDist / SECTOR_SIZE);
+    const maxDistSq = maxDist * maxDist;
+    const result: SectorNode[] = [];
+
+    for (let dx = -maxRadius; dx <= maxRadius; dx++) {
+      for (let dy = -maxRadius; dy <= maxRadius; dy++) {
+        const key = `${cx + dx},${cy + dy}`;
+        const nodes = this.sectors.get(key);
+        if (!nodes) continue;
+
+        for (const node of nodes) {
+          const ddx = node.x - x;
+          const ddy = node.y - y;
+          const distSq = ddx * ddx + ddy * ddy;
+          if (distSq <= maxDistSq) {
+            result.push(node);
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   nearest(x: number, y: number, maxDist = 5000): SectorNode | null {
@@ -212,23 +255,24 @@ class SpatialIndex {
 
     candidates.sort((a, b) => a.dist - b.dist);
 
-    const top = candidates.slice(0, 5);
-    const normalizedHeading = ((heading % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const top = candidates.slice(0, 10);
+    const truckHeading = scsHeadingToCartesianAngle(heading);
 
     let best: SectorNode | null = null;
     let bestScore = Infinity;
 
     for (const node of top) {
-      let delta = ((node.rotation - normalizedHeading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2);
-      if (delta > Math.PI) delta = Math.PI * 2 - delta;
-      const score = node.dist + delta * 1200;
+      const delta = Math.abs(((node.rotation - truckHeading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      // Strongly penalize opposite-direction nodes (> 90 degrees) to prevent snapping to Gegenfahrbahn
+      const alignmentPenalty = delta > (Math.PI / 2) ? 10000 + delta * 3000 : delta * 600;
+      const score = node.dist + alignmentPenalty;
       if (score < bestScore) {
         bestScore = score;
         best = node;
       }
     }
 
-    return best;
+    return best || candidates[0];
   }
 }
 
@@ -300,9 +344,39 @@ class BinaryHeap<T> {
 // --- Graph loader ---
 
 export interface PrefabMetadata {
-  type: 'roundabout' | 'highway-exit' | 'turn' | 'road';
+  type: 'roundabout' | 'highway-exit' | 'highway-entry' | 'turn' | 'road';
   token: string;
   path: string;
+  nodeCount?: number;
+  prefabUid?: string;
+}
+
+export interface PrefabDescNavCurve {
+  start: { x: number; y: number; rotation: number };
+  end: { x: number; y: number; rotation: number };
+  nextLines: number[];
+}
+
+export interface PrefabDescNode {
+  inputLanes: number[];
+  outputLanes: number[];
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+export interface PrefabDesc {
+  token: string;
+  path: string;
+  nodes: PrefabDescNode[];
+  navCurves: PrefabDescNavCurve[];
+}
+
+export interface PrefabItem {
+  uid: string;
+  token: string;
+  originNodeIndex: number;
+  nodeUids: string[];
 }
 
 let cachedGraph: {
@@ -312,6 +386,8 @@ let cachedGraph: {
   roads: Map<string, RoadInfo>;
   nodeLUT: Map<string, NodeInfo>;
   nodePrefabMap: Map<string, PrefabMetadata>;
+  prefabsByUid: Map<string, PrefabItem>;
+  prefabDescsByToken: Map<string, PrefabDesc>;
 } | null = null;
 
 function normalizeUid(val: unknown): string {
@@ -465,6 +541,7 @@ function loadGraph(mapDataDir: string, map: 'europe' | 'usa' = 'europe'): {
   }
 
   const prefabDescriptionsMap = new Map<string, string>();
+  const prefabDescsByToken = new Map<string, PrefabDesc>();
   let descPath = path.join(mapDataDir, `${map}-prefabDescriptions.json`);
   if (!fs.existsSync(descPath)) {
     const alt = path.join(mapDataDir, `${map}-prefab-descriptions.json`);
@@ -474,33 +551,68 @@ function loadGraph(mapDataDir: string, map: 'europe' | 'usa' = 'europe'): {
     try {
       const rawDescs = JSON.parse(fs.readFileSync(descPath, 'utf8'));
       for (const d of rawDescs) {
-        if (d && d.token && d.path) {
-          prefabDescriptionsMap.set(String(d.token), String(d.path));
+        if (d && d.token) {
+          const tokenStr = String(d.token);
+          if (d.path) {
+            prefabDescriptionsMap.set(tokenStr, String(d.path));
+          }
+          prefabDescsByToken.set(tokenStr, {
+            token: tokenStr,
+            path: String(d.path || ''),
+            nodes: Array.isArray(d.nodes) ? d.nodes.map((n: any) => ({
+              inputLanes: Array.isArray(n.inputLanes) ? n.inputLanes : [],
+              outputLanes: Array.isArray(n.outputLanes) ? n.outputLanes : [],
+              x: Number(n.x) || 0,
+              y: Number(n.y) || 0,
+              rotation: Number(n.rotation) || 0,
+            })) : [],
+            navCurves: Array.isArray(d.navCurves) ? d.navCurves.map((c: any) => ({
+              start: { x: Number(c.start?.x) || 0, y: Number(c.start?.y) || 0, rotation: Number(c.start?.rotation) || 0 },
+              end: { x: Number(c.end?.x) || 0, y: Number(c.end?.y) || 0, rotation: Number(c.end?.rotation) || 0 },
+              nextLines: Array.isArray(c.nextLines) ? c.nextLines : [],
+            })) : [],
+          });
         }
       }
-      console.log(`[route-service] Loaded ${prefabDescriptionsMap.size} prefab descriptions from ${descPath}`);
+      console.log(`[route-service] Loaded ${prefabDescsByToken.size} prefab descriptions with navCurves from ${descPath}`);
     } catch (e: any) {
       console.error('[route-service] Failed to parse prefabDescriptions:', e.message);
     }
   }
 
+  const prefabsByUid = new Map<string, PrefabItem>();
   const nodePrefabMap = new Map<string, PrefabMetadata>();
   const prefabsPath = path.join(mapDataDir, `${map}-prefabs.json`);
   if (fs.existsSync(prefabsPath)) {
     try {
       const rawPrefabs = JSON.parse(fs.readFileSync(prefabsPath, 'utf8'));
       for (const pf of rawPrefabs) {
-        if (pf && pf.token && Array.isArray(pf.nodeUids)) {
+        if (pf && pf.uid && pf.token && Array.isArray(pf.nodeUids)) {
+          const uidStr = normalizeUid(pf.uid);
           const token = String(pf.token);
           const pfPath = prefabDescriptionsMap.get(token) || token;
-          const type = classifyPrefabPath(pfPath);
-          const metadata: PrefabMetadata = { type, token, path: pfPath };
-          for (const nUid of pf.nodeUids) {
-            nodePrefabMap.set(normalizeUid(nUid), metadata);
+          const nodeUidsNorm = pf.nodeUids.map(normalizeUid);
+          const metadata: PrefabMetadata = {
+            type,
+            token,
+            path: pfPath,
+            nodeCount: nodeUidsNorm.length,
+            prefabUid: uidStr
+          };
+
+          prefabsByUid.set(uidStr, {
+            uid: uidStr,
+            token,
+            originNodeIndex: Number(pf.originNodeIndex) || 0,
+            nodeUids: nodeUidsNorm,
+          });
+
+          for (const nUid of nodeUidsNorm) {
+            nodePrefabMap.set(nUid, metadata);
           }
         }
       }
-      console.log(`[route-service] Mapped ${nodePrefabMap.size} nodes to prefabs from ${prefabsPath}`);
+      console.log(`[route-service] Mapped ${nodePrefabMap.size} nodes to ${prefabsByUid.size} prefabs from ${prefabsPath}`);
     } catch (e: any) {
       console.error('[route-service] Failed to parse prefabs:', e.message);
     }
@@ -519,9 +631,9 @@ function loadGraph(mapDataDir: string, map: 'europe' | 'usa' = 'europe'): {
     nodeLUT.set(node.uid, node);
   }
 
-  console.log(`[route-service] Loaded ${nodes.length} nodes, ${graphData.graph.size} graph entries, ${roads.size} roads, ${nodePrefabMap.size} prefab nodes`);
+  console.log(`[route-service] Loaded ${nodes.length} nodes, ${graphData.graph.size} graph entries, ${roads.size} roads, ${prefabsByUid.size} prefabs, ${prefabDescsByToken.size} descs`);
 
-  cachedGraph = { data: graphData, nodes, spatialIndex, roads, nodeLUT, nodePrefabMap };
+  cachedGraph = { data: graphData, nodes, spatialIndex, roads, nodeLUT, nodePrefabMap, prefabsByUid, prefabDescsByToken };
   return cachedGraph;
 }
 
@@ -585,10 +697,11 @@ function findRoutePath(
   const h0 = h(startNode);
 
   // Push both forward and backward initial states to openSet
-  const faDelta = heading != null
-    ? Math.abs(((startNode.rotation - heading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI)
+  const truckHeading = heading != null ? scsHeadingToCartesianAngle(heading) : undefined;
+  const faDelta = truckHeading != null
+    ? Math.abs(((startNode.rotation - truckHeading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI)
     : 0;
-  const isBackwardMoreAligned = heading != null && faDelta > Math.PI / 2;
+  const isBackwardMoreAligned = truckHeading != null && faDelta > Math.PI / 2;
 
   const fwdState: PathState = { nodeUid: startUid, direction: 'forward' };
   const bwdState: PathState = { nodeUid: startUid, direction: 'backward' };
@@ -710,8 +823,9 @@ function findRoutePathFallback(
 
     let neighbors = [...neighborsObj.forward, ...neighborsObj.backward];
 
-    if (heading != null && current.uid === startUid && startNode) {
-      const faDelta = Math.abs(((startNode.rotation - heading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+    const truckHeading = heading != null ? scsHeadingToCartesianAngle(heading) : undefined;
+    if (truckHeading != null && current.uid === startUid && startNode) {
+      const faDelta = Math.abs(((startNode.rotation - truckHeading) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
       const preferForward = faDelta <= Math.PI / 2;
       neighbors = preferForward ? neighborsObj.forward : neighborsObj.backward;
     }
@@ -739,19 +853,14 @@ function heuristic(a: { x: number; y: number }, b: { x: number; y: number }): nu
 
 // --- Hermite spline interpolation (matches truckermudgeon/maps geom.ts) ---
 
-function getValidTangent(rot: number, chordAngle: number): number {
+function clampTangentAngle(rot: number, chordAngle: number): number {
   let delta = rot - chordAngle;
   while (delta > Math.PI) delta -= Math.PI * 2;
   while (delta < -Math.PI) delta += Math.PI * 2;
-  if (Math.abs(delta) > Math.PI / 2) {
-    rot += Math.PI;
-    delta = rot - chordAngle;
-    while (delta > Math.PI) delta -= Math.PI * 2;
-    while (delta < -Math.PI) delta += Math.PI * 2;
-  }
-  const maxDev = Math.PI / 6;
-  if (delta > maxDev) rot = chordAngle + maxDev;
-  if (delta < -maxDev) rot = chordAngle - maxDev;
+  // Natural clamp: avoid backward loops without inverting tangent
+  const maxDev = (85 * Math.PI) / 180;
+  if (delta > maxDev) return chordAngle + maxDev;
+  if (delta < -maxDev) return chordAngle - maxDev;
   return rot;
 }
 
@@ -769,21 +878,25 @@ function toSplinePoints(
   if (dist < 0.1) return [p0, p1];
 
   const chordAngle = Math.atan2(dy, dx);
-  const startRot = getValidTangent(start.rotation, chordAngle);
-  const endRot = getValidTangent(end.rotation, chordAngle);
+  const startRot = clampTangentAngle(start.rotation, chordAngle);
+  const endRot = clampTangentAngle(end.rotation, chordAngle);
 
-  // Dynamic step count based on angle difference, matching reference
+  // Dynamic step count based on both distance AND curvature
+  // Samples a point every ~10 meters with extra density on sharp curves
   if (steps == null) {
-    steps = Math.min(
-      8,
-      Math.floor(Math.abs(Math.tan(startRot - endRot)) * 20) + 1,
-    );
+    const deltaRot = Math.abs(startRot - endRot);
+    const distSteps = Math.ceil(dist / 10);
+    const curveSteps = Math.ceil(deltaRot * 16);
+    steps = Math.min(64, Math.max(4, distSteps, curveSteps));
   }
   if (steps < 1) steps = 1;
 
-  // Cubic Hermite interpolation tangent vectors aligned with road direction
-  const m0: [number, number] = [Math.cos(startRot) * dist, Math.sin(startRot) * dist];
-  const m1: [number, number] = [Math.cos(endRot) * dist, Math.sin(endRot) * dist];
+  // Tangent scaling with curvature damping to strictly eliminate overshooting or bulging
+  const deltaRot = Math.abs(startRot - chordAngle) + Math.abs(endRot - chordAngle);
+  const curvatureDamping = Math.max(0.3, Math.min(0.5, 0.5 - (deltaRot / (Math.PI * 2)) * 0.2));
+  const tangentScale = dist * curvatureDamping;
+  const m0: [number, number] = [Math.cos(startRot) * tangentScale, Math.sin(startRot) * tangentScale];
+  const m1: [number, number] = [Math.cos(endRot) * tangentScale, Math.sin(endRot) * tangentScale];
 
   const res: [number, number][] = [];
   for (let i = 0; i < steps + 1; i++) {
@@ -867,6 +980,165 @@ function offsetPolylineRight(points: [number, number][], offsetMeters: number): 
   return smoothPolyline(rawOffset, 2);
 }
 
+// --- Prefab Junction & Interchange Geometry ---
+
+function rotateRight<T>(arr: readonly T[], count: number): T[] {
+  if (arr.length === 0 || count === 0) return arr.slice();
+  const c = ((count % arr.length) + arr.length) % arr.length;
+  return arr.slice(-c).concat(arr.slice(0, -c));
+}
+
+function rotatePoint(px: number, py: number, rad: number, cx: number, cy: number): [number, number] {
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = px - cx;
+  const dy = py - cy;
+  return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+}
+
+function toMapPosition(
+  px: number,
+  py: number,
+  prefabItem: PrefabItem,
+  prefabDesc: PrefabDesc,
+  nodeLUT: Map<string, NodeInfo>,
+): [number, number] {
+  const prefabOrigin = prefabDesc.nodes[prefabItem.originNodeIndex];
+  const originUid = normalizeUid(prefabItem.nodeUids[0]);
+  const originNode = nodeLUT.get(originUid);
+  if (!prefabOrigin || !originNode) return [px, py];
+
+  const originX = originNode.x;
+  const originY = originNode.y;
+  const prefabStartX = originX - prefabOrigin.x;
+  const prefabStartY = originY - prefabOrigin.y;
+  const rot = originNode.rotation - prefabOrigin.rotation;
+
+  return rotatePoint(px + prefabStartX, py + prefabStartY, rot, originX, originY);
+}
+
+function getCurvePaths(prefabDesc: PrefabDesc, inputLaneIndex: number): { endingNodeIndex: number; curvePathIndices: number[] }[] {
+  const endingCurveIndexToNodeIndex = new Map<number, number>();
+  for (let nodeIndex = 0; nodeIndex < prefabDesc.nodes.length; nodeIndex++) {
+    const node = prefabDesc.nodes[nodeIndex];
+    for (const outputLane of node.outputLanes) {
+      endingCurveIndexToNodeIndex.set(outputLane, nodeIndex);
+    }
+  }
+
+  const prefix = (curvePath: { endingNodeIndex: number; curvePathIndices: number[] }, curveIndex: number) => ({
+    endingNodeIndex: curvePath.endingNodeIndex,
+    curvePathIndices: [curveIndex, ...curvePath.curvePathIndices],
+  });
+
+  const seenIndices = new Set<number>();
+  const getPaths = (curveIndex: number): { endingNodeIndex: number; curvePathIndices: number[] }[] => {
+    if (seenIndices.has(curveIndex)) return [];
+    seenIndices.add(curveIndex);
+
+    if (endingCurveIndexToNodeIndex.has(curveIndex)) {
+      return [{ endingNodeIndex: endingCurveIndexToNodeIndex.get(curveIndex)!, curvePathIndices: [] }];
+    }
+
+    const ending: { endingNodeIndex: number; curvePathIndices: number[] }[] = [];
+    const curve = prefabDesc.navCurves[curveIndex];
+    if (curve && Array.isArray(curve.nextLines)) {
+      for (const next of curve.nextLines) {
+        ending.push(...getPaths(next).map(p => prefix(p, next)));
+      }
+    }
+    return ending;
+  };
+
+  return getPaths(inputLaneIndex).map(p => prefix(p, inputLaneIndex));
+}
+
+function getPrefabCurvePoints(
+  sNode: NodeInfo,
+  eNode: NodeInfo,
+  sharedPrefabUid: string | undefined,
+  prefabsByUid: Map<string, PrefabItem>,
+  prefabDescsByToken: Map<string, PrefabDesc>,
+  nodeLUT: Map<string, NodeInfo>,
+): [number, number][] | null {
+  let prefabItem: PrefabItem | undefined;
+  if (sharedPrefabUid) {
+    prefabItem = prefabsByUid.get(sharedPrefabUid);
+  }
+  if (!prefabItem) {
+    // Search across forward/backward item references of adjacent nodes
+    for (const itemUid of [sNode.forwardItemUid, sNode.backwardItemUid, eNode.forwardItemUid, eNode.backwardItemUid]) {
+      if (itemUid && itemUid !== '0' && prefabsByUid.has(itemUid)) {
+        const candidate = prefabsByUid.get(itemUid)!;
+        const normUids = candidate.nodeUids.map(normalizeUid);
+        if (normUids.includes(sNode.uid) && normUids.includes(eNode.uid)) {
+          prefabItem = candidate;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!prefabItem) return null;
+
+  const prefabDesc = prefabDescsByToken.get(prefabItem.token);
+  if (!prefabDesc || !prefabDesc.navCurves || prefabDesc.navCurves.length === 0) return null;
+
+  const targetNodeUids = rotateRight(prefabItem.nodeUids.map(normalizeUid), prefabItem.originNodeIndex);
+  const startNodeIndex = targetNodeUids.indexOf(sNode.uid);
+  const endNodeIndex = targetNodeUids.indexOf(eNode.uid);
+
+  if (startNodeIndex < 0 || endNodeIndex < 0 || startNodeIndex >= prefabDesc.nodes.length) {
+    return null;
+  }
+
+  const sDescNode = prefabDesc.nodes[startNodeIndex];
+  if (!sDescNode || !sDescNode.inputLanes || sDescNode.inputLanes.length === 0) {
+    return null;
+  }
+
+  // Find curve path leading to endNodeIndex
+  let chosenCurveIndices: number[] | null = null;
+  for (const inputLane of sDescNode.inputLanes) {
+    const paths = getCurvePaths(prefabDesc, inputLane);
+    const match = paths.find(p => p.endingNodeIndex === endNodeIndex);
+    if (match && match.curvePathIndices.length > 0) {
+      chosenCurveIndices = match.curvePathIndices;
+      break;
+    }
+  }
+
+  if (!chosenCurveIndices || chosenCurveIndices.length === 0) {
+    return null;
+  }
+
+  // Sample Hermite spline points along the connected navCurve chain
+  const points: [number, number][] = [];
+  for (const ci of chosenCurveIndices) {
+    const curve = prefabDesc.navCurves[ci];
+    if (!curve) continue;
+
+    const curveSpline = toSplinePoints(
+      { x: curve.start.x, y: curve.start.y, rotation: curve.start.rotation },
+      { x: curve.end.x, y: curve.end.y, rotation: curve.end.rotation },
+    );
+
+    for (let k = 0; k < curveSpline.length; k++) {
+      const mapped = toMapPosition(curveSpline[k][0], curveSpline[k][1], prefabItem, prefabDesc, nodeLUT);
+      if (points.length === 0) {
+        points.push(mapped);
+      } else {
+        const last = points[points.length - 1];
+        if (Math.hypot(mapped[0] - last[0], mapped[1] - last[1]) > 0.1) {
+          points.push(mapped);
+        }
+      }
+    }
+  }
+
+  return points.length >= 2 ? points : null;
+}
+
 // --- Public API ---
 
 export function getRouteServiceStatus(mapDataDir: string | null): { available: boolean; error?: string } {
@@ -882,6 +1154,95 @@ export function getRouteServiceStatus(mapDataDir: string | null): { available: b
   return { available: true };
 }
 
+/**
+ * Checks if a given node represents a true intersection with 3 or more connected roads.
+ * A node is an intersection if:
+ * 1. It directly has 3 or more unique connected neighbor nodes in the road graph, OR
+ * 2. It belongs to an intersection prefab that connects 3 or more roads (T-junction, crossroads, interchange, roundabout).
+ */
+export function isNodeIntersection(
+  nodeUid: string,
+  graph: Map<string, Neighbors>,
+  nodePrefabMap: Map<string, PrefabMetadata>,
+  prefabsByUid?: Map<string, PrefabItem>
+): boolean {
+  // 1. Direct graph degree (number of connected paths in road graph)
+  const neighbors = graph.get(nodeUid);
+  if (neighbors) {
+    const unique = new Set<string>();
+    for (const n of neighbors.forward) unique.add(n.nodeUid);
+    for (const n of neighbors.backward) unique.add(n.nodeUid);
+    if (unique.size >= 3) return true;
+  }
+
+  // 2. Prefab with 3 or more connected roads (crossroads, T-junction, interchange, roundabout)
+  const meta = nodePrefabMap.get(nodeUid);
+  if (meta) {
+    if (meta.nodeCount != null && meta.nodeCount >= 3) return true;
+    if (meta.prefabUid && prefabsByUid) {
+      const pf = prefabsByUid.get(meta.prefabUid);
+      if (pf && pf.nodeUids.length >= 3) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Checks if there is an actual intersection node (with 3 or more roads) within a search radius of (x, y).
+ */
+export function hasIntersectionNearPoint(
+  x: number,
+  y: number,
+  spatialIndex: SpatialIndex,
+  graph: Map<string, Neighbors>,
+  nodePrefabMap: Map<string, PrefabMetadata>,
+  prefabsByUid: Map<string, PrefabItem>,
+  radius = 45
+): boolean {
+  const nearbyNodes = spatialIndex.withinRadius(x, y, radius);
+  for (const n of nearbyNodes) {
+    if (isNodeIntersection(n.uid, graph, nodePrefabMap, prefabsByUid)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Filters a list of candidate turn points against the ETS2 map nodes.
+ * Guarantees that turn instructions are ONLY generated if there is an actual intersection with 3 or more roads.
+ */
+export function verifyTurnPointsWithNodes(
+  turnPoints: TurnPointInfo[],
+  mapDataDir: string,
+  map: 'europe' | 'usa' = 'europe'
+): TurnPointInfo[] {
+  if (!turnPoints || turnPoints.length === 0) return [];
+
+  let graphContext = cachedGraph;
+  if (!graphContext) {
+    try {
+      loadGraph(mapDataDir, map);
+      graphContext = cachedGraph;
+    } catch (e: any) {
+      console.warn('[route-service] Failed to load graph in verifyTurnPointsWithNodes:', e.message);
+      return turnPoints;
+    }
+    if (!graphContext) return turnPoints;
+  }
+
+  const { spatialIndex, data, nodePrefabMap, prefabsByUid } = graphContext;
+
+  return turnPoints.filter(tp => {
+    // Roundabouts are always multi-branch junction prefabs with multiple exits
+    if (tp.type === 'roundabout') return true;
+
+    // Check if within 45m there is an actual node with >= 3 connected roads
+    return hasIntersectionNearPoint(tp.x, tp.y, spatialIndex, data.graph, nodePrefabMap, prefabsByUid, 45);
+  });
+}
+
 export function getRoute(
   sourceX: number,
   sourceZ: number,
@@ -891,7 +1252,7 @@ export function getRoute(
   heading?: number,
 ): RouteResult | null {
   try {
-    const { data: graphData, spatialIndex, nodes, roads, nodeLUT, nodePrefabMap } = loadGraph(mapDataDir);
+    const { data: graphData, spatialIndex, nodes, roads, nodeLUT, nodePrefabMap, prefabsByUid, prefabDescsByToken } = loadGraph(mapDataDir);
 
     let sourceNode = heading != null
       ? spatialIndex.nearestWithHeading(sourceX, sourceZ, heading, graphData.graph, 20000)
@@ -930,7 +1291,11 @@ export function getRoute(
       };
     }
 
-    const result = findRoutePath(effectiveSource.uid, effectiveDest.uid, graphData.graph, nodeLUT, heading);
+    let result = findRoutePath(effectiveSource.uid, effectiveDest.uid, graphData.graph, nodeLUT, heading);
+    if (!result || result.path.length < 2) {
+      console.log('[route-service] Directional A* found no path, trying robust fallback A*...');
+      result = findRoutePathFallback(effectiveSource.uid, effectiveDest.uid, graphData.graph, nodeLUT, heading);
+    }
     if (!result || result.path.length < 2) {
       console.warn('[route-service] No path found, falling back to straight line');
       return {
@@ -941,10 +1306,67 @@ export function getRoute(
       };
     }
 
-    // Build coordinates array starting from player position
-    const coordinates: [number, number][] = [[sourceX, sourceZ]];
-    const segmentLanes: number[] = [2];
-    const turnPoints: Array<{ x: number; y: number; bearing: number }> = [];
+    // Build coordinates array starting cleanly from vehicle projected position along road
+    const coordinates: [number, number][] = [];
+    const segmentLanes: number[] = [];
+    const turnPoints: Array<{ x: number; y: number; bearing: number; type?: TurnPointInfo['type']; dir?: 'left' | 'straight' | 'right'; absAngle?: number; coordIdx?: number }> = [];
+
+    const appendSegmentPoints = (pts: [number, number][], laneCount: number) => {
+      if (!pts || pts.length === 0) return;
+      if (coordinates.length === 0) {
+        // First segment: project sourceX, sourceZ onto the segment to prevent 90-degree lateral hooks
+        let bestDistSq = Infinity;
+        let bestK = 0;
+        let bestProjX = pts[0][0];
+        let bestProjZ = pts[0][1];
+
+        for (let k = 0; k < pts.length - 1; k++) {
+          const ax = pts[k][0], az = pts[k][1];
+          const bx = pts[k + 1][0], bz = pts[k + 1][1];
+          const dx = bx - ax, dz = bz - az;
+          const lenSq = dx * dx + dz * dz;
+          let t = 0;
+          if (lenSq > 1e-6) {
+            t = Math.max(0, Math.min(1, ((sourceX - ax) * dx + (sourceZ - az) * dz) / lenSq));
+          }
+          const px = ax + t * dx;
+          const pz = az + t * dz;
+          const dSq = (sourceX - px) * (sourceX - px) + (sourceZ - pz) * (sourceZ - pz);
+          if (dSq < bestDistSq) {
+            bestDistSq = dSq;
+            bestK = k;
+            bestProjX = px;
+            bestProjZ = pz;
+          }
+        }
+
+        // If vehicle is farther than 45m away (depot / yard), connect from truck to projected road point
+        if (bestDistSq > 45 * 45) {
+          coordinates.push([sourceX, sourceZ]);
+          segmentLanes.push(laneCount);
+        }
+        coordinates.push([bestProjX, bestProjZ]);
+        segmentLanes.push(laneCount);
+
+        for (let j = bestK + 1; j < pts.length; j++) {
+          const pt = pts[j];
+          const last = coordinates[coordinates.length - 1];
+          if (!last || Math.hypot(pt[0] - last[0], pt[1] - last[1]) > 0.1) {
+            coordinates.push(pt);
+            segmentLanes.push(laneCount);
+          }
+        }
+      } else {
+        for (let j = 1; j < pts.length; j++) {
+          const pt = pts[j];
+          const last = coordinates[coordinates.length - 1];
+          if (!last || Math.hypot(pt[0] - last[0], pt[1] - last[1]) > 0.1) {
+            coordinates.push(pt);
+            segmentLanes.push(laneCount);
+          }
+        }
+      }
+    };
 
     for (let i = 0; i < result.path.length - 1; i++) {
       const sUid = result.path[i];
@@ -953,10 +1375,8 @@ export function getRoute(
       const eNode = nodeLUT.get(eUid);
 
       if (!sNode || !eNode) {
-        // Fallback: just add endpoint
         if (eNode) {
-          coordinates.push([eNode.x, eNode.y]);
-          segmentLanes.push(2);
+          appendSegmentPoints([[eNode.x, eNode.y]], 2);
         }
         continue;
       }
@@ -972,11 +1392,7 @@ export function getRoute(
         ? Math.max(1, isForward ? (roadInfo.lanesRight || 1) : (roadInfo.lanesLeft || 1))
         : 1;
 
-      // Graph-based turn detection: compare the road item of the current
-      // segment (i-1 → i) with the road item of the next segment (i → i+1).
-      // If they differ, the route changes roads at this node → turn/intersection.
-      // If there is no road item (prefab intersection), it's always a turn.
-      // Graph-based turn detection: generate turnPoints at prefab junctions, road changes, and sharp turns
+      // Graph-based turn detection: compare road items of current and next segments
       if (i > 0) {
         const prevUid = result.path[i - 1];
         const prevNode = nodeLUT.get(prevUid);
@@ -1005,9 +1421,14 @@ export function getRoute(
             const isEntry = (prevRoadInfo && (prevRoadInfo.lanesRight < 2 && prevRoadInfo.lanesLeft < 2) && roadInfo && (roadInfo.lanesRight >= 2 || roadInfo.lanesLeft >= 2)) ||
               (isPrefabJunction && deltaDeg >= 8 && deltaDeg < 28 && roadInfo && roadLaneCount >= 2);
 
-            const uniqueNeighborNodes = Array.from(new Set([...(graphData.graph.get(sNode.uid)?.forward || []).map(n => n.nodeUid), ...(graphData.graph.get(sNode.uid)?.backward || []).map(n => n.nodeUid)])).filter(uid => uid !== prevUid);
+            const forwardNeighbors = graphData.graph.get(sNode.uid)?.forward || [];
+            const backwardNeighbors = graphData.graph.get(sNode.uid)?.backward || [];
+            const allConnectedNeighbors = Array.from(new Set([...forwardNeighbors.map(n => n.nodeUid), ...backwardNeighbors.map(n => n.nodeUid)]));
+            const uniqueNeighborNodes = allConnectedNeighbors.filter(uid => uid !== prevUid);
 
-            // Decision Vector Method: Analyze all candidate outgoing paths from sNode
+            // Crucial check: verify that this node or its prefab is actually an intersection with 3 or more connected roads!
+            const isIntersection = isNodeIntersection(sNode.uid, graphData.graph, nodePrefabMap, prefabsByUid);
+
             let isTakingStraightPath = false;
             if (uniqueNeighborNodes.length >= 2) {
               let minCandidateDelta = Infinity;
@@ -1029,26 +1450,24 @@ export function getRoute(
                 }
               }
 
-              // If the route chose the straightest outgoing path and its angle is small, the driver is continuing straight
               if (straightNeighborUid === eNode.uid && minCandidateDelta < 28) {
                 isTakingStraightPath = true;
               }
             }
 
             const isRoundabout = sPrefabMeta?.type === 'roundabout';
-            const isPrefabExit = sPrefabMeta?.type === 'highway-exit' || isExit;
-            const isPrefabEntry = sPrefabMeta?.type === 'highway-entry' || isEntry;
+            const isPrefabExit = (sPrefabMeta?.type === 'highway-exit' || isExit) && isIntersection;
+            const isPrefabEntry = (sPrefabMeta?.type === 'highway-entry' || isEntry) && isIntersection;
 
             const isSameRoadContinuation = prevRoadInfo && roadInfo && prevSharedItemUid && sharedItemUid && prevSharedItemUid === sharedItemUid;
-            const isMultiBranchJunction = uniqueNeighborNodes.length >= 2;
 
-            // A turn ONLY occurs if the route takes a branch OTHER than the straight-through path, or at an exit/roundabout
-            const isSignificantTurn = !isSameRoadContinuation && (
+            // An instruction MUST only be generated if the node is actually an intersection with 3 or more roads!
+            const isSignificantTurn = isIntersection && !isSameRoadContinuation && (
               isRoundabout
                 ? deltaDeg >= 12
                 : (isPrefabExit || isPrefabEntry)
                   ? deltaDeg >= 15
-                  : (isMultiBranchJunction && !isTakingStraightPath && deltaDeg >= 18)
+                  : (!isTakingStraightPath && deltaDeg >= 18)
             );
 
             if (isSignificantTurn) {
@@ -1060,7 +1479,7 @@ export function getRoute(
                 const signedDelta = ((headingOut - headingIn) * (180 / Math.PI) + 540) % 360 - 180;
                 const turnDir: 'left' | 'straight' | 'right' = signedDelta > 0 ? 'right' : 'left';
 
-                let maneuverType: 'turn' | 'highway-exit' | 'highway-entry' | 'roundabout' = 'turn';
+                let maneuverType: TurnPointInfo['type'] = 'turn';
                 if (sPrefabMeta && sPrefabMeta.type !== 'road') {
                   maneuverType = sPrefabMeta.type;
                 } else if (isPrefabExit) {
@@ -1076,7 +1495,7 @@ export function getRoute(
                   type: maneuverType,
                   dir: turnDir,
                   absAngle: deltaDeg,
-                  coordIdx: coordinates.length - 1,
+                  coordIdx: Math.max(0, coordinates.length - 1),
                 });
               }
             }
@@ -1085,53 +1504,54 @@ export function getRoute(
       }
 
       if (roadInfo) {
-        // Road found: use Hermite spline curve (matches reference roadLineString)
-        const splineStart = roadInfo.startNodeUid === sNode.uid ? sNode : eNode;
-        const splineEnd = roadInfo.endNodeUid === eNode.uid ? eNode : sNode;
+        const isForwardTraversal = roadInfo.startNodeUid === sNode.uid;
+        const canonicalStart = isForwardTraversal ? sNode : eNode;
+        const canonicalEnd   = isForwardTraversal ? eNode : sNode;
 
         let roadPoints = toSplinePoints(
-          { x: splineStart.x, y: splineStart.y, rotation: splineStart.rotation },
-          { x: splineEnd.x, y: splineEnd.y, rotation: splineEnd.rotation },
+          { x: canonicalStart.x, y: canonicalStart.y, rotation: canonicalStart.rotation },
+          { x: canonicalEnd.x,   y: canonicalEnd.y,   rotation: canonicalEnd.rotation   },
         );
 
-        // Reverse if we're traversing the road in the opposite direction
-        if (splineStart.uid !== sNode.uid) {
+        if (!isForwardTraversal) {
           roadPoints = roadPoints.reverse();
         }
 
-        // Skip first point (duplicate of previous segment's last point)
-        for (let j = 1; j < roadPoints.length; j++) {
-          coordinates.push(roadPoints[j]);
-          segmentLanes.push(roadLaneCount);
-        }
+        appendSegmentPoints(roadPoints, roadLaneCount);
       } else {
-        // Prefab/intersection curve: use Hermite spline between sNode and eNode for smooth junction turns
-        const dist = Math.hypot(eNode.x - sNode.x, eNode.y - sNode.y);
-        if (dist > 15 && dist < 300) {
-          const prefabPoints = toSplinePoints(
-            { x: sNode.x, y: sNode.y, rotation: sNode.rotation },
-            { x: eNode.x, y: eNode.y, rotation: eNode.rotation },
-            Math.min(8, Math.max(3, Math.floor(dist / 25)))
-          );
-          for (let j = 1; j < prefabPoints.length; j++) {
-            coordinates.push(prefabPoints[j]);
-            segmentLanes.push(2);
-          }
+        // Prefab intersection / junction: check for exact navCurves
+        const prefabPoints = getPrefabCurvePoints(sNode, eNode, sharedItemUid, prefabsByUid, prefabDescsByToken, nodeLUT);
+        if (prefabPoints && prefabPoints.length >= 2) {
+          appendSegmentPoints(prefabPoints, 2);
         } else {
-          coordinates.push([eNode.x, eNode.y]);
-          segmentLanes.push(2);
+          // Fallback: Hermite spline between sNode and eNode
+          const dist = Math.hypot(eNode.x - sNode.x, eNode.y - sNode.y);
+          if (dist > 5 && dist < 500) {
+            const deltaRot = Math.abs(sNode.rotation - eNode.rotation);
+            const steps = Math.min(32, Math.max(6, Math.ceil(dist / 10), Math.ceil(deltaRot * 12)));
+            const fallbackPoints = toSplinePoints(
+              { x: sNode.x, y: sNode.y, rotation: sNode.rotation },
+              { x: eNode.x, y: eNode.y, rotation: eNode.rotation },
+              steps
+            );
+            appendSegmentPoints(fallbackPoints, 2);
+          } else {
+            appendSegmentPoints([[sNode.x, sNode.y], [eNode.x, eNode.y]], 2);
+          }
         }
       }
     }
 
-    // Append final destination position
-    coordinates.push([destX, destZ]);
-    segmentLanes.push(2);
+    // Append final destination position if not already at end
+    const lastCoord = coordinates[coordinates.length - 1];
+    if (!lastCoord || Math.hypot(destX - lastCoord[0], destZ - lastCoord[1]) > 0.5) {
+      coordinates.push([destX, destZ]);
+      segmentLanes.push(2);
+    }
 
-    // Apply right-side lateral offset ONCE to the entire continuous route polyline
-    // Shifting the whole route +4.2m to the right keeps it in your driving lane on highways
-    // while maintaining 100% smooth, unbroken continuity across all node boundaries.
-    const finalCoordinates = offsetPolylineRight(coordinates, 4.2);
+    // Use true road centerline geometry without artificial lateral offset,
+    // guaranteeing that the route sits 100% dead-center on the rendered MapLibre ets2-roads layer.
+    const finalCoordinates = coordinates;
 
     console.log('[route-service] route found:', finalCoordinates.length, 'points,', turnPoints.length, 'turn points,', result.distance.toFixed(0), 'm');
 

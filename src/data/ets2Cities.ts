@@ -15,7 +15,7 @@ export interface Ets2City {
 let _allCities: Ets2City[] = Array.isArray(fullCitiesData) ? (fullCitiesData as Ets2City[]) : [];
 let _companies: any[] = Array.isArray(europeCompaniesData) ? (europeCompaniesData as any[]) : [];
 
-const COMMON_CITIES: Ets2City[] = [
+export const COMMON_CITIES: Ets2City[] = [
   { gameName: "berlin", realName: "Berlin", country: "germany", x: 10070.25, z: -9774.412, lat: 52.517389, lng: 13.395131 },
   { gameName: "hamburg", realName: "Hamburg", country: "germany", x: -1989.667, z: -17284.371, lat: 53.551086, lng: 9.993682 },
   { gameName: "munich", realName: "München", country: "germany", x: 1063.7, z: 12175.66, lat: 48.135124, lng: 11.581981 },
@@ -37,6 +37,9 @@ const COMMON_CITIES: Ets2City[] = [
   { gameName: "amsterdam", realName: "Amsterdam", country: "netherlands", x: -19042.082, z: -11308.295, lat: 52.37308, lng: 4.892453 },
   { gameName: "rotterdam", realName: "Rotterdam", country: "netherlands", x: -21285.52, z: -8190.82, lat: 51.922538, lng: 4.479617 },
   { gameName: "brussel", realName: "Brussel", country: "belgium", x: -22100.25, z: -2415.147, lat: 50.855103, lng: 4.351091 },
+  { gameName: "antwerp", realName: "Antwerpen", country: "belgium", x: -21700.676, z: -5680.764, lat: 51.22111, lng: 4.399708 },
+  { gameName: "gent", realName: "Gent", country: "belgium", x: -24647.20, z: -3412.50, lat: 51.054342, lng: 3.717424 },
+  { gameName: "liege", realName: "Liège", country: "belgium", x: -16912.80, z: -980.20, lat: 50.632557, lng: 5.579666 },
   { gameName: "paris", realName: "Paris", country: "france", x: -30980.39, z: 5186.06, lat: 48.856613, lng: 2.352222 },
   { gameName: "lyon", realName: "Lyon", country: "france", x: -24005.56, z: 24200.16, lat: 45.764043, lng: 4.835659 },
   { gameName: "marseille", realName: "Marseille", country: "france", x: -24900.13, z: 36990.33, lat: 43.296482, lng: 5.36978 },
@@ -108,37 +111,100 @@ export async function loadAllCities(): Promise<Ets2City[]> {
   return _allCities;
 }
 
+const CITY_NAME_ALIASES: Record<string, string> = {
+  'munich': 'munchen',
+  'vienna': 'wien',
+  'cologne': 'koln',
+  'nuremberg': 'nurnberg',
+  'geneva': 'geneve',
+  'warsaw': 'warszawa',
+  'prague': 'praha',
+  'brussels': 'brussel',
+  'rome': 'roma',
+  'milan': 'milano',
+  'venice': 'venezia',
+  'turin': 'torino',
+  'florence': 'firenze',
+  'genoa': 'genova',
+  'naples': 'napoli',
+  'belgrade': 'beograd',
+  'bucharest': 'bucuresti',
+  'copenhagen': 'kobenhavn',
+  'gothenburg': 'goteborg',
+  'lisbon': 'lisboa',
+  'seville': 'sevilla',
+  'moscow': 'moskva',
+  'saint petersburg': 'petersburg',
+  'st petersburg': 'petersburg',
+  'badajoz': 'badajoz',
+  'bajadoz': 'badajoz',
+  'wertle': 'werlte',
+  'timisoara': 'timisoara',
+  'timişoara': 'timisoara',
+  'klagenfurt am worthersee': 'klagenfurt',
+  'klagenfurt am wörthersee': 'klagenfurt',
+  'frankfurt am main': 'frankfurt',
+  'outside wroclaw': 'wroclaw',
+  'veliko tarnovo': 'veliko_tarnovo'
+};
+
+function normalizeCitySearchStr(s: string): string {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đ]/g, 'dj')
+    .replace(/[ß]/g, 'ss')
+    .toLowerCase()
+    .trim();
+}
+
 /**
- * Find a city by name (case-insensitive, matches gameName OR realName, strips '(City)', '(Road)').
+ * Find a city by name (case-insensitive, matches gameName OR realName, strips '(City)', '(Road)', '(Port)', '(POI)', '(HQ)').
  */
 export function findCity(name: string): Ets2City | undefined {
   if (!name) return undefined;
-  const cleanName = name.replace(/\s*\((City|Road)\)/i, '').trim().toLowerCase();
+  let cleanName = name.replace(/\s*\((City|Road|Port|POI|HQ)\)/i, '').trim();
+  cleanName = normalizeCitySearchStr(cleanName);
   
+  if (CITY_NAME_ALIASES[cleanName]) {
+    cleanName = CITY_NAME_ALIASES[cleanName];
+  }
+  const cleanWithUnderscore = cleanName.replace(/[\s-]+/g, '_');
+
   const pool = (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
-  
-  // 1. Exact match
-  const found = pool.find(
-    c => c.gameName.toLowerCase() === cleanName || c.realName.toLowerCase() === cleanName
-  );
+
+  // 1. Exact match on gameName, realName, or underscore variant
+  let found = pool.find(c => {
+    const gn = normalizeCitySearchStr(c.gameName);
+    const rn = normalizeCitySearchStr(c.realName);
+    return gn === cleanName || rn === cleanName || gn === cleanWithUnderscore || rn === cleanWithUnderscore;
+  });
   if (found) return found;
 
   // 2. Starts with match
-  const starts = pool.find(
-    c => c.realName.toLowerCase().startsWith(cleanName) || c.gameName.toLowerCase().startsWith(cleanName)
-  );
-  if (starts) return starts;
+  found = pool.find(c => {
+    const gn = normalizeCitySearchStr(c.gameName);
+    const rn = normalizeCitySearchStr(c.realName);
+    return rn.startsWith(cleanName) || gn.startsWith(cleanName) || rn.startsWith(cleanWithUnderscore) || gn.startsWith(cleanWithUnderscore);
+  });
+  if (found) return found;
 
-  // 3. Includes match
-  return pool.find(
-    c => cleanName.includes(c.realName.toLowerCase()) || cleanName.includes(c.gameName.toLowerCase())
-  );
+  // 3. Exact word-inclusion match (cleanName >= 4 chars, avoiding false substring matches like 'nice' in 'venice')
+  found = pool.find(c => {
+    const gn = normalizeCitySearchStr(c.gameName);
+    const rn = normalizeCitySearchStr(c.realName);
+    return (cleanName.length >= 4 && (rn === cleanName || gn === cleanName)) ||
+           (rn.length >= 4 && cleanName.startsWith(rn)) ||
+           (gn.length >= 4 && cleanName.startsWith(gn));
+  });
+
+  return found;
 }
 
 /**
  * Find nearest city to game coordinates (x, z).
  */
-export function findClosestCity(x: number, z: number, maxDist: number = 4000): { city: Ets2City; dist: number } | null {
+export function findClosestCity(x: number, z: number, maxDist: number = 35000): { city: Ets2City; dist: number } | null {
   const pool = (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
   let closest: Ets2City | null = null;
   let minDist = Infinity;

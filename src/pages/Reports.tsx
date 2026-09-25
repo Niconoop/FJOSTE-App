@@ -72,13 +72,13 @@ const Reports = () => {
     <div className="space-y-8 pb-10 animate-pulse">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
+          <div className="w-1 h-4 bg-primary rounded-full" />
           <div className="h-7 w-40 bg-white/5 rounded" />
         </div>
         <div className="h-3 w-56 bg-white/5 rounded mt-2" />
       </div>
 
-      <div className="flex items-center gap-1 bg-[#000000] p-1 rounded-xl border-2 border-[#f59e0b]/20 w-56">
+      <div className="flex items-center gap-1 bg-[#000000] p-1 rounded-xl border-2 border-primary/20 w-56">
         <div className="h-8 bg-white/5 rounded-lg flex-1" />
         <div className="h-8 bg-white/5 rounded-lg flex-1" />
       </div>
@@ -106,13 +106,13 @@ const Reports = () => {
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-4 bg-amber-400 rounded-full" />
-          <h1 className="font-unbounded text-2xl font-bold text-amber-400 uppercase tracking-tight italic">Berichte</h1>
+          <div className="w-1 h-4 bg-primary rounded-full" />
+          <h1 className="font-unbounded text-2xl font-bold text-primary uppercase tracking-tight italic">Berichte</h1>
         </div>
         <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Wöchentliche Auswertung & Archiv</p>
       </div>
 
-      <div className="flex items-center gap-1 w-fit bg-black/40 backdrop-blur-xl p-1 rounded-xl border-2 border-[#f59e0b]/20">
+      <div className="flex items-center gap-1 w-fit bg-black/40 backdrop-blur-xl p-1 rounded-xl border-2 border-primary/20">
           <button
             onClick={() => setView('current')}
             className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover-glow ${view === 'current' ? 'bg-primary text-black' : 'text-slate-500 hover:text-white'}`}
@@ -138,29 +138,29 @@ const Reports = () => {
           >
             {/* Weekly KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer">
                 <div className="p-3 rounded-xl bg-primary/10"><Users className="w-5 h-5 text-primary" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Gesamt</p>
                   <p className="text-xl font-black text-white">{weeklyReport?.total_members || stats?.members || "0"}</p>
                 </div>
               </div>
-              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer">
                 <div className="p-3 rounded-xl bg-emerald-500/10"><UserCheck className="w-5 h-5 text-emerald-400" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Aktiv (7d)</p>
                   <p className="text-xl font-black text-emerald-400">{weeklyReport?.active_members || "0"}</p>
                 </div>
               </div>
-              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
+              <div className="frosted-card flex items-center gap-4 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer">
                 <div className="p-3 rounded-xl bg-red-500/10"><UserX className="w-5 h-5 text-red-400" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Inaktiv</p>
                   <p className="text-xl font-black text-red-400">{weeklyReport?.inactive_members || "0"}</p>
                 </div>
               </div>
-              <div className="frosted-card flex items-center gap-4 hover-glow transition-all">
-                <div className="p-3 rounded-xl bg-amber-500/10"><Coins className="w-5 h-5 text-amber-400" /></div>
+              <div className="frosted-card flex items-center gap-4 hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all cursor-pointer">
+                <div className="p-3 rounded-xl bg-primary/10"><Coins className="w-5 h-5 text-primary" /></div>
                 <div>
                   <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Gesamt $</p>
                   <p className="text-xl font-black text-white">{weeklyReport?.total_revenue ? `${(weeklyReport.total_revenue / 1000).toFixed(0)}k` : stats?.revenue ? `${(stats.revenue / 1000).toFixed(0)}k` : "0"}</p>
@@ -170,7 +170,7 @@ const Reports = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Activity Chart */}
-              <div className="lg:col-span-2 frosted-card hover-glow transition-all">
+              <div className="lg:col-span-2 frosted-card hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest italic">Aktivitäts-Trend</h3>
@@ -200,7 +200,7 @@ const Reports = () => {
               </div>
 
               {/* Driver Activity Table */}
-              <div className="frosted-card overflow-hidden !p-0 flex flex-col h-[400px]">
+              <div className="frosted-card overflow-hidden !p-0 flex flex-col h-[400px] hover-glow hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] transition-all">
                 <div className="p-5 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
                   <h3 className="font-unbounded text-[10px] font-black text-white uppercase tracking-widest italic">Fahrer-Aktivität</h3>
                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20">

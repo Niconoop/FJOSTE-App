@@ -17,7 +17,11 @@
     <script>
       (function() {
         function checkOverlay() {
-          const isOverlay = window.location.hash.includes('overlay') || window.location.search.includes('overlay');
+          const hash = window.location.hash.toLowerCase();
+          const path = window.location.pathname.toLowerCase();
+          const search = window.location.search.toLowerCase();
+          const isOverlay = hash.includes('overlay') || search.includes('overlay') ||
+                            hash.includes('carplay') || path.includes('carplay') || search.includes('carplay');
           if (isOverlay) {
             document.documentElement.classList.add('is-overlay');
             document.documentElement.classList.remove('light');
@@ -61,7 +65,10 @@
   <body>
     <script>
       // Run body check again now that body tag is parsed
-      if (window.location.hash.includes('overlay') || window.location.search.includes('overlay')) {
+      const _h = window.location.hash.toLowerCase();
+      const _p = window.location.pathname.toLowerCase();
+      const _s = window.location.search.toLowerCase();
+      if (_h.includes('overlay') || _s.includes('overlay') || _h.includes('carplay') || _p.includes('carplay') || _s.includes('carplay')) {
         document.body.classList.add('is-overlay-body');
         document.body.style.setProperty('background', 'transparent', 'important');
         document.body.style.setProperty('background-color', 'transparent', 'important');

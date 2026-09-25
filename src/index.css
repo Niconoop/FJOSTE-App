@@ -68,7 +68,8 @@ html, body, #root, .carplay-root {
 }
 
 .toast-resumed {
-  border: 2px solid #f59e0b !important;
+  border: 2px solid var(--primary, #f59e0b) !important;
+  box-shadow: 0 0 20px var(--primary-glow, rgba(245, 158, 11, 0.35)) !important;
 }
 
 :root {
@@ -77,6 +78,9 @@ html, body, #root, .carplay-root {
   --card: rgba(10, 10, 10, 0.95);
   --border: rgba(255, 255, 255, 0.08);
   --primary: #f59e0b;
+  --app-glow-rgb: 245, 158, 11;
+  --app-accent-rgb: 245, 158, 11;
+  --primary-glow: rgba(245, 158, 11, 0.35);
   --glass-card-bg: rgba(255, 255, 255, 0.05);
   --shadow-color: rgba(0, 0, 0, 0.8);
 }
@@ -102,8 +106,214 @@ body.is-overlay-body {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
+  --color-amber-50: color-mix(in srgb, var(--primary) 10%, #ffffff);
+  --color-amber-100: color-mix(in srgb, var(--primary) 20%, #ffffff);
+  --color-amber-200: color-mix(in srgb, var(--primary) 40%, #ffffff);
+  --color-amber-300: color-mix(in srgb, var(--primary) 70%, #ffffff);
+  --color-amber-400: var(--primary);
+  --color-amber-500: var(--primary);
+  --color-amber-600: color-mix(in srgb, var(--primary) 85%, #000000);
+  --color-amber-700: color-mix(in srgb, var(--primary) 70%, #000000);
+  --color-amber-800: color-mix(in srgb, var(--primary) 50%, #000000);
+  --color-amber-900: color-mix(in srgb, var(--primary) 30%, #000000);
   --font-unbounded: "Unbounded", sans-serif;
   --font-outfit: "Outfit", sans-serif;
+}
+
+/* ==========================================================================
+   Dynamic App Accent Color Overrides
+   Ensures ALL headings, section tags, borders, buttons, gradients, inputs & 
+   glow effects across the entire app adapt in real-time when the user 
+   customizes the accent color.
+   ========================================================================== */
+
+/* All headings with amber or f59e0b */
+h1[class*="text-amber-"],
+h2[class*="text-amber-"],
+h3[class*="text-amber-"],
+h4[class*="text-amber-"],
+h5[class*="text-amber-"],
+h6[class*="text-amber-"],
+h1[class*="f59e0b"],
+h2[class*="f59e0b"],
+h3[class*="f59e0b"],
+h4[class*="f59e0b"] {
+  color: var(--primary) !important;
+}
+
+/* Any text with amber or f59e0b (unless explicit hover/group-hover class) */
+[class*="text-amber-"]:not([class*="hover:text-amber"]):not([class*="group-hover:text-amber"]):not([class*="group-hover/name:text-amber"]),
+[class*="text-[#f59e0b]"],
+[class*="text-[#F59E0B]"] {
+  color: var(--primary) !important;
+}
+
+/* Text opacity variants */
+[class*="text-amber-"][class*="/90"] {
+  color: color-mix(in srgb, var(--primary) 90%, transparent) !important;
+}
+[class*="text-amber-"][class*="/80"] {
+  color: color-mix(in srgb, var(--primary) 80%, transparent) !important;
+}
+[class*="text-amber-"][class*="/70"] {
+  color: color-mix(in srgb, var(--primary) 70%, transparent) !important;
+}
+[class*="text-amber-"][class*="/60"] {
+  color: color-mix(in srgb, var(--primary) 60%, transparent) !important;
+}
+[class*="text-amber-"][class*="/50"] {
+  color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
+}
+
+/* Hover and group-hover text */
+[class*="hover:text-amber"]:hover,
+[class*="hover:text-[#f59e0b]"]:hover {
+  color: var(--primary) !important;
+}
+.group:hover [class*="group-hover:text-amber"],
+.group:hover [class*="group-hover:text-[#f59e0b]"],
+.group:hover [class*="group-hover/name:text-amber"] {
+  color: var(--primary) !important;
+}
+
+/* All buttons with amber background, gradient or styling */
+button[class*="bg-amber-"]:not([class*="/"]):not([class*="hover:"]),
+button[class*="bg-[#f59e0b]"]:not([class*="/"]):not([class*="hover:"]),
+button[class*="bg-[#F59E0B]"]:not([class*="/"]):not([class*="hover:"]),
+button[class*="from-amber"],
+button[class*="to-amber"],
+button[class*="from-[#f59e0b]"],
+button[class*="to-[#fbbf24]"],
+[role="button"][class*="bg-amber-"]:not([class*="/"]):not([class*="hover:"]),
+[role="button"][class*="bg-[#f59e0b]"]:not([class*="/"]):not([class*="hover:"]),
+[role="button"][class*="from-amber"],
+[role="button"][class*="to-amber"] {
+  background-image: none !important;
+  background-color: var(--primary) !important;
+  color: #000000 !important;
+}
+
+button[class*="from-amber"]:hover,
+button[class*="to-amber"]:hover,
+button[class*="bg-amber-"]:hover,
+button[class*="bg-[#f59e0b]"]:hover,
+button[class*="from-[#f59e0b]"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 85%, #ffffff) !important;
+  box-shadow: 0 0 25px var(--primary-glow) !important;
+}
+
+/* Background amber classes and decorative heading bars */
+[class*="bg-amber-"]:not([class*="/"]):not([class*="hover:bg-amber"]):not([class*="via-amber"]):not([class*="from-amber"]):not([class*="to-amber"]),
+[class*="bg-[#f59e0b]"]:not([class*="/"]):not([class*="hover:bg-"]),
+[class*="bg-[#F59E0B]"]:not([class*="/"]):not([class*="hover:bg-"]),
+div[class*="bg-amber-"],
+span[class*="bg-amber-"] {
+  background-color: var(--primary) !important;
+}
+
+/* Background opacity variants for badges and buttons */
+[class*="bg-amber-"][class*="/5"],
+[class*="bg-[#f59e0b]/5"] {
+  background-color: color-mix(in srgb, var(--primary) 5%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/10"],
+[class*="bg-[#f59e0b]/10"] {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/15"],
+[class*="bg-[#f59e0b]/15"] {
+  background-color: color-mix(in srgb, var(--primary) 15%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/20"],
+[class*="bg-[#f59e0b]/20"] {
+  background-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/30"],
+[class*="bg-[#f59e0b]/30"] {
+  background-color: color-mix(in srgb, var(--primary) 30%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/40"],
+[class*="bg-[#f59e0b]/40"] {
+  background-color: color-mix(in srgb, var(--primary) 40%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/50"],
+[class*="bg-[#f59e0b]/50"] {
+  background-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
+}
+
+/* Hover background states */
+[class*="hover:bg-amber-"]:hover:not([class*="/"]),
+[class*="hover:bg-[#f59e0b]"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 85%, #ffffff) !important;
+}
+[class*="hover:bg-amber-"][class*="/10"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 14%, transparent) !important;
+}
+[class*="hover:bg-amber-"][class*="/20"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 25%, transparent) !important;
+}
+[class*="hover:bg-amber-"][class*="/30"]:hover {
+  background-color: color-mix(in srgb, var(--primary) 35%, transparent) !important;
+}
+
+/* All amber borders */
+[class*="border-amber-"]:not([class*="/"]),
+[class*="border-[#f59e0b]"]:not([class*="/"]),
+[class*="border-[#F59E0B]"]:not([class*="/"]) {
+  border-color: var(--primary) !important;
+}
+[class*="border-amber-"][class*="/"]:not(:hover),
+[class*="border-[#f59e0b]/"]:not(:hover),
+[class*="border-[#F59E0B]/"]:not(:hover) {
+  border-color: color-mix(in srgb, var(--primary) 25%, transparent) !important;
+}
+[class*="hover:border-amber-"]:hover,
+[class*="hover:border-[#f59e0b]"]:hover,
+[class*="hover:border-primary"]:hover {
+  border-color: var(--primary) !important;
+}
+
+/* Gradients on buttons & elements: e.g. from-amber-400 to-amber-500 or from-[#f59e0b] to-[#fbbf24] */
+[class*="from-amber"],
+[class*="from-[#f59e0b]"],
+[class*="from-[#F59E0B]"] {
+  background-image: linear-gradient(to right, var(--primary), color-mix(in srgb, var(--primary) 85%, #ffffff)) !important;
+}
+[class*="to-amber"],
+[class*="to-[#fbbf24]"],
+[class*="to-[#FBBF24]"] {
+  --tw-gradient-to: color-mix(in srgb, var(--primary) 85%, #ffffff) !important;
+}
+
+/* Rings */
+[class*="ring-amber-"],
+[class*="ring-[#f59e0b]"] {
+  --tw-ring-color: var(--primary) !important;
+}
+
+/* Glow effects & arbitrary hover shadows — ALWAYS trigger BOTH luminous border AND glow across entire app */
+.hover-glow:hover,
+.frosted-card:hover,
+[class*="hover:shadow-"]:hover,
+[class*="hover:border-primary"]:hover,
+[class*="hover:border-amber-"]:hover,
+[class*="hover:border-[#f59e0b]"]:hover,
+[class*="hover:border-cyan-"]:hover {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 25px var(--primary-glow), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Overlines & Section Headers */
+.overline {
+  color: var(--primary) !important;
+}
+
+/* Accent form inputs */
+input[type="range"][class*="accent-amber-"],
+input[type="range"].accent-primary,
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary) !important;
 }
 
 @layer base {
@@ -231,8 +441,8 @@ body.is-overlay-body {
   transform: translateZ(0);
 
   &:hover {
-    border-color: rgba(245, 158, 11, 0.3) !important;
-    box-shadow: 0 0 25px rgba(245, 158, 11, 0.15), 0 20px 40px rgba(0, 0, 0, 0.5);
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 25px var(--primary-glow), 0 20px 40px rgba(0, 0, 0, 0.5) !important;
   }
 }
 
@@ -289,7 +499,7 @@ body.is-overlay-body {
 
 /* Background Animated Blobs — matching frontend */
 .bg-blob-1 {
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 70%) !important;
+  background: radial-gradient(circle, rgba(var(--app-glow-rgb, 245, 158, 11), 0.1) 0%, transparent 70%) !important;
   filter: blur(80px);
 }
 
@@ -299,7 +509,7 @@ body.is-overlay-body {
 }
 
 .bg-blob-3 {
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.05) 0%, transparent 70%) !important;
+  background: radial-gradient(circle, rgba(var(--app-glow-rgb, 245, 158, 11), 0.07) 0%, transparent 70%) !important;
   filter: blur(70px);
 }
 
@@ -463,8 +673,8 @@ nav,
 }
 
 .frosted-card:hover {
-  border-color: rgba(245, 158, 11, 0.45) !important;
-  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.3), 0 0 24px rgba(245, 158, 11, 0.3), 0 24px 50px rgba(0, 0, 0, 0.75) !important;
+  border-color: var(--primary) !important;
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.3), 0 0 24px var(--primary-glow), 0 24px 50px rgba(0, 0, 0, 0.75) !important;
 }
 
 /* Nested frosted cards (sitting on another frosted card) appear darker for depth */
@@ -481,87 +691,87 @@ body nav .glass-nav {
 
 /* Glow text */
 .glow-text {
-  text-shadow: 0 0 20px rgba(245, 158, 11, 0.15), 0 0 40px rgba(245, 158, 11, 0.05);
+  text-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(var(--app-glow-rgb, 245, 158, 11), 0.1);
 }
 
-/* Redesign entire Drivershub: Override cyan utility classes to amber to match the public brand theme */
+/* Dynamic Drivershub overrides: Map cyan utility classes directly to primary brand theme */
 .text-cyan-400 {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .text-cyan-500 {
-  color: #d97706 !important;
+  color: var(--primary) !important;
 }
 .bg-cyan-400 {
-  background-color: #fbbf24 !important;
+  background-color: var(--primary) !important;
 }
 .bg-cyan-500 {
-  background-color: #f59e0b !important;
+  background-color: var(--primary) !important;
 }
 .bg-cyan-500\/5 {
-  background-color: rgba(245, 158, 11, 0.05) !important;
+  background-color: color-mix(in srgb, var(--primary) 5%, transparent) !important;
 }
 .bg-cyan-500\/10 {
-  background-color: rgba(245, 158, 11, 0.1) !important;
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
 }
 .bg-cyan-500\/20 {
-  background-color: rgba(245, 158, 11, 0.2) !important;
+  background-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 .border-cyan-800 {
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent) !important;
 }
 .border-cyan-400\/20 {
-  border-color: rgba(245, 158, 11, 0.2) !important;
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 .border-cyan-400\/50 {
-  border-color: rgba(245, 158, 11, 0.5) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
 }
 .border-cyan-500\/20 {
-  border-color: rgba(245, 158, 11, 0.2) !important;
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 .border-cyan-500\/30 {
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent) !important;
 }
 .border-cyan-500\/50 {
-  border-color: rgba(245, 158, 11, 0.5) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
 }
 .focus\:border-cyan-500\/50:focus {
-  border-color: rgba(245, 158, 11, 0.5) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
 }
 .focus\:border-cyan-400\/50:focus {
-  border-color: rgba(245, 158, 11, 0.5) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
 }
 .hover\:border-cyan-400\/50:hover {
-  border-color: rgba(245, 158, 11, 0.5) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent) !important;
 }
 .hover\:border-cyan-500\/30:hover {
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent) !important;
 }
 .hover\:bg-cyan-400:hover {
-  background-color: #fbbf24 !important;
+  background-color: var(--primary) !important;
 }
 .hover\:bg-cyan-500\/10:hover {
-  background-color: rgba(245, 158, 11, 0.1) !important;
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important;
 }
 .hover\:bg-cyan-500\/20:hover {
-  background-color: rgba(245, 158, 11, 0.2) !important;
+  background-color: color-mix(in srgb, var(--primary) 20%, transparent) !important;
 }
 .hover\:text-cyan-400:hover {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .group:hover .group-hover\:text-cyan-400 {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .group:hover .group-hover\/name\:text-cyan-400 {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .group\/name:hover .group-hover\/name\:text-cyan-400 {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .group-hover\/name\:text-cyan-400:hover {
-  color: #f59e0b !important;
+  color: var(--primary) !important;
 }
 .shadow-\[0_4px_14px_rgba\(7\,200\,248\,0\.25\)\] {
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25) !important;
+  box-shadow: 0 4px 14px var(--primary-glow) !important;
 }
 
 /* Glassmorphism Alignments for Solid Cards and Borders — scoped to main app only.
@@ -574,7 +784,7 @@ main .bg-zinc-900 {
   background-color: rgba(13, 15, 23, 0.48) !important;
   backdrop-filter: blur(28px) saturate(200%) contrast(105%) !important;
   -webkit-backdrop-filter: blur(28px) saturate(200%) contrast(105%) !important;
-  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15) !important;
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
   isolation: isolate;
   transform: translateZ(0);
 }
@@ -583,7 +793,34 @@ main .border-zinc-900,
 .page-enter .border-zinc-900,
 main .border-zinc-800,
 .page-enter .border-zinc-800 {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Priority hover effects for cards & interactive items in main content — ALWAYS synchronize glowing border AND ambient glow */
+main [class*="hover:shadow-"]:hover,
+.page-enter [class*="hover:shadow-"]:hover,
+main [class*="hover:border-primary"]:hover,
+.page-enter [class*="hover:border-primary"]:hover,
+main [class*="hover:border-amber-"]:hover,
+.page-enter [class*="hover:border-amber-"]:hover,
+main [class*="hover:border-cyan-"]:hover,
+.page-enter [class*="hover:border-cyan-"]:hover,
+main [class*="hover:border-[#f59e0b]"]:hover,
+.page-enter [class*="hover:border-[#f59e0b]"]:hover,
+main .frosted-card:hover,
+.page-enter .frosted-card:hover,
+main .hover-glow:hover,
+.page-enter .hover-glow:hover {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 25px var(--primary-glow), inset 0 1px 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+.group:hover .group-hover\:border-primary,
+.group:hover [class*="group-hover:border-primary"],
+.group:hover [class*="group-hover:border-amber-"],
+.group:hover [class*="group-hover:border-cyan-"] {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 20px var(--primary-glow) !important;
 }
 
 html.is-overlay,
@@ -617,9 +854,9 @@ body.is-overlay {
 }
 
 @keyframes pulse-ring-amber {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-  70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  0% { box-shadow: 0 0 0 0 var(--primary); }
+  70% { box-shadow: 0 0 0 12px var(--primary-glow); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .acrylic-noise {

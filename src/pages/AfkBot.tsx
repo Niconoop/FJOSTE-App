@@ -93,9 +93,9 @@ const AfkBot = () => {
   return (
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
       <div className="text-center mb-12">
-        <span className="overline text-amber-400 mb-2 inline-block">Automatisierung</span>
+        <span className="overline text-primary mb-2 inline-block">Automatisierung</span>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tighter text-white mt-2 flex items-center justify-center gap-3">
-          <Bot className="text-amber-400" size={40} />
+          <Bot className="text-primary" size={40} />
           Anti-AFK Bot
         </h1>
         <p className="text-zinc-400 text-sm mt-3">
@@ -106,30 +106,30 @@ const AfkBot = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
         {/* Left sidebar: Status + Hinweis */}
-        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-28">
-          <div className="frosted-card flex flex-col items-center text-center p-8 border border-white/5 bg-[#000000] border-2 border-[#f59e0b]/20">
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] ${running ? 'bg-amber-400/20 text-amber-400 shadow-amber-400/30 animate-pulse' : 'bg-white/5 text-slate-500'}`}>
+        <div id="tour-afkbot-card" className="lg:col-span-4 space-y-6 lg:sticky lg:top-28">
+          <div className="frosted-card flex flex-col items-center text-center p-8 border border-white/5 bg-[#000000] border-2 border-primary/20 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] ${running ? 'bg-primary/20 text-primary shadow-primary/30 animate-pulse' : 'bg-white/5 text-slate-500'}`}>
               <Bot size={48} />
             </div>
             <h2 className="font-unbounded font-black text-lg text-white uppercase italic tracking-widest mb-2">
               Status
             </h2>
-            <span className={`text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border mb-8 ${running ? 'bg-amber-400/10 border-amber-400/30 text-amber-400' : 'bg-zinc-900 border border-white/5 text-slate-400'}`}>
+            <span className={`text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border mb-8 ${running ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-zinc-900 border border-white/5 text-slate-400'}`}>
               {running ? 'Aktiviert' : 'Deaktiviert'}
             </span>
 
             <button
               onClick={toggleBot}
-              className={`w-full py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 ${running ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-[0_0_30px_rgba(245,158,11,0.3)]' : 'bg-gradient-to-r from-amber-400 to-amber-500 text-black hover:shadow-[0_0_30px_rgba(245,158,11,0.3)]'}`}
+              className={`w-full py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 ${running ? 'bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg' : 'bg-primary text-black hover:bg-primary/90 hover:shadow-[0_0_30px_var(--primary-glow)]'}`}
             >
               {running ? <Square size={16} /> : <Play size={16} />}
               {running ? 'Bot Stoppen' : 'Bot Starten'}
             </button>
           </div>
 
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3">
-            <ShieldAlert className="text-amber-400 shrink-0 mt-0.5" size={16} />
-            <p className="text-[10px] text-amber-200/70 leading-relaxed font-medium">
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-start gap-3 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
+            <ShieldAlert className="text-primary shrink-0 mt-0.5" size={16} />
+            <p className="text-[10px] text-primary/80 leading-relaxed font-medium">
               Der Bot prüft vor jedem Senden, ob <b>Euro Truck Simulator 2</b> oder <b>TruckersMP</b> das aktive Fenster im Vordergrund ist.
               Ist dies nicht der Fall, wird der Tastendruck blockiert, um versehentliches Tippen in anderen Programmen zu verhindern!
             </p>
@@ -138,9 +138,9 @@ const AfkBot = () => {
 
         {/* Right main: Configuration + Nachrichten-Pools */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="frosted-card space-y-8 border border-white/5 bg-[#000000] border-2 border-[#f59e0b]/20 p-6 md:p-8">
+          <div className="frosted-card space-y-8 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-2 border-b border-white/5 pb-4">
-              <Settings size={18} className="text-amber-400" />
+              <Settings size={18} className="text-primary" />
               <h2 className="font-unbounded font-bold text-sm text-white uppercase italic tracking-widest">
                 Konfiguration
               </h2>
@@ -149,7 +149,7 @@ const AfkBot = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Key size={11} className="text-amber-400/60" /> Hotkey
+                  <Key size={11} className="text-primary/60" /> Hotkey
                 </label>
                 <div className="relative group">
                   <div className="relative">
@@ -176,7 +176,7 @@ const AfkBot = () => {
                         const newHotkey = keys.join('+');
                         setHotkey(newHotkey);
                       }}
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-amber-400 text-center cursor-pointer focus:border-amber-400/40 outline-none transition-all duration-300"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-primary text-center cursor-pointer focus:border-primary/40 outline-none transition-all duration-300"
                       placeholder="Taste drücken..."
                     />
                     <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity">
@@ -189,27 +189,27 @@ const AfkBot = () => {
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Clock size={11} className="text-amber-400/60" /> Intervall (Sekunden)
+                  <Clock size={11} className="text-primary/60" /> Intervall (Sekunden)
                 </label>
                 <input
                   type="number"
                   min="5"
                   value={intervalSec}
                   onChange={e => setIntervalSec(Number(e.target.value))}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-amber-400/40 outline-none transition-all duration-300"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-primary/40 outline-none transition-all duration-300"
                 />
                 <p className="text-[9px] text-slate-600 font-bold uppercase tracking-widest mt-2">Zeit zwischen zwei Nachrichten.</p>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Volume2 size={11} className="text-amber-400/60" /> Sounds
+                  <Volume2 size={11} className="text-primary/60" /> Sounds
                 </label>
                 <button
                   onClick={() => setSoundEnabled(!soundEnabled)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 ${soundEnabled ? 'bg-white/[0.03] border-amber-400/30 hover:bg-white/[0.05]' : 'bg-white/[0.02] border-white/10 opacity-60 hover:opacity-100'}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300 ${soundEnabled ? 'bg-white/[0.03] border-primary/30 hover:bg-white/[0.05]' : 'bg-white/[0.02] border-white/10 opacity-60 hover:opacity-100'}`}
                 >
-                  {soundEnabled ? <Volume2 size={18} className="text-amber-400" /> : <VolumeX size={18} className="text-slate-500" />}
+                  {soundEnabled ? <Volume2 size={18} className="text-primary" /> : <VolumeX size={18} className="text-slate-500" />}
                   <div className="text-left">
                     <p className={`text-sm font-bold ${soundEnabled ? 'text-white' : 'text-slate-500'}`}>
                       {soundEnabled ? 'Aktiviert' : 'Deaktiviert'}
@@ -221,9 +221,9 @@ const AfkBot = () => {
             </div>
           </div>
 
-          <div className="frosted-card space-y-4 border border-white/5 bg-[#000000] border-2 border-[#f59e0b]/20 p-6 md:p-8">
+          <div className="frosted-card space-y-4 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-2 pb-2">
-              <MessageSquare size={16} className="text-amber-400" />
+              <MessageSquare size={16} className="text-primary" />
               <h3 className="font-unbounded font-bold text-xs text-white uppercase italic tracking-widest">
                 Nachrichten-Pools
               </h3>
@@ -234,7 +234,7 @@ const AfkBot = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('driving')}
-                className={`flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'driving' ? 'bg-gradient-to-r from-[#f59e0b] to-[#fbbf24] text-[#050507] shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'driving' ? 'bg-primary text-black shadow-md shadow-primary/20' : 'text-zinc-400 hover:text-white'}`}
               >
                 <Truck size={12} />
                 Aktiv (Fahrt)
@@ -242,7 +242,7 @@ const AfkBot = () => {
               <button
                 type="button"
                 onClick={() => setActiveTab('paused')}
-                className={`flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'paused' ? 'bg-gradient-to-r from-[#f59e0b] to-[#fbbf24] text-[#050507] shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                className={`flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeTab === 'paused' ? 'bg-primary text-black shadow-md shadow-primary/20' : 'text-zinc-400 hover:text-white'}`}
               >
                 <Coffee size={12} />
                 Inaktiv (Stand {'>='} 2 Min.)
@@ -263,13 +263,13 @@ const AfkBot = () => {
                   maxLength={200}
                   onChange={e => setNewText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addText()}
-                  className="flex-1 bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 outline-none transition-all duration-300"
+                  className="flex-1 bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 outline-none transition-all duration-300"
                   placeholder={activeTab === 'driving' ? "Neue Aktiv-Nachricht..." : "Neue Inaktiv-Nachricht..."}
                 />
                 <button
                   onClick={addText}
                   disabled={!newText.trim() || newText.length > 200}
-                  className="bg-amber-400/20 text-amber-400 border border-amber-400/30 px-4 rounded-xl hover:bg-amber-400 hover:text-black transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-400/20 disabled:hover:text-amber-400"
+                  className="bg-primary/20 text-primary border border-primary/30 px-4 rounded-xl hover:bg-primary hover:text-black transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary/20 disabled:hover:text-primary"
                 >
                   <Plus size={18} />
                 </button>

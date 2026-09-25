@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL, getAvatarUrl } from '../config';
 import * as proj4 from 'proj4';
 import * as pmtiles from 'pmtiles';
-import { loadAllCities, findCity } from '../data/ets2Cities';
+import { loadAllCities, findCity, findClosestCity } from '../data/ets2Cities';
 import { getSpeedCamerasGeoJson } from '../data/ets2Speedcams';
 
 const SIDEBAR_WIDTH = 320;
@@ -197,7 +197,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'ets2',
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        layout: { 'line-cap': 'round', 'line-join': 'bevel' },
         paint: {
           'line-color': isLight
             ? [
@@ -216,11 +216,25 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
               'train', '#0f172a',
               '#1e293b',
             ],
+          'line-gap-width': [
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            3, 1.5,
+            7, 5.0,
+            10, 16.0,
+            12, 32.0,
+            14, 52.0,
+            16, 220.0,
+          ],
           'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            3, 3.5,
-            6, 7.5,
-            10, 13,
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            8, 1.5,
+            11, 2.5,
+            14, 4.0,
+            16, 6.0,
           ],
           'line-opacity': 0.95,
         },
@@ -243,7 +257,7 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         source: 'ets2',
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        layout: { 'line-cap': 'round', 'line-join': 'bevel' },
         paint: {
           'line-color': isLight
             ? [
@@ -263,14 +277,18 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
               '#475569',
             ],
           'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            3, 2,
-            6, 5,
-            10, 9,
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            3, 1.5,
+            7, 5.0,
+            10, 16.0,
+            12, 32.0,
+            14, 52.0,
+            16, 220.0,
           ],
           'line-opacity': 0.95,
         },
-
       },
       {
         id: 'ets2-ferries',
@@ -385,7 +403,16 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         ],
         layout: {
           'icon-image': '{sprite}',
-          'icon-allow-overlap': true,
+          'icon-allow-overlap': false,
+          'icon-ignore-placement': false,
+          'symbol-sort-key': [
+            'match', ['get', 'sprite'],
+            'railcrossing', 1,
+            'roadwork', 2,
+            'trafficlight', 3,
+            10
+          ],
+          'icon-padding': 2,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
             10, 0.55,
@@ -556,7 +583,7 @@ const createRailcrossingImage = (map: any) => {
   if (map.hasImage('railcrossing')) return;
 
   const s = 2;
-  const size = 48 * s;
+  const size = 48 * s; // 96x96
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -564,70 +591,51 @@ const createRailcrossingImage = (map: any) => {
   if (ctx) {
     ctx.clearRect(0, 0, size, size);
 
-    // Dark glowing backplate with crimson hazard border
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, (size / 2) - (3 * s), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-    ctx.fill();
-    ctx.lineWidth = 2.5 * s;
-    ctx.strokeStyle = '#e11d48';
-    ctx.stroke();
+    const w = 6.5 * s;
 
-    // Railway tracks
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 2 * s;
-    ctx.beginPath();
-    ctx.moveTo(16 * s, 10 * s); ctx.lineTo(16 * s, 38 * s);
-    ctx.moveTo(32 * s, 10 * s); ctx.lineTo(32 * s, 38 * s);
-    ctx.stroke();
-
-    // Cross ties (Sleepers)
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 1.8 * s;
-    ctx.beginPath();
-    for (let y = 13; y <= 35; y += 5.5) {
-      ctx.moveTo(13 * s, y * s);
-      ctx.lineTo(35 * s, y * s);
-    }
-    ctx.stroke();
-
-    // White X cross bars (Andreaskreuz)
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 5.5 * s;
+    // 1. Subtle drop shadow
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = w + (2 * s);
     ctx.lineCap = 'butt';
     ctx.beginPath();
-    ctx.moveTo(9 * s, 9 * s); ctx.lineTo(39 * s, 39 * s);
-    ctx.moveTo(39 * s, 9 * s); ctx.lineTo(9 * s, 39 * s);
+    ctx.moveTo(8 * s, 10 * s); ctx.lineTo(40 * s, 42 * s);
+    ctx.moveTo(40 * s, 10 * s); ctx.lineTo(8 * s, 42 * s);
     ctx.stroke();
 
-    // Red tips on 4 ends of the cross
-    ctx.strokeStyle = '#e11d48';
-    ctx.lineWidth = 5.5 * s;
+    // 2. Dark outline for crisp contrast on map
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = w + (1.2 * s);
     ctx.beginPath();
-    ctx.moveTo(9 * s, 9 * s); ctx.lineTo(14 * s, 14 * s);
-    ctx.moveTo(34 * s, 34 * s); ctx.lineTo(39 * s, 39 * s);
-    ctx.moveTo(39 * s, 9 * s); ctx.lineTo(34 * s, 14 * s);
-    ctx.moveTo(14 * s, 34 * s); ctx.lineTo(9 * s, 39 * s);
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(7 * s, 41 * s);
     ctx.stroke();
 
-    // Center Warning Signal Light
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, 4.5 * s, 0, Math.PI * 2);
-    ctx.fillStyle = '#e11d48';
-    ctx.fill();
-    ctx.lineWidth = 1.2 * s;
+    // 3. Main pure white beams
     ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(7 * s, 41 * s);
     ctx.stroke();
 
+    // 4. Characteristic Signal Red Tips (4 ends)
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = w;
     ctx.beginPath();
-    ctx.arc(size / 2, size / 2, 2 * s, 0, Math.PI * 2);
-    ctx.fillStyle = '#fecaca';
-    ctx.fill();
-  }
+    ctx.moveTo(7 * s, 7 * s); ctx.lineTo(14 * s, 14 * s);
+    ctx.moveTo(34 * s, 34 * s); ctx.lineTo(41 * s, 41 * s);
+    ctx.moveTo(41 * s, 7 * s); ctx.lineTo(34 * s, 14 * s);
+    ctx.moveTo(14 * s, 34 * s); ctx.lineTo(7 * s, 41 * s);
+    ctx.stroke();
 
-  const imgData = ctx?.getImageData(0, 0, size, size);
-  if (imgData) {
-    map.addImage('railcrossing', imgData, { pixelRatio: s });
+    // 5. Clean white center square
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect((size / 2) - (w / 2), (size / 2) - (w / 2), w, w);
+
+    const imgData = ctx.getImageData(0, 0, size, size);
+    if (imgData) {
+      map.addImage('railcrossing', imgData, { pixelRatio: s });
+    }
   }
 };
 
@@ -855,6 +863,33 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     return str.charAt(0).toUpperCase() + str.slice(1);
   };
 
+  const getDriverLocationDisplay = useCallback((m: any) => {
+    if (!m) return "Keine Daten";
+    const loc = m.online ? (m.live_location || m) : (m.last_position || m);
+    if (!loc) return "Keine Daten";
+
+    const gx = loc.game_x ?? loc.x;
+    const gy = loc.game_y;
+    const gz = loc.game_z ?? loc.z;
+
+    if (gx != null) {
+      let closest = null;
+      if (gy != null) closest = findClosestCity(Number(gx), Number(gy), 45000);
+      if (!closest && gz != null) closest = findClosestCity(Number(gx), Number(gz), 45000);
+      if (closest?.city?.realName) {
+        const country = closest.city.country ? `, ${capitalize(closest.city.country)}` : '';
+        return `${closest.city.realName}${country}`;
+      }
+    }
+
+    if (loc.city) {
+      const country = loc.country ? `, ${capitalize(loc.country)}` : '';
+      return `${capitalize(loc.city)}${country}`;
+    }
+
+    return m.online ? "Unterwegs" : "Keine Daten";
+  }, []);
+
   const getMapAnchor = useCallback(() => {
     if (!mapContainer.current) return undefined;
     const w = mapContainer.current.offsetWidth;
@@ -869,10 +904,11 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     return mapData.filter((m: any) => {
       const nameMatch = (m.username || '').toLowerCase().includes(query);
       const tmpIdMatch = (m.tmp_id || '').toString().includes(query);
-      const cityMatch = (m.live_location?.city || m.last_position?.city || '').toLowerCase().includes(query);
+      const locDisplay = getDriverLocationDisplay(m).toLowerCase();
+      const cityMatch = locDisplay.includes(query) || (m.live_location?.city || m.last_position?.city || '').toLowerCase().includes(query);
       return nameMatch || tmpIdMatch || cityMatch;
     });
-  }, [mapData, search]);
+  }, [mapData, search, getDriverLocationDisplay]);
 
 
   const trackTmpPlayer = useCallback(async (tmpId: string | number) => {
@@ -1095,24 +1131,59 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   useEffect(() => {
     if (showTraffic) {
       fetchTraffic(trafficServer);
-      const interval = setInterval(() => fetchTraffic(trafficServer), 30000);
+      const interval = setInterval(() => fetchTraffic(trafficServer), 15000);
       return () => clearInterval(interval);
     }
   }, [showTraffic, trafficServer, fetchTraffic]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [mapRes, usersRes] = await Promise.all([
+      const fetchUsers = async () => {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        try {
+          const res = await axios.get(`${API_URL}/management/users`, { headers });
+          if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+        } catch { }
+        try {
+          const mRes = await axios.get(`${API_URL}/members`);
+          if (Array.isArray(mRes.data)) return mRes.data;
+          return mRes.data?.data || [];
+        } catch (err) {
+          console.warn("Failed to load members list:", err);
+          return [];
+        }
+      };
+
+      const [mapRes, usersData] = await Promise.all([
         axios.get(`${API_URL}/live-map`).catch(() => ({ data: [] })),
-        axios.get(`${API_URL}/management/users`).catch(() => ({ data: [] }))
+        fetchUsers()
       ]);
 
       const liveData = Array.isArray(mapRes.data) ? mapRes.data : [];
-      const openpipeclubUsers = Array.isArray(usersRes.data) ? usersRes.data : [];
+      const openpipeclubUsers = Array.isArray(usersData) ? usersData : [];
 
       // Merge: Use openpipeclubUsers as base to include everyone
       const merged = openpipeclubUsers.map((u: any) => {
-        const live = liveData.find((l: any) => l.id == u.id || (l.trucky_id && l.trucky_id == u.trucky_driver_id));
+        const uIdStr = String(u.id || u.user_id || "");
+        const uUidStr = String(u.uid || "");
+        const uTmpStr = String(u.truckersmp_id || u.trucky_driver_id || "");
+        const uNameLower = (u.username || u.name || "").toLowerCase();
+
+        const live = liveData.find((l: any) => {
+          const lIdStr = String(l.id || l.user_id || "");
+          const lTmpStr = String(l.truckersmp_id || l.trucky_id || "");
+          const lNameLower = (l.username || l.name || "").toLowerCase();
+          return (
+            (uIdStr && lIdStr === uIdStr) ||
+            (uUidStr && lIdStr === uUidStr) ||
+            (uTmpStr && lTmpStr === uTmpStr) ||
+            (uTmpStr && lIdStr === uTmpStr) ||
+            (uNameLower && lNameLower && lNameLower === uNameLower)
+          );
+        });
+
+        const role = u.role === 'driver' ? 'Fahrer' : (u.role === 'admin' ? 'Admin' : (u.role || live?.role || 'Fahrer'));
         return {
           ...u,
           ...live,
@@ -1121,13 +1192,28 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
           online: !!live?.online,
           lastSeen: live?.last_position?.updated_at || u.updated_at,
           avatar_url: u.avatar_url || live?.avatar_url,
-          role: u.role || live?.role || 'Fahrer'
+          role: role
         };
       });
 
       // Add live users that might not be in openpipeclubUsers
       liveData.forEach((l: any) => {
-        if (!merged.find(m => m.id == l.id || m.trucky_driver_id == l.id)) {
+        const lIdStr = String(l.id || l.user_id || "");
+        const lTmpStr = String(l.truckersmp_id || l.trucky_id || "");
+        const lNameLower = (l.username || l.name || "").toLowerCase();
+        const exists = merged.find((m: any) => {
+          const mIdStr = String(m.id || m.user_id || "");
+          const mUidStr = String(m.uid || "");
+          const mTmpStr = String(m.truckersmp_id || m.trucky_driver_id || "");
+          const mNameLower = (m.username || m.name || "").toLowerCase();
+          return (
+            (mIdStr && lIdStr === mIdStr) ||
+            (mUidStr && lIdStr === mUidStr) ||
+            (mTmpStr && lTmpStr === mTmpStr) ||
+            (mNameLower && lNameLower && lNameLower === mNameLower)
+          );
+        });
+        if (!exists) {
           merged.push({
             ...l,
             online: !!l.online,
@@ -1168,7 +1254,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       fadeDuration: 0,
       trackResize: true,
       renderWorldCopies: false,
-      maxTileCacheSize: 80,
+      maxTileCacheSize: 25,
+      collectResourceTiming: false,
     });
     map.on('load', () => {
       try {
@@ -1242,7 +1329,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -1270,7 +1357,15 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     }
   }, [initialSelectedId, mapData, onClearInitialId]);
 
-  const driverMarkersMapRef = useRef<globalThis.Map<string, { marker: any; el: HTMLDivElement }>>(new window.Map());
+  const driverMarkersMapRef = useRef<globalThis.Map<string, { marker: any; el: HTMLDivElement; avatarUrl?: string | null }>>(new window.Map());
+
+  const renderMarkerContent = (avatarUrl: string | null) => {
+    const truckSvg = '<svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>';
+    if (avatarUrl) {
+      return `<div style="position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;background-color:#0f172a;display:flex;align-items:center;justify-content:center;"><img src="${avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='flex';" /><div style="display:none;align-items:center;justify-content:center;width:100%;height:100%;background-color:#1e293b;border-radius:50%;">${truckSvg}</div></div>`;
+    }
+    return `<div style="position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;background-color:#1e293b;display:flex;align-items:center;justify-content:center;">${truckSvg}</div>`;
+  };
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1324,15 +1419,16 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         existing.el.style.zIndex = isSelected ? "10" : "1";
         existing.el.style.boxShadow = `0 0 20px ${borderColor}40`;
         existing.el.style.animation = member.online ? "map-marker-pulse 2s infinite" : "none";
+        if (existing.avatarUrl !== avatarUrl) {
+          existing.el.innerHTML = renderMarkerContent(avatarUrl);
+          existing.avatarUrl = avatarUrl;
+        }
       } else {
-        // Create marker once
+        // Create marker once with 100% opaque solid background
         const el = document.createElement("div");
         el.className = "map-marker";
-        el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background:${avatarUrl ? `url(${avatarUrl}) center/cover` : "#1a1a2e"};box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:${isSelected ? 10 : 1};${member.online ? "animation:map-marker-pulse 2s infinite;" : ""}`;
-
-        if (!avatarUrl) {
-          el.innerHTML = '<svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>';
-        }
+        el.style.cssText = `width:42px;height:42px;border-radius:50%;border:3px solid ${borderColor};background-color:#0f172a;box-shadow:0 0 20px ${borderColor}40;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:${isSelected ? 10 : 1};${member.online ? "animation:map-marker-pulse 2s infinite;" : ""}`;
+        el.innerHTML = renderMarkerContent(avatarUrl);
 
         el.addEventListener("click", () => {
           setSelectedDriver(member);
@@ -1341,7 +1437,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         });
 
         const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
-        driverMarkersMapRef.current.set(driverId, { marker, el });
+        driverMarkersMapRef.current.set(driverId, { marker, el, avatarUrl });
       }
     });
 
@@ -1623,7 +1719,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         <div ref={mapContainer} className="w-full h-full" />
 
         {/* Map Overlays */}
-        <div className="absolute top-24 left-6 z-30 flex flex-col gap-2">
+        <div id="tour-map-controls" className="absolute top-24 left-6 z-30 flex flex-col gap-2">
           <div className="frosted-card !p-3.5 backdrop-blur-xl shadow-2xl border border-white/5 flex items-center justify-between gap-4">
             <div>
               <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest mb-1">Live Karte</h3>
@@ -1819,7 +1915,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 </div>
 
       {/* Sidebar */}
-      <div className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-50 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
+      <div id="tour-map-sidebar" className={`absolute top-0 right-0 bottom-0 w-80 border-l border-white/5 bg-zinc-950/80 backdrop-blur-2xl flex flex-col shrink-0 transition-transform duration-500 z-50 pt-20 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
         <div className="p-4 border-b border-white/5 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest">Fahrer ({filteredDrivers.length})</h2>
@@ -1900,9 +1996,9 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                       </span>
                     )}
                   </div>
-                  {loc?.city && (
+                  {getDriverLocationDisplay(m) !== "Keine Daten" && (
                     <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                      <p className="text-[9px] text-primary font-bold truncate">{capitalize(loc.city)}{loc.country ? `, ${capitalize(loc.country)}` : ""}</p>
+                      <p className="text-[9px] text-primary font-bold truncate">{getDriverLocationDisplay(m)}</p>
                       {m.online && (
                         <>
                           <span className="text-slate-800 text-[8px] shrink-0">•</span>
@@ -2057,7 +2153,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
              animate={{ opacity: 1, x: 0, scale: 1 }}
              exit={{ opacity: 0, x: 20, scale: 0.95 }}
              style={{ right: sidebarOpen ? "340px" : "24px" }}
-             className="absolute bottom-6 z-[9999] w-80 frosted-card !p-0 border border-white/5 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-500"
+             className="absolute bottom-6 z-[9999] w-80 frosted-card !p-0 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow"
            >
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
@@ -2123,9 +2219,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                   <div className="min-w-0 relative z-10">
                     <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-1.5">Aktuelle Position</p>
                     <p className="text-xs font-bold text-white leading-tight">
-                      {selectedDriver.online
-                        ? `${capitalize(selectedDriver.live_location?.city) || "Unbekannt"}${selectedDriver.live_location?.country ? `, ${capitalize(selectedDriver.live_location.country)}` : ""}`
-                        : `${capitalize(selectedDriver.last_position?.city) || "Keine Daten"}${selectedDriver.last_position?.country ? `, ${capitalize(selectedDriver.last_position.country)}` : ""}`}
+                      {getDriverLocationDisplay(selectedDriver)}
                     </p>
                   </div>
                 </div>

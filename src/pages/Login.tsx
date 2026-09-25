@@ -93,21 +93,21 @@ const Login = ({ onSwitchToRegister }: { onSwitchToRegister: () => void }) => {
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Lock size={11} className="text-amber-400/60" /> Passwort
+                  <Lock size={11} className="text-primary/60" /> Passwort
                 </label>
-                <button type="button" onClick={() => toast("Passwort vergessen?", { description: "Bitte wende dich an die Personalabteilung oder einen Administrator im Discord, um dein Passwort zurücksetzen zu lassen." })} className="text-[9px] font-black text-slate-500 hover:text-amber-400 uppercase tracking-widest transition-colors">
+                <button type="button" onClick={() => toast("Passwort vergessen?", { description: "Bitte wende dich an die Personalabteilung oder einen Administrator im Discord, um dein Passwort zurücksetzen zu lassen." })} className="text-[9px] font-black text-slate-500 hover:text-primary uppercase tracking-widest transition-colors">
                   Passwort vergessen?
                 </button>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-amber-400 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-primary transition-colors">
                   <Lock size={18} />
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300"
                   placeholder="••••••••"
                   required
                 />
@@ -120,7 +120,7 @@ const Login = ({ onSwitchToRegister }: { onSwitchToRegister: () => void }) => {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-black rounded-2xl py-3.5 font-black text-[10px] uppercase tracking-widest hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-primary text-black hover:bg-primary/90 rounded-2xl py-3.5 font-black text-[10px] uppercase tracking-widest hover:shadow-[0_0_30px_var(--primary-glow)] transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <><LogIn size={16} /> Anmelden</>}
           </motion.button>
@@ -131,7 +131,7 @@ const Login = ({ onSwitchToRegister }: { onSwitchToRegister: () => void }) => {
               <button
                 type="button"
                 onClick={onSwitchToRegister}
-                className="font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest text-[10px] transition-colors"
+                className="font-black text-primary hover:text-primary/80 uppercase tracking-widest text-[10px] transition-colors"
               >
                 Jetzt registrieren
               </button>

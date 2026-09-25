@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { de } from 'date-fns/locale/de';
 import { apiService } from '../services/api';
 import { API_URL, API_BASE_URL, getAvatarUrl } from '../config';
+import { findClosestCity } from '../data/ets2Cities';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid, AreaChart, Area
@@ -79,11 +80,11 @@ const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, set
           </div>
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block italic">Twitter / X URL</label>
-            <input value={twitter} onChange={e => setTwitter(e.target.value)} placeholder="https://x.com/..." className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-amber-400/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
+            <input value={twitter} onChange={e => setTwitter(e.target.value)} placeholder="https://x.com/..." className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-primary/40 focus:bg-white/[0.05] outline-none transition-all duration-300 italic" />
           </div>
         </div>
 
-        <button disabled={saving} className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-white transition-all flex items-center justify-center gap-2 shadow-[0_10px_20px_rgba(245,158,11,0.2)] italic">
+        <button disabled={saving} className="w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-white transition-all flex items-center justify-center gap-2 shadow-[0_10px_20px_var(--primary-glow)] italic">
           {saving ? <Loader2 size={16} className="animate-spin" /> : <><Save size={16} /> Profil Speichern</>}
         </button>
       </form>
@@ -150,7 +151,7 @@ const SettingsContent = ({ isSelf, editUsername, setEditUsername, editTmpId, set
 
 const JobCard = ({ job, onSelect }: any) => {
   return (
-    <div className="frosted-card !p-0 overflow-hidden hover:border-[#f59e0b]/20 hover-glow transition-all group/job">
+    <div className="frosted-card !p-0 overflow-hidden hover:border-primary/20 hover-glow transition-all group/job">
       <button onClick={() => onSelect(job)} className="w-full text-left p-3 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 hover:bg-white/[0.02] transition-colors">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
@@ -420,6 +421,99 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
     }));
   }, [jobs]);
 
+  const isCurrentlyOnline = Boolean(isTelemetryActive || liveData?.online || liveData?.live_location);
+
+  const lastActivityInfo = useMemo(() => {
+    if (isCurrentlyOnline) {
+      return { isOnline: true, text: "Jetzt online" };
+    }
+
+    const timestamps: number[] = [];
+
+    if (lastJob) {
+      const val = lastJob.stop_timestamp || lastJob.delivered_at || lastJob.ended_at || lastJob.created_at;
+      if (val) {
+        const ts = typeof val === 'number' ? (val < 10000000000 ? val * 1000 : val) : new Date(val).getTime();
+        if (!isNaN(ts) && ts > 0) timestamps.push(ts);
+      }
+    }
+
+    const liveTime = liveData?.updated_at || liveData?.last_position?.updated_at || liveData?.timestamp;
+    if (liveTime) {
+      const ts = new Date(liveTime).getTime();
+      if (!isNaN(ts) && ts > 0) timestamps.push(ts);
+    }
+
+    const driverTime = driver?.last_active || driver?.last_seen || driver?.updated_at;
+    if (driverTime) {
+      const ts = new Date(driverTime).getTime();
+      if (!isNaN(ts) && ts > 0) timestamps.push(ts);
+    }
+
+    if (timestamps.length === 0) {
+      return { isOnline: false, text: "Nie" };
+    }
+
+    const maxTs = Math.max(...timestamps);
+    const diffMs = Date.now() - maxTs;
+
+    if (diffMs >= 0 && diffMs < 5 * 60 * 1000) {
+      return { isOnline: false, text: "Vor wenigen Minuten" };
+    }
+
+    try {
+      const formatted = formatDistanceToNow(new Date(maxTs), { addSuffix: true, locale: de });
+      return { isOnline: false, text: formatted };
+    } catch {
+      return { isOnline: false, text: "Vor kurzem" };
+    }
+  }, [isCurrentlyOnline, lastJob, liveData, driver]);
+
+  const currentLocationDisplay = useMemo(() => {
+    // 1. If live telemetry is active locally, resolve directly from real-time coordinates
+    if (isTelemetryActive && telemetry?.posX != null && telemetry?.posZ != null) {
+      const gx = Number(telemetry.posX);
+      const gz = Number(telemetry.posZ);
+      if (gx !== 0 || gz !== 0) {
+        const closest = findClosestCity(gx, gz, 45000);
+        if (closest?.city?.realName) {
+          const country = closest.city.country ? ` (${closest.city.country.toUpperCase()})` : '';
+          return `${closest.city.realName}${country}`;
+        }
+      }
+    }
+
+    // 2. Check liveData (live_location or last_position)
+    const pos = liveData?.live_location || liveData?.last_position;
+    if (pos) {
+      const gx = pos.game_x ?? pos.x;
+      const gy = pos.game_y;
+      const gz = pos.game_z ?? pos.z;
+
+      if (gx != null) {
+        let closest = null;
+        if (gy != null) closest = findClosestCity(Number(gx), Number(gy), 45000);
+        if (!closest && gz != null) closest = findClosestCity(Number(gx), Number(gz), 45000);
+        if (closest?.city?.realName) {
+          const country = closest.city.country ? ` (${closest.city.country.toUpperCase()})` : '';
+          return `${closest.city.realName}${country}`;
+        }
+      }
+
+      if (pos.city) {
+        const country = pos.country ? ` (${pos.country.toUpperCase()})` : '';
+        return `${pos.city}${country}`;
+      }
+    }
+
+    // 3. Fallback to driver info or default
+    if (driver?.city) {
+      const country = driver.country ? ` (${driver.country.toUpperCase()})` : '';
+      return `${driver.city}${country}`;
+    }
+    return driver?.country || 'Europa';
+  }, [isTelemetryActive, telemetry, liveData, driver]);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => { setJobPage(0); }, [jobs.length]);
@@ -549,30 +643,34 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
 
   if (loading) return (
     <div className="space-y-8 pb-10 animate-pulse">
-      {/* Banner */}
-      <div className="relative w-full h-[35vh] sm:h-[45vh] bg-black overflow-hidden shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-      </div>
+      <div id="tour-profile-container">
+        {/* Banner */}
+        <div className="relative w-full h-[35vh] sm:h-[45vh] bg-black overflow-hidden shadow-2xl">
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+        </div>
 
-      <div className="max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Horizontale Infoleiste */}
-        <div className="relative z-10 -mt-8 sm:-mt-10 border border-white/5 rounded-2xl py-6 px-8 shadow-2xl shadow-black/95 mb-12 frosted-card">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
-            <div className="sm:border-r border-white/5 last:border-0 sm:pr-6 space-y-2">
-              <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
-              <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
-            </div>
-            <div className="sm:border-r border-white/5 last:border-0 sm:px-6 space-y-2">
-              <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
-              <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
-            </div>
-            <div className="sm:pl-6 space-y-2">
-              <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
-              <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
+        <div className="max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Horizontale Infoleiste */}
+          <div className="relative z-10 -mt-8 sm:-mt-10 border border-white/5 rounded-2xl py-6 px-8 shadow-2xl shadow-black/95 mb-12 frosted-card hover-glow transition-all">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
+              <div className="sm:border-r border-white/5 last:border-0 sm:pr-6 space-y-2">
+                <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
+                <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
+              </div>
+              <div className="sm:border-r border-white/5 last:border-0 sm:px-6 space-y-2">
+                <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
+                <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
+              </div>
+              <div className="sm:pl-6 space-y-2">
+                <div className="h-2 bg-white/5 rounded w-20 mx-auto sm:mx-0" />
+                <div className="h-4 bg-white/5 rounded w-24 mx-auto sm:mx-0" />
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* 2-Spalten-Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Linke Spalte */}
@@ -613,93 +711,89 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
   const finalAvatar = getAvatarUrlLocal(isSelf ? (user?.avatar_url || driver?.avatar_url) : driver?.avatar_url);
   const finalBanner = getBannerUrl(isSelf ? (user?.custom_banner_url || driver?.custom_banner_url) : driver?.custom_banner_url);
 
-  const lastJobTime = lastJob ? (() => {
-    const val = lastJob.stop_timestamp || lastJob.delivered_at || lastJob.ended_at || lastJob.created_at;
-    const date = typeof val === 'number'
-      ? new Date(val < 10000000000 ? val * 1000 : val)
-      : new Date(val);
-    return formatDistanceToNow(date, { addSuffix: true, locale: de });
-  })() : 'Nie';
-
   const totalJobPages = Math.max(1, Math.ceil(jobs.length / JOBS_PER_PAGE));
   const safeJobPage = Math.min(jobPage, totalJobPages - 1);
   const pagedJobs = jobs.slice(safeJobPage * JOBS_PER_PAGE, safeJobPage * JOBS_PER_PAGE + JOBS_PER_PAGE);
 
   return (
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header-Bereich (Full Width Banner) */}
-      <div className="relative w-full h-[35vh] sm:h-[45vh] shadow-2xl overflow-hidden bg-black">
-        <img src={finalBanner} alt="Profile Banner" className="w-full h-full object-cover scale-105" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+      <div id="tour-profile-container">
+        {/* Header-Bereich (Full Width Banner) */}
+        <div className="relative w-full h-[35vh] sm:h-[45vh] shadow-2xl overflow-hidden bg-black">
+          <img src={finalBanner} alt="Profile Banner" className="w-full h-full object-cover scale-105" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-        {/* Zurück Button (floating overlay at top-left) */}
-        <div className="absolute top-24 lg:top-24 left-4 sm:left-6 lg:left-8 z-50">
-          <button onClick={onBack} className="inline-flex items-center gap-2 text-slate-400 hover:text-white group bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-lg hover:bg-black/80 italic">
-            <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform text-primary" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Zurück</span>
-          </button>
-        </div>
-
-        {/* Banner Edit Button */}
-        {isSelf && (
-          <label className="absolute top-24 lg:top-24 right-4 z-50 flex items-center gap-2 bg-black/60 hover:bg-black/80 backdrop-blur-md px-3.5 py-2 rounded-full border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-lg">
-            <input type="file" className="hidden" accept="image/*" onChange={handleBannerUpload} />
-            <Camera size={14} className="text-primary" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">Banner ändern</span>
-          </label>
-        )}
-
-        <div className="absolute inset-0 flex flex-col items-center justify-end text-center p-6 sm:p-8 pb-10">
-          {/* Avatar Container */}
-          <div className="relative group/avatar mb-4">
-            <div className={`w-28 h-28 rounded-full bg-black border-4 overflow-hidden shadow-2xl relative transition-all duration-500 shrink-0 ${liveData?.online ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-[profile-pulse_2s_infinite]' : 'border-white/5'}`}>
-              {finalAvatar ? (
-                <img src={finalAvatar} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-primary/20 flex items-center justify-center text-3xl font-black text-primary italic">{(driver?.name || user?.username)?.charAt(0)}</div>
-              )}
-            </div>
-            {isSelf && (
-              <label className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all cursor-pointer rounded-full">
-                <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
-                <div className="flex flex-col items-center gap-1">
-                  <Camera size={20} className="text-white" />
-                  <span className="text-[8px] font-black uppercase tracking-widest text-white">Ändern</span>
-                </div>
-              </label>
-            )}
+          {/* Zurück Button (floating overlay at top-left) */}
+          <div className="absolute top-24 lg:top-24 left-4 sm:left-6 lg:left-8 z-50">
+            <button onClick={onBack} className="inline-flex items-center gap-2 text-slate-400 hover:text-white group bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-lg hover:bg-black/80 italic">
+              <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform text-primary" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Zurück</span>
+            </button>
           </div>
 
-          <h1 className="font-unbounded text-xl sm:text-3xl font-black text-white tracking-wider uppercase leading-none max-w-4xl drop-shadow-xl italic mb-1">
-            {driver?.name || user?.username}
-          </h1>
+          {/* Banner Edit Button */}
+          {isSelf && (
+            <label className="absolute top-24 lg:top-24 right-4 z-50 flex items-center gap-2 bg-black/60 hover:bg-black/80 backdrop-blur-md px-3.5 py-2 rounded-full border border-white/10 hover:border-primary/40 transition-all cursor-pointer shadow-lg">
+              <input type="file" className="hidden" accept="image/*" onChange={handleBannerUpload} />
+              <Camera size={14} className="text-primary" />
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">Banner ändern</span>
+            </label>
+          )}
 
-          <p className="text-xs mt-1.5 font-black uppercase tracking-widest text-primary drop-shadow-md italic">
-            {driver?.role?.name || 'Fahrer'}
-          </p>
+          <div className="absolute inset-0 flex flex-col items-center justify-end text-center p-6 sm:p-8 pb-10">
+            {/* Avatar Container */}
+            <div className="relative group/avatar mb-4">
+              <div className={`w-28 h-28 rounded-full bg-black border-4 overflow-hidden shadow-2xl relative transition-all duration-500 shrink-0 ${liveData?.online ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-[profile-pulse_2s_infinite]' : 'border-white/5'}`}>
+                {finalAvatar ? (
+                  <img src={finalAvatar} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-primary/20 flex items-center justify-center text-3xl font-black text-primary italic">{(driver?.name || user?.username)?.charAt(0)}</div>
+                )}
+              </div>
+              {isSelf && (
+                <label className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-all cursor-pointer rounded-full">
+                  <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                  <div className="flex flex-col items-center gap-1">
+                    <Camera size={20} className="text-white" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-white">Ändern</span>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            <h1 className="font-unbounded text-xl sm:text-3xl font-black text-white tracking-wider uppercase leading-none max-w-4xl drop-shadow-xl italic mb-1">
+              {driver?.name || user?.username}
+            </h1>
+
+            <p className="text-xs mt-1.5 font-black uppercase tracking-widest text-primary drop-shadow-md italic">
+              {driver?.role?.name || 'Fahrer'}
+            </p>
+          </div>
+        </div>
+
+        {/* Content Container (Widescreen layout) */}
+        <div className="max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Horizontale Infoleiste (Floating over cover image bottom edge) */}
+          <div className="relative z-10 -mt-8 sm:-mt-10 border border-white/5 rounded-2xl py-6 px-8 shadow-2xl shadow-black/95 mb-12 frosted-card hover-glow transition-all">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
+              <div className="sm:border-r border-white/5 last:border-0 sm:pr-6">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">GESAMT-DISTANZ</p>
+                <p className="text-base font-black text-white uppercase mt-1 truncate">{Math.round(mergedStats.distance).toLocaleString()} KM</p>
+              </div>
+              <div className="sm:border-r border-white/5 last:border-0 sm:px-6">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">FAHRTEN</p>
+                <p className="text-base font-black text-white uppercase mt-1 truncate">{mergedStats.jobs} Fahrten</p>
+              </div>
+              <div className="sm:pl-6">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">PUNKTE</p>
+                <p className="text-base font-black text-primary uppercase mt-1 truncate">{mergedStats.points.toLocaleString()} PT</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Content Container (Widescreen layout) */}
       <div className="max-w-[1450px] mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Horizontale Infoleiste (Floating over cover image bottom edge) */}
-        <div className="relative z-10 -mt-8 sm:-mt-10 border border-white/5 rounded-2xl py-6 px-8 shadow-2xl shadow-black/95 mb-12 frosted-card">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
-            <div className="sm:border-r border-white/5 last:border-0 sm:pr-6">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">GESAMT-DISTANZ</p>
-              <p className="text-base font-black text-white uppercase mt-1 truncate">{Math.round(mergedStats.distance).toLocaleString()} KM</p>
-            </div>
-            <div className="sm:border-r border-white/5 last:border-0 sm:px-6">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">FAHRTEN</p>
-              <p className="text-base font-black text-white uppercase mt-1 truncate">{mergedStats.jobs} Fahrten</p>
-            </div>
-            <div className="sm:pl-6">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-black">PUNKTE</p>
-              <p className="text-base font-black text-primary uppercase mt-1 truncate">{mergedStats.points.toLocaleString()} PT</p>
-            </div>
-          </div>
-        </div>
-
         {/* 2-Spalten-Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Linke Spalte: Biografie, Letzte Fahrten & Charts */}
@@ -915,7 +1009,7 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
                 <div className="flex justify-between items-center text-xs border-b border-white/5 pb-3">
                   <span className="text-slate-500 font-bold uppercase tracking-wider">STANDORT</span>
                   <span className="text-white font-black uppercase truncate max-w-[180px]">
-                    {liveData?.live_location?.city || liveData?.last_position?.city || driver?.country || 'Europa'}
+                    {currentLocationDisplay}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-xs border-b border-white/5 pb-3">
@@ -940,7 +1034,14 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-bold uppercase tracking-wider">LETZTE AKTIVITÄT</span>
-                  <span className="text-white font-black uppercase">{lastJobTime}</span>
+                  {lastActivityInfo.isOnline ? (
+                    <span className="text-emerald-400 font-black uppercase flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                      Jetzt online
+                    </span>
+                  ) : (
+                    <span className="text-white font-black uppercase">{lastActivityInfo.text}</span>
+                  )}
                 </div>
               </div>
             </div>

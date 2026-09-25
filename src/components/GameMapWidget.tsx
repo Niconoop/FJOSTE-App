@@ -7,9 +7,12 @@ import { Crosshair, Navigation } from 'lucide-react';
 import { API_URL } from '../config';
 import { findCity, findCompany } from '../data/ets2Cities';
 import { CarPlayNavOverlay } from './CarPlayNavOverlay';
-import { generateNextInstruction, type JSONTurnPoint, type InstructionResult } from '../utils/navInstructionEngine';
+import { generateNextInstruction, extractTurnsFromRouteCoords, type JSONTurnPoint, type InstructionResult } from '../utils/navInstructionEngine';
+import { smoothRouteCoords } from '../utils/routeSmoother';
 import { getSpeedCamerasGeoJson, findApproachingSpeedcam, type SpeedcamAlertInfo } from '../data/ets2Speedcams';
-import type { GameMapWidgetHandle } from './GameMapWidget.types';
+import type { GameMapWidgetHandle, NearbyTrafficVehicle, NearbySemaphore } from './GameMapWidget.types';
+import { detectApproachingTrafficLight, type ApproachingTrafficLight } from '../utils/trafficLightDetector';
+import { TrafficLightWidget } from './TrafficLightWidget';
 
 // Register PMTiles protocol once
 let pmTilesProtocolAdded = false;
@@ -29,6 +32,8 @@ interface GameMapWidgetProps {
   heading?: number;
   /** Current vehicle speed in km/h */
   currentSpeed?: number;
+  /** Current speed limit in km/h */
+  speedLimit?: number;
   /** Exact in-game route waypoints from OPCGameBridge plugin [x, y, z] */
   routeWaypoints?: [number, number, number][] | [number, number][] | null;
   /** Source city name */
@@ -41,6 +46,8 @@ interface GameMapWidgetProps {
   city?: string;
   /** Navigation distance in meters */
   navDistance?: number;
+  /** Navigation remaining time in seconds */
+  navTime?: number;
   /** Whether the game is connected */
   connected?: boolean;
   /** Accent color from theme */
@@ -71,6 +78,16 @@ interface GameMapWidgetProps {
   onDestinationReached?: () => void;
   /** Callback when route calculation completes or updates */
   onRouteCalculated?: (routeInfo: { distanceMeters: number; durationSeconds: number } | null) => void;
+  /** Nearby multiplayer / AI traffic vehicles from OPCGameBridge plugin */
+  nearbyVehicles?: NearbyTrafficVehicle[];
+  /** Optional custom marker color for nearby vehicles (defaults to #007aff matching player marker) */
+  nearbyVehicleColor?: string;
+  /** Nearby semaphores / traffic lights from telemetry */
+  semaphores?: NearbySemaphore[];
+  /** Callback emitted when approaching a traffic light (<= 150m) */
+  onApproachingTrafficLightChange?: (light: ApproachingTrafficLight | null) => void;
+  /** Optional manual top padding override for camera following */
+  followPaddingTop?: number;
 }
 
 // --- ETS2 coordinate → lat/lng projection (Lambert Conformal Conic) ---
@@ -236,6 +253,83 @@ const createRailcrossingImage = (map: maplibregl.Map) => {
 
     const imgData = ctx.getImageData(0, 0, size, size);
     map.addImage('railcrossing', imgData, { pixelRatio: s });
+  }
+};
+
+const createNearbyVehiclesImages = (map: maplibregl.Map, color: string = '#007aff') => {
+  const s = 2; // High-DPI Retina scaling
+
+  if (map.hasImage('nearby_truck_ico')) {
+    try { map.removeImage('nearby_truck_ico'); } catch {}
+  }
+
+  // High-visibility, prominent navigation marker for nearby multiplayer / traffic vehicles (matches player marker color #007aff)
+  const size = 48 * s; // 96x96 px Retina canvas (48x48 logical)
+  const cx = size / 2;
+  const cy = size / 2 + 2 * s;
+  const r = 11 * s; // ~22px logical diameter
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    // Deep drop shadow + subtle glow matching player marker
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowBlur = 5 * s;
+    ctx.shadowOffsetY = 2 * s;
+
+    // High-contrast outer silhouette (combines circular base + prominent directional arrow pip)
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r - 6.5 * s);
+    ctx.lineTo(cx + 6.5 * s, cy - r + 1.8 * s);
+    ctx.arc(cx, cy, r + 0.8 * s, -0.3 * Math.PI, 1.3 * Math.PI, false);
+    ctx.lineTo(cx - 6.5 * s, cy - r + 1.8 * s);
+    ctx.closePath();
+    ctx.fillStyle = '#05070f';
+    ctx.fill();
+
+    // Disable shadow for crisp interior strokes
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+
+    // Crisp white separation ring for contrast against any road / terrain
+    ctx.lineWidth = 1.8 * s;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.stroke();
+
+    // Solid CarPlay marker color fill (same color as player marker: #007aff)
+    const innerR = r - 2 * s;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - innerR - 5 * s);
+    ctx.lineTo(cx + 4.8 * s, cy - innerR + 1.5 * s);
+    ctx.arc(cx, cy, innerR, -0.3 * Math.PI, 1.3 * Math.PI, false);
+    ctx.lineTo(cx - 4.8 * s, cy - innerR + 1.5 * s);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // Crisp white central core dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3 * s, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    // Inner crisp white directional pointer line inside the arrow tip
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - innerR - 3.5 * s);
+    ctx.lineTo(cx, cy - 1.2 * s);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = 1.8 * s;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  const imgData = ctx?.getImageData(0, 0, size, size);
+  if (imgData) {
+    map.addImage('nearby_truck_ico', imgData, { pixelRatio: s });
   }
 };
 
@@ -476,7 +570,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         source: 'ets2',
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        layout: { 'line-cap': 'round', 'line-join': 'bevel' },
         paint: {
           'line-color': [
             'match', ['get', 'roadType'],
@@ -486,11 +580,25 @@ function createEts2Style(): maplibregl.StyleSpecification {
             'train', '#0f172a',
             '#1e293b',
           ],
+          'line-gap-width': [
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            3, 1.5,
+            7, 5.0,
+            10, 16.0,
+            12, 32.0,
+            14, 52.0,
+            16, 220.0,
+          ],
           'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            3, 3.5,
-            6, 7.5,
-            10, 13,
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            8, 1.5,
+            11, 2.5,
+            14, 4.0,
+            16, 6.0,
           ],
           'line-opacity': 0.95,
         },
@@ -501,7 +609,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
         source: 'ets2',
         'source-layer': 'ets2',
         filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'type'], 'road'], ['!=', ['get', 'hidden'], true]],
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        layout: { 'line-cap': 'round', 'line-join': 'bevel' },
         paint: {
           'line-color': [
             'match', ['get', 'roadType'],
@@ -512,10 +620,15 @@ function createEts2Style(): maplibregl.StyleSpecification {
             '#475569',
           ],
           'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            3, 2,
-            6, 5,
-            10, 9,
+            'interpolate',
+            ['exponential', 1.4],
+            ['zoom'],
+            3, 1.5,
+            7, 5.0,
+            10, 16.0,
+            12, 32.0,
+            14, 52.0,
+            16, 220.0,
           ],
           'line-opacity': 0.95,
         },
@@ -630,7 +743,16 @@ function createEts2Style(): maplibregl.StyleSpecification {
         ],
         layout: {
           'icon-image': '{sprite}',
-          'icon-allow-overlap': true,
+          'icon-allow-overlap': false,
+          'icon-ignore-placement': false,
+          'symbol-sort-key': [
+            'match', ['get', 'sprite'],
+            'railcrossing', 1,
+            'roadwork', 2,
+            'trafficlight', 3,
+            10
+          ],
+          'icon-padding': 2,
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
             10, 0.55,
@@ -673,6 +795,31 @@ function normalizeBearing(deg: number): number {
   return ((deg % 360) + 540) % 360 - 180;
 }
 
+/**
+ * Calculates the exact forward geographic bearing (degrees CW from North) for ETS2 telemetry.
+ * Uses a forward-projected lookAt vector in Lambert Conformal Conic space, exactly like TruckersMudgeon.
+ * This compensates for the meridian convergence angle between ETS2 game coordinates and WGS84/Web Mercator,
+ * ensuring the map heading aligns 100% with the road without the "paar Grad" tilt.
+ */
+function computeExactBearing(effX: number, effY: number, rawHeading: number, pos: [number, number]): number {
+  const theta = (0.5 - rawHeading) * Math.PI * 2 + Math.PI / 2;
+  const lookAtGameX = effX + 1000 * Math.cos(theta);
+  const lookAtGameY = effY + 1000 * Math.sin(theta);
+  const lookAt = projectGameToLatLng(lookAtGameX, lookAtGameY);
+  if (!lookAt) {
+    return normalizeBearing(-rawHeading * 360);
+  }
+  const [lat1, lon1] = pos;
+  const [lat2, lon2] = lookAt;
+  const rad = Math.PI / 180;
+  const phi1 = lat1 * rad;
+  const phi2 = lat2 * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const y = Math.sin(dLon) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+  return normalizeBearing(Math.atan2(y, x) * (180 / Math.PI));
+}
+
 /** Safely removes a MapLibre marker without throwing NotFoundError if detached */
 function safeRemoveMarker(marker: maplibregl.Marker | null) {
   if (!marker) return;
@@ -700,19 +847,57 @@ function getIpcRenderer() {
   return null;
 }
 
+function areInstructionsEqual(a: InstructionResult, b: InstructionResult): boolean {
+  if (a === b) return true;
+  if (!a.primary && !b.primary) return true;
+  if (!a.primary || !b.primary) return false;
+  const pa = a.primary;
+  const pb = b.primary;
+  if (
+    pa.actionText !== pb.actionText ||
+    pa.distanceText !== pb.distanceText ||
+    pa.subText !== pb.subText ||
+    pa.type !== pb.type ||
+    pa.direction !== pb.direction ||
+    pa.roundaboutExit !== pb.roundaboutExit
+  ) {
+    return false;
+  }
+  if (pa.lanes.length !== pb.lanes.length) return false;
+  for (let i = 0; i < pa.lanes.length; i++) {
+    if (pa.lanes[i].type !== pb.lanes[i].type || pa.lanes[i].active !== pb.lanes[i].active) return false;
+  }
+  if (a.upcoming.length !== b.upcoming.length) return false;
+  for (let i = 0; i < a.upcoming.length; i++) {
+    if (a.upcoming[i].dir !== b.upcoming[i].dir || a.upcoming[i].distText !== b.upcoming[i].distText) return false;
+  }
+  return true;
+}
+
 const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
-  gameX, gameY, heading, currentSpeed, routeWaypoints, source, dest, destCompany, city,
+  gameX, gameY, heading, currentSpeed, speedLimit, routeWaypoints, source, dest, destCompany, city,
   navDistance, connected, accentColor = '#f59e0b', themeMode = 'dark',
   width = 300, height = 200, zoom, initialZoom = 9, onZoomChange,
   showInstructions = false, fullWidthInstructions = false,
   showSpeedcams = true, onSpeedcamAlert,
-  mapId, onDestinationReached, onRouteCalculated
+  mapId, onDestinationReached, onRouteCalculated,
+  nearbyVehicles, nearbyVehicleColor = '#007aff',
+  semaphores,
+  onApproachingTrafficLightChange,
+  followPaddingTop
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerEl = useRef<HTMLDivElement | null>(null);
+  const markerInnerEl = useRef<HTMLDivElement | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const turnMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const lastReportedLightRef = useRef<ApproachingTrafficLight | null>(null);
+  const lastNearbyCountRef = useRef<number>(0);
+  const lastRoadQueryTimeRef = useRef<number>(0);
+  const lastRoadQueryPosRef = useRef<[number, number] | null>(null);
+  const cachedRoadTypeRef = useRef<'freeway' | 'divided' | 'local' | 'unknown'>('unknown');
+  const lastCameraPaddingTopRef = useRef<number>(-1);
   const [following, setFollowing] = useState(true);
   const isFollowingRef = useRef<boolean>(true);
   isFollowingRef.current = following;
@@ -723,6 +908,8 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   onZoomChangeRef.current = onZoomChange;
   const onSpeedcamAlertRef = useRef(onSpeedcamAlert);
   onSpeedcamAlertRef.current = onSpeedcamAlert;
+  const onApproachingTrafficLightChangeRef = useRef(onApproachingTrafficLightChange);
+  onApproachingTrafficLightChangeRef.current = onApproachingTrafficLightChange;
 
   const [jsonTurnPoints, setJsonTurnPoints] = useState<JSONTurnPoint[]>([]);
   const [segmentLanes, setSegmentLanes] = useState<number[]>([]);
@@ -734,10 +921,14 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   showInstructionsRef.current = showInstructions;
   const fullWidthInstructionsRef = useRef(fullWidthInstructions);
   fullWidthInstructionsRef.current = fullWidthInstructions;
+  const followPaddingTopRef = useRef(followPaddingTop);
+  followPaddingTopRef.current = followPaddingTop;
 
   // Dynamic zoom state tracked in ref to avoid telemetry zoom resets
   const currentZoomRef = useRef<number>(zoom ?? initialZoom);
+  const targetZoomRef = useRef<number>(zoom ?? initialZoom);
   const lastRouteKeyRef = useRef<string>('');
+  const lastDirectWaypointsHashRef = useRef<string>('');
   const lastRouteCalcPosRef = useRef<{ x: number; y: number } | null>(null);
   const headingRef = useRef<number | undefined>(heading);
   headingRef.current = heading;
@@ -753,19 +944,18 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const currentBearingRef = useRef<number>(0);
   const hasInitializedPosRef = useRef<boolean>(false);
   const lastRawHeading = useRef<number | null>(null);
+  const prevTargetPosRef = useRef<[number, number] | null>(null);
+  const lastTargetTimeRef = useRef<number>(performance.now());
+  const targetVelocityRef = useRef<[number, number]>([0, 0]);
 
   const [routeCalcTrigger, setRouteCalcTrigger] = useState(0);
 
-  // Controlled zoom prop synchronization
+  // Controlled zoom prop synchronization - update target immediately with 0ms delay
   useEffect(() => {
-    if (zoom !== undefined && mapRef.current && mapReady) {
-      const current = mapRef.current.getZoom();
-      if (Math.abs(current - zoom) > 0.05) {
-        currentZoomRef.current = zoom;
-        mapRef.current.easeTo({ zoom, duration: 250 });
-      }
+    if (zoom !== undefined) {
+      targetZoomRef.current = Math.min(Math.max(zoom, 4), 13);
     }
-  }, [zoom, mapReady]);
+  }, [zoom]);
 
   const [routeGeoJson, setRouteGeoJson] = useState<{
     traveled: GeoJSON.FeatureCollection;
@@ -775,24 +965,133 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     remaining: { type: 'FeatureCollection', features: [] },
   });
 
+  const fullRemainingCoordsRef = useRef<[number, number][]>([]);
+  const rawRouteCoordsRef = useRef<[number, number][]>([]);
+  const lastRouteSliceTimeRef = useRef<number>(0);
+  const lastRouteSlicePosRef = useRef<[number, number] | null>(null);
+  const consecutiveOffRouteCountRef = useRef<number>(0);
+
+  // Dynamic route progress slicing: slices remaining route from current vehicle position forward,
+  // and marks traversed path as traveled without altering raw road curvature geometry.
+  const sliceRouteProgress = useCallback((effX: number, effY: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const fullRemaining = fullRemainingCoordsRef.current;
+    if (fullRemaining.length < 2) return;
+
+    const now = performance.now();
+    if (now - lastRouteSliceTimeRef.current < 180) return; // 5.5 Hz max throttling
+
+    if (lastRouteSlicePosRef.current) {
+      const dPos = Math.hypot(effX - lastRouteSlicePosRef.current[0], effY - lastRouteSlicePosRef.current[1]);
+      if (dPos < 2.5) return; // Only re-slice after 2.5 meters moved
+    }
+
+    lastRouteSliceTimeRef.current = now;
+    lastRouteSlicePosRef.current = [effX, effY];
+
+    const pos = lastPos.current;
+    if (!pos) return;
+    const curLat = pos[0];
+    const curLng = pos[1];
+
+    // Find closest segment directly on fullRemaining [lng, lat]
+    let minDistanceSq = Infinity;
+    let bestSegmentIndex = 0;
+    let bestProjLngLat: [number, number] = fullRemaining[0];
+
+    for (let i = 0; i < fullRemaining.length - 1; i++) {
+      const ax = fullRemaining[i][0];
+      const ay = fullRemaining[i][1];
+      const bx = fullRemaining[i + 1][0];
+      const by = fullRemaining[i + 1][1];
+
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lenSq = dx * dx + dy * dy;
+
+      let t = 0;
+      if (lenSq > 1e-12) {
+        t = Math.max(0, Math.min(1, ((curLng - ax) * dx + (curLat - ay) * dy) / lenSq));
+      }
+
+      const projX = ax + t * dx;
+      const projY = ay + t * dy;
+      // Convert degree diff to approximate meters
+      const dLngMeters = (curLng - projX) * 111320 * Math.cos(curLat * Math.PI / 180);
+      const dLatMeters = (curLat - projY) * 110540;
+      const distSq = dLngMeters * dLngMeters + dLatMeters * dLatMeters;
+
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
+        bestSegmentIndex = i;
+        bestProjLngLat = [projX, projY];
+      }
+    }
+
+    // If vehicle is > 250m away from planned route, trigger off-route recalculation
+    if (Math.sqrt(minDistanceSq) > 250) {
+      consecutiveOffRouteCountRef.current++;
+      if (consecutiveOffRouteCountRef.current > 15) {
+        consecutiveOffRouteCountRef.current = 0;
+        lastRouteKeyRef.current = '';
+        setRouteCalcTrigger((prev) => prev + 1);
+      }
+      return;
+    }
+    consecutiveOffRouteCountRef.current = 0;
+
+    // Slice remaining coordinates: begins directly at projected vehicle point
+    const remainingSliced: [number, number][] = [
+      bestProjLngLat,
+      ...fullRemaining.slice(bestSegmentIndex + 1),
+    ];
+
+    // Slice traveled coordinates: from origin up to projected vehicle point
+    const traveledSliced: [number, number][] = [
+      ...fullRemaining.slice(0, bestSegmentIndex + 1),
+      bestProjLngLat,
+    ];
+
+    // Update MapLibre sources directly for instant 60 FPS performance without React re-renders
+    const remSource = map.getSource('route-remaining') as maplibregl.GeoJSONSource;
+    if (remSource && remSource.setData) {
+      remSource.setData({
+        type: 'FeatureCollection',
+        features: remainingSliced.length >= 2 ? [{
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: remainingSliced },
+        }] : [],
+      });
+    }
+
+    const travSource = map.getSource('route-traveled') as maplibregl.GeoJSONSource;
+    if (travSource && travSource.setData) {
+      travSource.setData({
+        type: 'FeatureCollection',
+        features: traveledSliced.length >= 2 ? [{
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: traveledSliced },
+        }] : [],
+      });
+    }
+  }, []);
+
   // Expose imperative ref methods
   useImperativeHandle(ref, () => ({
     zoomIn: () => {
-      if (!mapRef.current) return;
-      const current = mapRef.current.getZoom();
-      const next = Math.min(current + 1, 12);
-      currentZoomRef.current = next;
-      mapRef.current.easeTo({ zoom: next, duration: 300 });
+      const next = Math.min(Math.round(targetZoomRef.current + 1), 13);
+      targetZoomRef.current = next;
       if (onZoomChangeRef.current) {
         onZoomChangeRef.current(next);
       }
     },
     zoomOut: () => {
-      if (!mapRef.current) return;
-      const current = mapRef.current.getZoom();
-      const next = Math.max(current - 1, 4);
-      currentZoomRef.current = next;
-      mapRef.current.easeTo({ zoom: next, duration: 300 });
+      const next = Math.max(Math.round(targetZoomRef.current - 1), 4);
+      targetZoomRef.current = next;
       if (onZoomChangeRef.current) {
         onZoomChangeRef.current(next);
       }
@@ -800,11 +1099,15 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     recenter: () => {
       if (!mapRef.current || !lastPos.current) return;
       setFollowing(true);
+      const topOffset = followPaddingTopRef.current !== undefined
+        ? followPaddingTopRef.current
+        : ((showInstructionsRef.current && navInstructionRef.current.primary) ? (fullWidthInstructionsRef.current ? 140 : 150) : 0);
       mapRef.current.flyTo({
         center: [lastPos.current[1], lastPos.current[0]],
         zoom: currentZoomRef.current,
         bearing: currentBearingRef.current,
         duration: 800,
+        padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
       });
     },
     fitRoute: () => {
@@ -818,6 +1121,8 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     clearRoute: () => {
       lastRouteKeyRef.current = '';
       lastRouteCalcPosRef.current = null;
+      fullRemainingCoordsRef.current = [];
+      rawRouteCoordsRef.current = [];
       setRawRouteCoords([]);
       setJsonTurnPoints([]);
       setSegmentLanes([]);
@@ -872,7 +1177,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       center: [1.85, 50.95],
       zoom: currentZoomRef.current,
       minZoom: 4,
-      maxZoom: 12,
+      maxZoom: 13,
       bearing: 0,
       pitch: 60,
       attributionControl: false,
@@ -881,9 +1186,13 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       pitchWithRotate: false,
       touchZoomRotate: true,
       doubleClickZoom: true,
+      maxTileCacheSize: 15,
+      fadeDuration: 0,
+      collectResourceTiming: false,
+      renderWorldCopies: false,
     });
     map.setMinZoom(4);
-    map.setMaxZoom(12);
+    map.setMaxZoom(13);
 
     map.on('load', () => {
       try {
@@ -891,6 +1200,37 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         createTurnArrowheadImage(map);
         createSpeedcamImage(map);
         createRailcrossingImage(map);
+        createNearbyVehiclesImages(map, nearbyVehicleColor);
+
+        // Register nearby vehicles (TruckersMP / Traffic) source & layer
+        if (!map.getSource('nearby-vehicles-source')) {
+          map.addSource('nearby-vehicles-source', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+          });
+
+          map.addLayer({
+            id: 'nearby-vehicles-layer',
+            type: 'symbol',
+            source: 'nearby-vehicles-source',
+            minzoom: 4.5,
+            layout: {
+              'icon-image': ['get', 'icon'],
+              'icon-size': [
+                'interpolate', ['linear'], ['zoom'],
+                4.5, 0.75,
+                7, 1.05,
+                9, 1.35,
+                11, 1.65,
+                13, 1.9,
+              ],
+              'icon-rotate': ['get', 'bearing'],
+              'icon-rotation-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            },
+          });
+        }
 
         // Register speed cameras source & symbol layer
         if (!map.getSource('speedcams-source')) {
@@ -967,10 +1307,11 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       targetBearingRef.current = map.getBearing();
     });
 
-    // Track user zoom actions to update currentZoomRef and notify parent listeners
-    const handleZoomEvent = () => {
-      if (mapRef.current) {
+    // Track user-initiated zoom actions (mouse wheel, gestures) to update targetZoomRef and notify parent
+    const handleZoomEvent = (e: any) => {
+      if (mapRef.current && e?.originalEvent) {
         const newZoom = Math.round(mapRef.current.getZoom() * 10) / 10;
+        targetZoomRef.current = newZoom;
         currentZoomRef.current = newZoom;
         if (onZoomChangeRef.current) {
           onZoomChangeRef.current(newZoom);
@@ -979,7 +1320,6 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     };
 
     map.on('zoomend', handleZoomEvent);
-    map.on('zoom', handleZoomEvent);
 
     mapRef.current = map;
 
@@ -1046,6 +1386,24 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     if (!pos) return;
 
     lastPos.current = pos;
+
+    const nowTarget = performance.now();
+    const dtTarget = (nowTarget - lastTargetTimeRef.current) / 1000;
+    lastTargetTimeRef.current = nowTarget;
+
+    if (dtTarget > 0.005 && dtTarget < 0.25 && prevTargetPosRef.current) {
+      const vLat = (pos[0] - prevTargetPosRef.current[0]) / dtTarget;
+      const vLng = (pos[1] - prevTargetPosRef.current[1]) / dtTarget;
+      const speedMag = Math.hypot(vLat, vLng);
+      // Valid vehicle movement: smooth out velocity vector (prevents discrete position jumps)
+      if (speedMag < 0.005) {
+        targetVelocityRef.current = [
+          targetVelocityRef.current[0] * 0.3 + vLat * 0.7,
+          targetVelocityRef.current[1] * 0.3 + vLng * 0.7,
+        ];
+      }
+    }
+    prevTargetPosRef.current = pos;
     targetPosRef.current = pos;
 
     if (!hasInitializedPosRef.current) {
@@ -1056,8 +1414,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const rawHeading = heading ?? lastRawHeading.current ?? 0;
     if (heading != null) lastRawHeading.current = heading;
 
-    // Directly convert SCS SDK heading (in turns) to degrees
-    const desiredBearing = normalizeBearing(-rawHeading * 360);
+    // Convert SCS SDK heading to true WGS84 geographic bearing via forward-projected lookAt vector
+    // (Corrects Lambert Conformal Conic meridian convergence angle so map aligns 100% with road)
+    const desiredBearing = computeExactBearing(effX, effY, rawHeading, pos);
     targetBearingRef.current = desiredBearing;
 
     if (!hasInitializedPosRef.current) {
@@ -1069,7 +1428,36 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750);
       onSpeedcamAlertRef.current?.(alert);
     }
-  }, [gameX, gameY, heading, currentSpeed, showSpeedcams, dest, destCompany, source, city]);
+
+    // Dynamic route progress slicing: update traveled vs remaining path as vehicle drives forward
+    sliceRouteProgress(effX, effY);
+
+    // Traffic Light (Ampel) Ahead Detection: only active when <= 100m in front of vehicle
+    const activeLight = detectApproachingTrafficLight(
+      semaphores,
+      effX,
+      effY,
+      heading,
+      desiredBearing,
+      100
+    );
+    const prevLight = lastReportedLightRef.current;
+    const hasLightChanged =
+      (!prevLight && !!activeLight) ||
+      (!!prevLight && !activeLight) ||
+      (!!prevLight && !!activeLight && (
+        prevLight.id !== activeLight.id ||
+        prevLight.state !== activeLight.state ||
+        prevLight.distance !== activeLight.distance ||
+        prevLight.timeRemaining !== activeLight.timeRemaining
+      ));
+    if (hasLightChanged) {
+      lastReportedLightRef.current = activeLight;
+      onApproachingTrafficLightChangeRef.current?.(activeLight);
+    }
+  }, [gameX, gameY, heading, currentSpeed, showSpeedcams, dest, destCompany, source, city, semaphores]);
+
+
 
   // High Performance 60 FPS requestAnimationFrame Smooth Driving Camera & Marker Loop
   useEffect(() => {
@@ -1084,19 +1472,26 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
       const map = mapRef.current;
       if (map) {
-        // Frame-rate independent exponential decay interpolation (Subpixel precision)
-        const posDecay = 14.0;
-        const posAlpha = 1 - Math.exp(-posDecay * dt);
-
         const targetPos = targetPosRef.current;
         const curPos = currentPosRef.current;
+        const vel = targetVelocityRef.current;
+        const timeSinceTarget = (now - lastTargetTimeRef.current) / 1000;
 
-        const newLat = curPos[0] + (targetPos[0] - curPos[0]) * posAlpha;
-        const newLng = curPos[1] + (targetPos[1] - curPos[1]) * posAlpha;
+        // Smooth Dead Reckoning: extrapolate vehicle position forward along velocity vector between telemetry updates (capped at 60ms)
+        const extrapTime = Math.min(timeSinceTarget, 0.06);
+        const predictedLat = targetPos[0] + vel[0] * extrapTime;
+        const predictedLng = targetPos[1] + vel[1] * extrapTime;
+
+        // High-frequency convergence: camera glides seamlessly without stuttering or rubber-banding
+        const posDecay = 24.0;
+        const posAlpha = 1 - Math.exp(-posDecay * dt);
+
+        const newLat = curPos[0] + (predictedLat - curPos[0]) * posAlpha;
+        const newLng = curPos[1] + (predictedLng - curPos[1]) * posAlpha;
         currentPosRef.current = [newLat, newLng];
 
         // Smooth bearing interpolation (shortest angle delta)
-        const bearingDecay = 12.0;
+        const bearingDecay = 20.0;
         const bearingAlpha = 1 - Math.exp(-bearingDecay * dt);
         const targetBearing = targetBearingRef.current;
         const curBearing = currentBearingRef.current;
@@ -1105,25 +1500,34 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         const newBearing = normalizeBearing(curBearing + deltaBearing * bearingAlpha);
         currentBearingRef.current = newBearing;
 
-        // Player marker setup & smooth update
+        // Player marker setup & smooth update without DOM recreation (Solid Apple CarPlay Blue Navigation Chevron)
         if (!markerEl.current) {
           const el = document.createElement('div');
           el.className = 'game-map-player-marker';
           el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
+          const inner = document.createElement('div');
+          inner.style.cssText = 'display:flex;align-items:center;justify-content:center;transform-origin:center center;filter:drop-shadow(0 2px 8px rgba(0,122,255,0.85)) drop-shadow(0 4px 14px rgba(0,0,0,0.9));will-change:transform;';
+          inner.innerHTML = `
+            <svg width="58" height="72" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- Outer Dark Contour border for crisp contrast on light & dark road surfaces -->
+              <path d="M14 2L2.5 32.5L14 25.5L25.5 32.5L14 2Z" fill="#070b19" stroke="#070b19" stroke-width="2.5" stroke-linejoin="round"/>
+              <!-- Solid monochrome Apple CarPlay blue navigation chevron -->
+              <path d="M14 3.2L4.0 31.6L14 25.4L24.0 31.6L14 3.2Z" fill="#007aff"/>
+            </svg>
+          `;
+          el.appendChild(inner);
           markerEl.current = el;
+          markerInnerEl.current = inner;
         }
 
         const mapBearing = map.getBearing();
-        const arrowRotation = newBearing - mapBearing;
-        const purpleColor = '#a855f7';
-
-        markerEl.current.innerHTML = `
-          <div style="display:flex;align-items:center;justify-content:center;transform:perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg);transform-origin:center center;filter:drop-shadow(0 0 16px ${purpleColor}) drop-shadow(0 4px 12px rgba(0,0,0,0.9));">
-            <svg width="54" height="70" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L3 28L12 22L21 28L12 2Z" fill="${purpleColor}"/>
-            </svg>
-          </div>
-        `;
+        const isFollow = isFollowingRef.current;
+        // When following the truck, the map rotates with the vehicle so the arrow points straight forward (0 deg).
+        // Only in free-cam mode does the arrow rotate relative to the free map bearing.
+        const arrowRotation = isFollow ? 0 : (newBearing - mapBearing);
+        if (markerInnerEl.current) {
+          markerInnerEl.current.style.transform = `perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg)`;
+        }
 
         if (!markerRef.current) {
           markerRef.current = new maplibregl.Marker({
@@ -1135,16 +1539,38 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           markerRef.current.setLngLat([newLng, newLat]);
         }
 
+        // Smooth high-frequency zoom convergence (zero delay, perfectly smooth 60 FPS transition)
+        const zoomDecay = 18.0;
+        const zoomAlpha = 1 - Math.exp(-zoomDecay * dt);
+        if (Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005) {
+          currentZoomRef.current += (targetZoomRef.current - currentZoomRef.current) * zoomAlpha;
+        } else {
+          currentZoomRef.current = targetZoomRef.current;
+        }
+
         // Camera follow
-        if (isFollowingRef.current) {
-          const topOffset = (showInstructionsRef.current && navInstructionRef.current.primary && fullWidthInstructionsRef.current) ? 140 : 0;
-          map.jumpTo({
-            center: [newLng, newLat],
-            bearing: newBearing,
-            zoom: currentZoomRef.current,
-            pitch: 60,
-            padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
-          });
+        if (isFollow) {
+          const topOffset = followPaddingTopRef.current !== undefined
+            ? followPaddingTopRef.current
+            : ((showInstructionsRef.current && navInstructionRef.current.primary) ? (fullWidthInstructionsRef.current ? 140 : 150) : 0);
+
+          const isPosMoving = Math.abs(predictedLat - curPos[0]) > 1e-6 || Math.abs(predictedLng - curPos[1]) > 1e-6;
+          const isBearingRotating = Math.abs(deltaBearing) > 0.04;
+          const isZoomChanging = Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005;
+          const isPaddingChanging = lastCameraPaddingTopRef.current !== topOffset;
+
+          if (isPosMoving || isBearingRotating || isZoomChanging || isPaddingChanging) {
+            lastCameraPaddingTopRef.current = topOffset;
+            map.jumpTo({
+              center: [newLng, newLat],
+              bearing: newBearing,
+              zoom: currentZoomRef.current,
+              pitch: 60,
+              padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
+            });
+          }
+        } else if (Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005) {
+          map.setZoom(currentZoomRef.current);
         }
       }
 
@@ -1174,11 +1600,23 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     const calculateRoute = async () => {
       // 1. Direct In-Game Route Waypoints from OPCGameBridge Plugin
       if (Array.isArray(routeWaypoints) && routeWaypoints.length >= 2) {
+        const first = routeWaypoints[0];
+        const last = routeWaypoints[routeWaypoints.length - 1];
+        const hash = `${routeWaypoints.length}_${first[0]?.toFixed(1)}_${(first[2] ?? first[1])?.toFixed(1)}_${last[0]?.toFixed(1)}_${(last[2] ?? last[1])?.toFixed(1)}`;
+        if (hash === lastDirectWaypointsHashRef.current && routeGeoJson.remaining.features.length > 0) {
+          return;
+        }
+        lastDirectWaypointsHashRef.current = hash;
+
         const rawCoords: [number, number][] = routeWaypoints.map((w: any) => [
           w[0],
           w[2] != null ? w[2] : w[1]
         ]);
-        const remainingCoords = rawCoords
+        
+        // Smooth route points with tangent-clamped Hermite spline (curves stay strictly on road, corners remain sharp)
+        const smoothedCoords = smoothRouteCoords(rawCoords);
+
+        const remainingCoords = smoothedCoords
           .map(([gx, gz]) => {
             const pt = projectGameToLatLng(gx, gz);
             return pt ? ([pt[1], pt[0]] as [number, number]) : null;
@@ -1187,32 +1625,46 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
         if (!canceled && remainingCoords.length >= 2) {
           setRawRouteCoords(rawCoords);
+          rawRouteCoordsRef.current = rawCoords;
+          fullRemainingCoordsRef.current = remainingCoords;
 
-          // Calculate turn points for navigation instructions
-          const turnPoints: JSONTurnPoint[] = [];
-          for (let i = 1; i < rawCoords.length - 1; i++) {
-            const p0 = rawCoords[i - 1];
-            const p1 = rawCoords[i];
-            const p2 = rawCoords[i + 1];
-            const v1x = p1[0] - p0[0];
-            const v1y = p1[1] - p0[1];
-            const v2x = p2[0] - p1[0];
-            const v2y = p2[1] - p1[1];
-            const cross = v1x * v2y - v1y * v2x;
-            const dot = v1x * v2x + v1y * v2y;
-            const angleDeg = (Math.atan2(cross, dot) * 180) / Math.PI;
-            if (Math.abs(angleDeg) > 25) {
-              turnPoints.push({
-                x: p1[0],
-                y: p1[1],
-                turnAngleDeg: angleDeg,
-                type: angleDeg > 0 ? 'turn_left' : 'turn_right',
-                roadName: ''
-              });
+          // Calculate turn points for navigation instructions using distance-window curvature detector
+          const rawTurnPoints = extractTurnsFromRouteCoords(rawCoords);
+          let turnPoints = rawTurnPoints;
+
+          const ipc = getIpcRenderer();
+          if (ipc) {
+            try {
+              const verified = await ipc.invoke('verify-turn-nodes', rawTurnPoints);
+              if (!canceled && Array.isArray(verified)) {
+                turnPoints = verified;
+              }
+            } catch (err) {
+              console.warn('[GameMapWidget] verify-turn-nodes IPC failed:', err);
             }
+          } else {
+            try {
+              const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+              const hostname = window.location.hostname || 'localhost';
+              const port = window.location.port === '5173' ? '8383' : (window.location.port || '8383');
+              const res = await fetch(`${protocol}//${hostname}:${port}/api/carplay/verify-turns`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ turnPoints: rawTurnPoints }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (!canceled && Array.isArray(data.turnPoints)) {
+                  turnPoints = data.turnPoints;
+                }
+              }
+            } catch (err) {}
           }
-          setJsonTurnPoints(turnPoints);
-          setSegmentLanes([]);
+
+          if (!canceled) {
+            setJsonTurnPoints(turnPoints);
+            setSegmentLanes([]);
+          }
 
           const remainingFeature: GeoJSON.Feature[] = [{
             type: 'Feature',
@@ -1303,12 +1755,17 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
             setJsonTurnPoints(res.turnPoints || []);
             setSegmentLanes(res.segmentLanes || []);
             setRawRouteCoords(res.coordinates || []);
-            remainingCoords = res.coordinates
+            rawRouteCoordsRef.current = res.coordinates;
+
+            const smoothedCoords = smoothRouteCoords(res.coordinates);
+            remainingCoords = smoothedCoords
               .map(([gx, gz]: [number, number]) => {
                 const pt = projectGameToLatLng(gx, gz);
                 return pt ? [pt[1], pt[0]] : null;
               })
               .filter((pt): pt is [number, number] => pt !== null);
+
+            fullRemainingCoordsRef.current = remainingCoords;
 
             onRouteCalculated?.({
               distanceMeters: res.distanceMeters || 0,
@@ -1325,6 +1782,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         if (currentPos) remainingCoords.push([currentPos[1], currentPos[0]]);
         if (destLngLat) remainingCoords.push(destLngLat);
       }
+      fullRemainingCoordsRef.current = remainingCoords;
 
       if (canceled) return;
 
@@ -1355,6 +1813,16 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     if (!map || !mapReady) return;
 
     const setupRouteLayers = () => {
+      // Helper to ensure all sprites/POIs are rendered strictly ON TOP of route lines
+      const ensureSpritesAboveRoute = () => {
+        const topLayers = ['ets2-pois', 'ets2-companies', 'ets2-traffic', 'ets2-cities', 'nearby-vehicles-layer'];
+        for (const layerId of topLayers) {
+          if (map.getLayer(layerId)) {
+            try { map.moveLayer(layerId); } catch {}
+          }
+        }
+      };
+
       if (map.getSource('route-remaining')) {
         if (map.getLayer('route-traveled-line')) {
           map.setPaintProperty('route-traveled-line', 'line-color', accentColor);
@@ -1369,6 +1837,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         if (remSource && remSource.setData) remSource.setData(routeGeoJson.remaining);
         const travSource = map.getSource('route-traveled') as maplibregl.GeoJSONSource;
         if (travSource && travSource.setData) travSource.setData(routeGeoJson.traveled);
+        ensureSpritesAboveRoute();
         return;
       }
 
@@ -1392,6 +1861,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       createArrowImage(map);
       createTurnArrowheadImage(map);
 
+      // Find first POI/sprite layer so route is placed beneath all sprites
+      const beforeLayer = ['ets2-pois', 'ets2-companies', 'ets2-traffic', 'ets2-cities'].find(id => map.getLayer(id));
+
       map.addLayer({
         id: 'route-traveled-line',
         type: 'line',
@@ -1411,7 +1883,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'line-opacity': 0.35,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-      });
+      }, beforeLayer);
 
       map.addLayer({
         id: 'route-remaining-glow',
@@ -1433,7 +1905,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'line-blur': 3,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-      });
+      }, beforeLayer);
 
       map.addLayer({
         id: 'route-remaining-line',
@@ -1454,7 +1926,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'line-opacity': 0.95,
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-      });
+      }, beforeLayer);
 
       map.addLayer({
         id: 'route-turn-curves-glow',
@@ -1466,7 +1938,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'line-opacity': 0,
         },
         layout: { 'line-cap': 'butt', 'line-join': 'round' },
-      });
+      }, beforeLayer);
 
       map.addLayer({
         id: 'route-turn-curves-line',
@@ -1478,7 +1950,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'line-opacity': 0,
         },
         layout: { 'line-cap': 'butt', 'line-join': 'round' },
-      });
+      }, beforeLayer);
 
       map.addLayer({
         id: 'route-turn-tips-symbol',
@@ -1494,7 +1966,10 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           'icon-rotation-alignment': 'map',
           'icon-anchor': 'bottom',
         },
-      });
+      }, beforeLayer);
+
+      // Ensure all POIs, companies, traffic features, city labels and nearby players are strictly ON TOP of route lines
+      ensureSpritesAboveRoute();
     };
 
     if (map.isStyleLoaded()) {
@@ -1531,6 +2006,88 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       map.once('styledata', updateSourceData);
     }
   }, [routeGeoJson, mapReady]);
+
+  // Synchronize nearby vehicles (TruckersMP / Traffic) with MapLibre source
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const count = Array.isArray(nearbyVehicles) ? nearbyVehicles.length : 0;
+    // Fast bailout: if both current and previous count are 0, avoid touching GeoJSON or triggering WebGL repaints!
+    if (count === 0 && lastNearbyCountRef.current === 0) {
+      return;
+    }
+
+    const updateNearbyData = () => {
+      try {
+        const source = map.getSource('nearby-vehicles-source') as maplibregl.GeoJSONSource | undefined;
+        if (!source || typeof source.setData !== 'function') return;
+
+        if (count === 0) {
+          if (lastNearbyCountRef.current > 0) {
+            lastNearbyCountRef.current = 0;
+            source.setData({ type: 'FeatureCollection', features: [] });
+          }
+          return;
+        }
+        lastNearbyCountRef.current = count;
+
+        const features: any[] = [];
+        for (const v of nearbyVehicles!) {
+          // Do not display player trailers per user specification
+          if (v.isTrailer) continue;
+
+          const coords = projectGameToLatLng(v.x, v.z);
+          if (!coords) continue;
+
+          // Convert heading in radians to clockwise degrees from North
+          const bearing = normalizeBearing((-v.heading * 180) / Math.PI);
+
+          features.push({
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [coords[1], coords[0]], // [lng, lat]
+            },
+            properties: {
+              id: v.id,
+              icon: 'nearby_truck_ico',
+              bearing,
+              isTrailer: false,
+              isTmp: !!v.isTmp,
+            },
+          });
+        }
+
+        source.setData({
+          type: 'FeatureCollection',
+          features,
+        });
+      } catch (e) {
+        console.warn('Error updating nearby vehicles on map:', e);
+      }
+    };
+
+    // Real-time live update of player markers on incoming telemetry data
+    const source = map.getSource('nearby-vehicles-source') as maplibregl.GeoJSONSource | undefined;
+    if (source && typeof source.setData === 'function') {
+      updateNearbyData();
+      map.triggerRepaint();
+    } else {
+      map.once('styledata', () => {
+        updateNearbyData();
+        map.triggerRepaint();
+      });
+    }
+  }, [nearbyVehicles, mapReady]);
+
+  // Re-register nearby player icon on color change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    createNearbyVehiclesImages(map, nearbyVehicleColor);
+    map.triggerRepaint();
+  }, [nearbyVehicleColor, mapReady]);
 
   // Dynamic Map Theme (Dark / Light Mode) updates
   useEffect(() => {
@@ -1723,21 +2280,65 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
   // Generate top-right CarPlay navigation instructions
   useEffect(() => {
-    if (!showInstructions || (!dest && !destCompany) || !rawRouteCoords.length || gameX == null || gameY == null) {
+    if (!showInstructions || !rawRouteCoords.length || gameX == null || gameY == null) {
       setNavInstruction({ primary: null, upcoming: [] });
       return;
+    }
+
+    const destinationLabel = destCompany ? (dest ? `${destCompany}, ${dest}` : destCompany) : (dest || city || 'Ziel');
+
+    // Detect actual road classification at player position to accurately determine lanes in driving direction
+    // Throttled to every 500ms or on >20m movement to prevent expensive 33Hz WebGL tile queries
+    let currentRoadType: 'freeway' | 'divided' | 'local' | 'unknown' = 'unknown';
+    const now = performance.now();
+    const curPos = lastPos.current;
+    const lastRoadPos = lastRoadQueryPosRef.current;
+    const distMoved = (curPos && lastRoadPos) ? Math.hypot(curPos[0] - lastRoadPos[0], curPos[1] - lastRoadPos[1]) : 999;
+
+    if (now - lastRoadQueryTimeRef.current >= 500 || distMoved > 0.0002) {
+      lastRoadQueryTimeRef.current = now;
+      if (curPos) lastRoadQueryPosRef.current = [curPos[0], curPos[1]];
+      const map = mapRef.current;
+      if (map && mapReady && curPos) {
+        try {
+          const pt = map.project([curPos[1], curPos[0]]);
+          const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+            [pt.x - 24, pt.y - 24],
+            [pt.x + 24, pt.y + 24],
+          ];
+          const features = map.queryRenderedFeatures(bbox, { layers: ['ets2-roads'] });
+          if (features && features.length > 0) {
+            for (const f of features) {
+              const rt = f.properties?.roadType;
+              if (rt === 'freeway') { currentRoadType = 'freeway'; break; }
+              if (rt === 'divided') { currentRoadType = 'divided'; }
+              if (rt === 'local' && currentRoadType === 'unknown') { currentRoadType = 'local'; }
+            }
+          }
+          cachedRoadTypeRef.current = currentRoadType;
+        } catch (e) {}
+      }
+    } else {
+      currentRoadType = cachedRoadTypeRef.current;
     }
 
     const inst = generateNextInstruction(
       rawRouteCoords,
       gameX,
       gameY,
-      dest || destCompany || null,
+      destinationLabel,
       segmentLanes,
-      jsonTurnPoints
+      jsonTurnPoints,
+      headingRef.current,
+      speedLimit,
+      currentSpeed,
+      currentRoadType
     );
-    setNavInstruction(inst);
-  }, [showInstructions, rawRouteCoords, gameX, gameY, dest, destCompany, segmentLanes, jsonTurnPoints]);
+    // Only trigger React state update if the instruction, distance, maneuver or lane state actually changed
+    if (!areInstructionsEqual(navInstructionRef.current, inst)) {
+      setNavInstruction(inst);
+    }
+  }, [showInstructions, rawRouteCoords, gameX, gameY, dest, destCompany, city, segmentLanes, jsonTurnPoints, speedLimit, currentSpeed, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1757,7 +2358,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const recenter = useCallback(() => {
     if (!mapRef.current || !lastPos.current) return;
     setFollowing(true);
-    const topOffset = (showInstructions && navInstruction.primary && fullWidthInstructions) ? 140 : 0;
+    const topOffset = followPaddingTop !== undefined
+      ? followPaddingTop
+      : ((showInstructions && navInstruction.primary) ? (fullWidthInstructions ? 140 : 150) : 0);
     mapRef.current.flyTo({
       center: [lastPos.current[1], lastPos.current[0]],
       zoom: currentZoomRef.current,
@@ -1765,7 +2368,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       duration: 800,
       padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
     });
-  }, [showInstructions, fullWidthInstructions, navInstruction.primary]);
+  }, [showInstructions, fullWidthInstructions, navInstruction.primary, followPaddingTop]);
 
   return (
     <div
