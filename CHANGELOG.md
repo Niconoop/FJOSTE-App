@@ -1,6 +1,58 @@
 # Changelog
-
+ 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
+ 
+## [1.7.71] - 2026-09-27
+ 
+### 📷 Frühere Blitzer-Warnung, Overlay-HUD & Korrekter Verbrauch bei Tankstopps
+  - **Frühzeitige Blitzer-Warnung mit ETS2 1:19 Maßstab ([ets2Speedcams.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/data/ets2Speedcams.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Problem behoben**: Die Blitzer-Distanzberechnung berechnete den euklidischen Abstand in realen WGS84-Erdkoordinaten. Da die ETS2-Spielwelt im Maßstab 1:19 komprimiert ist, entsprachen 750 WGS84-Meter in der Spielwelt lediglich rund 39,4 Metern! Bei 80 km/h (22,2 m/s) löste die Warnung daher erst ca. 1,7 Sekunden vor dem Blitzer aus – genau im Moment der Vorbeifahrt.
+    - **Spielwelt-Skalierung**: Die WGS84-Distanz wird nun durch 19.0 dividiert. Die Warnung schlägt nun verlässlich bei echten 750 Spielmetern vor dem Blitzer an (bei 80 km/h rund 34 Sekunden Vorwarnzeit inklusive Live-Distanz-Countdown).
+    - **Fahrtrichtungs-Filterung**: Übergabe des Fahrzeug-Kompasswinkels (`desiredBearing`). Blitzer auf Gegenfahrbahnen oder hinter dem LKW werden ignoriert.
+  - **Blitzer-Warnanzeige im Desktop-Overlay ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [projections.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/projections.ts))**:
+    - **HUD-Warnbanner am oberen Bildschirmrand**: Nähert sich das Fahrzeug einem Blitzer, blendet das Desktop-Overlay ein animiertes Warnbanner ein: Kamera-Icon, Live-Entfernung in Metern, Tempolimit-Schild und Straßenbezeichnung.
+    - **Überschreitungswarnung**: Bei Geschwindigkeitsüberschreitung pulsiert das Banner in Warnrot (`+XX km/h zu schnell!`).
+    - **Unabhängig von Kartenanzeige**: Die Blitzerprüfung läuft im Overlay über Telemetrie-Koordinaten (`posX`/`posZ`) und `computeExactBearing` auch dann eigenständig weiter, wenn das Karten-Widget im Overlay ausgeblendet oder deaktiviert ist.
+    - **Einstellungs-Toggle**: In den Overlay-Einstellungen kann die Blitzer-Warnung nach Belieben ein- oder ausgeschaltet werden.
+  - **Präzise Kraftstoffberechnung bei Tankstopps während Frachtaufträgen ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Problem behoben**: Wurde während eines Auftrags getankt, war der Tank bei Ankunft voller als bei Abfahrt (`current.fuel > session.startFuel`). Die bisherige Subtraktion `session.startFuel - current.fuel` wurde negativ und durch `Math.max(0, ...)` auf 0 geklemmt. Im Auftragsbericht stand daher fälschlicherweise `0 L` und `0.0 L/100km`.
+    - **Nachtank-Erfassung (`totalRefueled`)**: Das Tracking überwacht den Tankstand kontinuierlich. Sprünge nach oben (`diff > 0.5 L`) beim Tanken an der Zapfsäule werden exakt aufsummiert und in der aktiven Sitzung (`activeJobSession.totalRefueled`) fortgeführt.
+    - **Exakter Verbrauch**: Der tatsächliche Verbrauch berechnet sich nun aus:
+      `fuelUsed = (startFuel - finalFuel) + totalRefueled`.
+      Selbst nach mehreren Tankstopps oder Volltanken wird der exakte Dieselverbrauch in Litern und l/100km auf den Deziliter genau ausgewiesen.
+ 
+## [1.7.70] - 2026-09-27
+ 
+### 🛣️ Beseitigung von Z-Knick-Stufen & Zuverlässige Routenanzeige im Overlay-Karten-Widget
+  - **Harmonische Bézier-Kurvenglättung ([routeSmoother.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/routeSmoother.ts))**:
+    - Die bisherige Hermite-Spline-Interpolation neigte bei ungleichen Segmentabständen und SCS-Verbindungsknoten (z. B. Autobahn A1 bei Hamburg) zu starkem seitlichen Überschwingen, was Z-förmige Stufen hervorrief.
+    - Vollständiger Umstieg auf ein geometrisches quadratisches Bézier-Fillet-Verfahren: Garantiert innerhalb der konvexen Hülle, kein seitliches Ausbeulen, weiche Rundung von Kurven (1° bis 85°) und Erhalt scharfer 90°-Kreuzungen.
+  - **Dauerhafte Routenanzeige im Overlay ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Komponenten-Cache (`cachedRouteWaypointsRef`)**: Wegpunkte bleiben im Overlay auch dann erhalten, wenn nachfolgende Telemetrie-Ticks zur Bandbreitenschonung keine neuen Wegpunkte mitsenden.
+    - **Fehl-Reset verhindert**: `GameMapWidget.tsx` löscht bestehende In-Game-Routen nicht mehr, wenn `routeWaypoints` kurzzeitig nicht übertragen wird.
+    - **Sofortige Synchronisation**: `overlay-get-state` liefert beim Start des Overlays direkt alle aktiven In-Game-Wegpunkte aus.
+ 
+## [1.7.69] - 2026-09-27
+
+### 🛣️ Kurvenglättung gegen zackige Routen & Fix für Routenanzeige im Overlay-Kartenwidget
+  - **Kurvenglättung mit Hermite-Spline ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Direkte Spiel-Wegpunkte aus ETS2/ATS werden nun mit `smoothRouteCoords` (4m Schrittweite, 80° Glättungswinkel) sanft entlang des Straßenverlaufs interpoliert. Eckige Sehnen ("zackige Routen") auf Autobahnkurven werden komplett beseitigt.
+  - **Routenanzeige im Desktop-Overlay repariert ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Schutz vor ungewolltem Routen-Reset**: In `GameMapWidget.tsx` wurde verhindert, dass Routen in freier Fahrt gelöscht werden, wenn direkte Wegpunkte vorliegen.
+    - **Kontraststarkes Casing & Farbgebung**: Zusätzliche dunkle Kontur (`route-remaining-casing`) und automatische Umschaltung auf kontrastreiches Navigations-Lila (`#a855f7`), falls die Akzentfarbe ein Blauton ist, der auf den blauen ETS2-Autobahnen unsichtbar wäre.
+    - **Persistentes Telemetrie-Caching**: `useTelemetry` in `Overlay.tsx` sowie IPC-Handler in `main.ts` garantieren die sofortige Verfügbarkeit der Wegpunkte beim Öffnen oder Neuladen des Overlays.
+
+## [1.7.68] - 2026-09-27
+
+### 🧭 CarPlay & Overlay: In-Game Routen & freie Wegpunkte auf Karten-Widgets wiederhergestellt
+  - **Freie Navigation ohne Frachtjob im CarPlay ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Problem behoben**: Wurde in ETS2 oder ATS im Spielmenü / auf der Weltkarte ein Wegpunkt oder eine Route gesetzt, während man sich in freier Fahrt befand (ohne aktiven Frachtmarkt-Job), leerte CarPlay die Wegpunkte bei jedem Telemetrie-Tick sofort wieder (`data.routeWaypoints = []`), da eine strikte Prüfung auf `jobActive` vorlag.
+    - **Unabhängiges Wegpunkt-Caching**: Das Caching der 1:1 In-Game-Wegpunkte (`cachedRouteWaypointsRef`) in SSE- und IPC-Handlern arbeitet nun unabhängig davon, ob ein Frachtauftrag aktiv ist oder der Fahrer in freier Fahrt cruist.
+    - **Navigationsleiste & Status**: `isRouteActive` und die verbleibende Distanz-/Zeitanzeige springen nun zuverlässig auch bei freier In-Game-Navigation (`navDistance > 0`, `navTime > 0` oder vorhandene `routeWaypoints`) an.
+  - **Routenanzeige auf dem Overlay Karten-Widget ([Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Zuverlässige Initialisierung**: `useOverlayTelemetry` fragt beim Start nun explizit den initialen Telemetriestatus über `overlay-get-state` ab, sodass gesetzte Wegpunkte auch bei nachträglich geladenem Overlay-Fenster sofort vorhanden sind.
+    - **Event- & In-Game-Routen**: Das Overlay unterstützt nun dieselbe Wegpunkt-Logik (`effectiveRouteWaypoints`), unterstützt aktive OPC-Event-Routen (`activeEventRoute`) und leert die Karte bei Auftragsabgabe oder Abbruch.
+    - **Verlustfreier IPC-Dispatch**: Telemetrie-Pakete mit neu berechneten `routeWaypoints` umgehen das Drosselintervall in `main.ts`, sodass keine Routenänderung mehr im IPC-Loop übersprungen werden kann.
 
 ## [1.7.67] - 2026-09-27
 

@@ -98,3 +98,35 @@ export function projectLatLngToGame(lat: number, lng: number): [number, number] 
     Math.round(y + ets2DefData.mapOffset[1]),
   ];
 }
+
+export function normalizeBearing(deg: number): number {
+  return ((deg % 360) + 540) % 360 - 180;
+}
+
+/**
+ * Calculates the exact forward geographic bearing (degrees CW from North) for ETS2 telemetry.
+ * Uses a forward-projected lookAt vector in Lambert Conformal Conic space.
+ */
+export function computeExactBearing(
+  effX: number,
+  effY: number,
+  rawHeading: number,
+  pos?: [number, number] | null
+): number {
+  const theta = (0.5 - rawHeading) * Math.PI * 2 + Math.PI / 2;
+  const lookAtGameX = effX + 1000 * Math.cos(theta);
+  const lookAtGameY = effY + 1000 * Math.sin(theta);
+  const lookAt = projectGameToLatLng(lookAtGameX, lookAtGameY);
+  if (!lookAt || !pos) {
+    return normalizeBearing(-rawHeading * 360);
+  }
+  const [lat1, lon1] = pos;
+  const [lat2, lon2] = lookAt;
+  const rad = Math.PI / 180;
+  const phi1 = lat1 * rad;
+  const phi2 = lat2 * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const y = Math.sin(dLon) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+  return normalizeBearing(Math.atan2(y, x) * (180 / Math.PI));
+}

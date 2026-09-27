@@ -805,7 +805,8 @@ export function findApproachingSpeedcam(
   lat: number,
   lng: number,
   currentSpeedKmh: number,
-  maxDistanceMeters: number = 750
+  maxDistanceMeters: number = 750,
+  headingDeg?: number
 ): SpeedcamAlertInfo | null {
   if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
 
@@ -818,9 +819,29 @@ export function findApproachingSpeedcam(
   for (const cam of ETS2_SPEED_CAMERAS) {
     const dLat = (cam.lat - lat) * latKm;
     const dLng = (cam.lng - lng) * lngKm;
-    const distM = Math.sqrt(dLat * dLat + dLng * dLng) * 1000;
+    const wgs84DistM = Math.sqrt(dLat * dLat + dLng * dLng) * 1000;
+    // Map is 1:19 scale in ETS2: convert real-world WGS84 distance to in-game driving distance
+    const distM = wgs84DistM / 19.0;
 
-    if (distM < minDistance && distM <= maxDistanceMeters) {
+    if (distM > maxDistanceMeters) continue;
+
+    // Heading filter: only consider cameras ahead in our direction of travel
+    if (headingDeg != null && !isNaN(headingDeg)) {
+      const bearingToCam = (Math.atan2(dLng, dLat) * (180 / Math.PI) + 360) % 360;
+      let angleDiff = Math.abs(bearingToCam - headingDeg) % 360;
+      if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+      // When approaching from a distance (> 25m), camera must be within forward arc (+/- 80°)
+      if (distM > 25 && angleDiff > 80) {
+        continue;
+      }
+      // When right alongside or just passed, ignore if camera is behind (> 105°)
+      if (angleDiff > 105) {
+        continue;
+      }
+    }
+
+    if (distM < minDistance) {
       minDistance = distM;
       closestCam = cam;
     }
@@ -839,3 +860,4 @@ export function findApproachingSpeedcam(
     overspeedKmh,
   };
 }
+

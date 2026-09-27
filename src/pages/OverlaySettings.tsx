@@ -47,6 +47,7 @@ interface OverlaySettingsType {
   blockCollisions?: boolean;
   cityEntryNotify?: boolean;
   trafficJamNotify?: boolean;
+  showSpeedcamNotify?: boolean;
   trafficServer?: string;
   showCarPlay: boolean;
   carPlayTheme: 'dark' | 'light' | 'auto';
@@ -305,6 +306,7 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   blockCollisions: true,
   cityEntryNotify: true,
   trafficJamNotify: true,
+  showSpeedcamNotify: true,
   trafficServer: 'sim1',
   showCarPlay: false,
   carPlayTheme: 'dark',
@@ -2871,6 +2873,22 @@ const OverlaySettings = () => {
                       type="checkbox"
                       checked={settings.trafficJamNotify !== false}
                       onChange={() => updateSetting('trafficJamNotify', settings.trafficJamNotify === false)}
+                      className="sr-only peer"
+                    />
+                    <div className="switch-toggle" />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer group py-0.5">
+                  <div>
+                    <span className="text-xs text-slate-300 group-hover:text-white transition-colors block">Blitzer-Warnung</span>
+                    <span className="text-[9px] text-slate-500 block">Warnt im Overlay frühzeitig vor stationären Blitzern</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={settings.showSpeedcamNotify !== false}
+                      onChange={() => updateSetting('showSpeedcamNotify', settings.showSpeedcamNotify === false)}
                       className="sr-only peer"
                     />
                     <div className="switch-toggle" />

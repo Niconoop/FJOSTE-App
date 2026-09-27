@@ -737,9 +737,9 @@ export default function CarPlayPage() {
     customDest ||
     (telemetry.connected && (
       ((telemetry as any).routeWaypoints && (telemetry as any).routeWaypoints.length > 0) ||
+      (telemetry.navDistance && telemetry.navDistance > 0) ||
+      (telemetry.navTime && telemetry.navTime > 0) ||
       (telemetry.jobActive && (
-        (telemetry.navDistance && telemetry.navDistance > 0) ||
-        (telemetry.navTime && telemetry.navTime > 0) ||
         (telemetry.dest && telemetry.dest.trim().length > 0 && telemetry.dest.toLowerCase() !== 'none')
       ))
     ))
@@ -776,10 +776,10 @@ export default function CarPlayPage() {
     if (telemetry.connected) {
       const wp = (telemetry as any).routeWaypoints;
       if (Array.isArray(wp) && wp.length > 0) return wp;
-      if (!telemetry.jobActive) return [];
+      return [];
     }
     return undefined;
-  }, [activeEventRoute, customDest, telemetry.connected, telemetry.jobActive, (telemetry as any).routeWaypoints]);
+  }, [activeEventRoute, customDest, telemetry.connected, (telemetry as any).routeWaypoints]);
 
   const effectiveDest = customDest ? customDest.dest : (activeEventRoute ? activeEventRoute.endCity : ((telemetry.connected && telemetry.jobActive) ? telemetry.dest : undefined));
   const effectiveDestCompany = customDest ? customDest.destCompany : (activeEventRoute ? activeEventRoute.endCompany : ((telemetry.connected && telemetry.jobActive) ? telemetry.dest_company : undefined));
@@ -1799,10 +1799,7 @@ export default function CarPlayPage() {
           try {
             const data = JSON.parse(e.data);
             if (data) {
-              if (!data.jobActive && !customDest && !activeEventRoute) {
-                cachedRouteWaypointsRef.current = null;
-                data.routeWaypoints = [];
-              } else if (data.routeWaypoints !== undefined) {
+              if (data.routeWaypoints !== undefined) {
                 cachedRouteWaypointsRef.current = data.routeWaypoints;
               } else if (cachedRouteWaypointsRef.current) {
                 data.routeWaypoints = cachedRouteWaypointsRef.current;
@@ -1900,10 +1897,7 @@ export default function CarPlayPage() {
     let telemetryRaf: number | null = null;
     const telemetryListener = (_: any, data: Telemetry) => {
       if (data) {
-        if (!data.jobActive && !customDest && !activeEventRoute) {
-          cachedRouteWaypointsRef.current = null;
-          data.routeWaypoints = [];
-        } else if (data.routeWaypoints !== undefined) {
+        if (data.routeWaypoints !== undefined) {
           cachedRouteWaypointsRef.current = data.routeWaypoints;
         } else if (cachedRouteWaypointsRef.current) {
           data.routeWaypoints = cachedRouteWaypointsRef.current;

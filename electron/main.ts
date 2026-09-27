@@ -190,6 +190,8 @@ export interface ActiveJobSession {
   game: string;
   startTime: number;
   startFuel: number;
+  lastFuel?: number;
+  totalRefueled?: number;
   startOdometer: number;
   startIncome: number;
   plannedDistance: number;
@@ -453,6 +455,8 @@ let mapDataDir: string | null = path.join(app.getPath('documents'), 'Open Pipe C
 
 // Job Tracking Stats
 let jobStartFuel = 0;
+let jobLastFuel = 0;
+let jobTotalRefueled = 0;
 let jobStartTime = 0;
 let jobStartOdometer = 0;
 let jobStartIncome = 0;
@@ -549,6 +553,8 @@ async function loadSettings(isAppStart = false) {
       lastJobDetails = activeJobSession.jobDetails;
       jobStartTime = activeJobSession.startTime;
       jobStartFuel = activeJobSession.startFuel;
+      jobLastFuel = activeJobSession.lastFuel ?? activeJobSession.startFuel;
+      jobTotalRefueled = activeJobSession.totalRefueled ?? 0;
       jobStartOdometer = activeJobSession.startOdometer;
       jobStartIncome = activeJobSession.startIncome;
       jobPlannedDistance = activeJobSession.plannedDistance;
@@ -1996,7 +2002,8 @@ function setupTelemetryListeners(proc: any) {
         const parsed = JSON.parse(line);
 
         // Cache route waypoints only when newly received to prevent massive V8 IPC structured clone overhead (2000 items x 33 FPS)
-        if (parsed.routeWaypoints !== undefined) {
+        const isRouteUpdate = parsed.routeWaypoints !== undefined;
+        if (isRouteUpdate) {
           cachedRouteWaypoints = parsed.routeWaypoints;
         }
         
@@ -2010,7 +2017,7 @@ function setupTelemetryListeners(proc: any) {
         
         // Send updates throttled by the update interval to prevent high CPU usage on IPC & frontend rendering
         const now = Date.now();
-        if (now - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL) {
+        if (isRouteUpdate || (now - lastTelemetryUpdate > TELEMETRY_UPDATE_INTERVAL)) {
           lastTelemetryUpdate = now;
           // Main window (App.tsx) only needs ~1Hz updates or on connection state change
           if (now - lastWinTelemetryUpdate >= 1000 || (parsed.connected !== lastWinConnected)) {
@@ -2379,6 +2386,23 @@ async function handleTrackingLogic(current: any, prev: any) {
     jobSpeedTicks++;
     jobMaxSpeed = Math.max(jobMaxSpeed, current.speed || 0);
 
+    // Continuous Fuel & Refuel Tracking
+    const curFuel = current.fuel;
+    if (typeof curFuel === 'number' && curFuel > 0) {
+      if (jobLastFuel > 0 && curFuel > jobLastFuel) {
+        const diff = curFuel - jobLastFuel;
+        if (diff > 0.5) {
+          jobTotalRefueled += diff;
+          writeToLog(`⛽ Tankvorgang während Job erkannt: +${diff.toFixed(1)} L nachgetankt (Gesamt nachgetankt: ${jobTotalRefueled.toFixed(1)} L)`);
+        }
+      }
+      jobLastFuel = curFuel;
+      if (activeJobSession) {
+        activeJobSession.lastFuel = jobLastFuel;
+        activeJobSession.totalRefueled = jobTotalRefueled;
+      }
+    }
+
     // Continuous Route Point Recording
     if (current.posX != null && current.posZ != null) {
       const gx = Number(current.posX);
@@ -2480,6 +2504,8 @@ async function handleTrackingLogic(current: any, prev: any) {
         lastJobDetails = activeJobSession.jobDetails;
         jobStartTime = activeJobSession.startTime;
         jobStartFuel = activeJobSession.startFuel;
+        jobLastFuel = activeJobSession.lastFuel ?? activeJobSession.startFuel;
+        jobTotalRefueled = activeJobSession.totalRefueled ?? 0;
         jobStartOdometer = activeJobSession.startOdometer;
         jobStartIncome = activeJobSession.startIncome;
         jobPlannedDistance = activeJobSession.plannedDistance;
@@ -2510,6 +2536,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       activeJobSession.maxSpeed = jobMaxSpeed;
       activeJobSession.routePoints = jobRoutePoints;
       activeJobSession.lastRecordedPos = jobLastRecordedPos;
+      activeJobSession.lastFuel = jobLastFuel;
+      activeJobSession.totalRefueled = jobTotalRefueled;
       activeJobSession.updatedAt = now;
       saveActiveJobSession(activeJobSession);
     } else if (jobDetails !== lastJobDetails) {
@@ -2534,6 +2562,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       // Reset & Initialize Job Stats
       jobStartTime = Date.now();
       jobStartFuel = current.fuel || 0;
+      jobLastFuel = jobStartFuel;
+      jobTotalRefueled = 0;
       jobStartOdometer = current.odometer || 0;
       jobStartIncome = current.income || 0;
       jobPlannedDistance = current.plannedDistance || 0;
@@ -2570,6 +2600,8 @@ async function handleTrackingLogic(current: any, prev: any) {
         game: gameStr,
         startTime: jobStartTime,
         startFuel: jobStartFuel,
+        lastFuel: jobLastFuel,
+        totalRefueled: jobTotalRefueled,
         startOdometer: jobStartOdometer,
         startIncome: jobStartIncome,
         plannedDistance: jobPlannedDistance,
@@ -2647,6 +2679,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       game: gameStr,
       startTime: jobStartTime || (now - 60000),
       startFuel: jobStartFuel,
+      lastFuel: jobLastFuel,
+      totalRefueled: jobTotalRefueled,
       startOdometer: jobStartOdometer,
       startIncome: jobStartIncome,
       plannedDistance: jobPlannedDistance,
@@ -2703,7 +2737,10 @@ async function handleTrackingLogic(current: any, prev: any) {
         ? Math.round(session.totalSpeed / session.speedTicks)
         : (distanceKm > 0 && elapsedMinutes > 0 ? Math.min(120, Math.round(distanceKm / (elapsedMinutes / 60))) : 0);
       const maxSpeed = Math.round(session.maxSpeed);
-      const fuelUsed = Math.max(0, session.startFuel - (current.fuel || 0));
+      const finalFuel = (current.fuel && current.fuel > 0) ? current.fuel : (session.lastFuel || session.startFuel);
+      const refueledLiters = session.totalRefueled ?? jobTotalRefueled ?? 0;
+      const rawFuelUsed = (session.startFuel - finalFuel) + refueledLiters;
+      const fuelUsed = Math.max(0, parseFloat(rawFuelUsed.toFixed(2)));
       const fuelEcon = (distanceKm > 0 && fuelUsed > 0) ? parseFloat(((fuelUsed / distanceKm) * 100).toFixed(1)) : 0;
       const pointsVal = (current.jobDeliveredEarnedXp && current.jobDeliveredEarnedXp > 0)
         ? current.jobDeliveredEarnedXp
@@ -2770,6 +2807,8 @@ async function handleTrackingLogic(current: any, prev: any) {
 
       // Reset stats
       jobStartFuel = 0;
+      jobLastFuel = 0;
+      jobTotalRefueled = 0;
       jobStartTime = 0;
       jobStartOdometer = 0;
       jobStartIncome = 0;
@@ -2840,6 +2879,8 @@ async function handleTrackingLogic(current: any, prev: any) {
           saveSettings();
 
           jobStartFuel = 0;
+          jobLastFuel = 0;
+          jobTotalRefueled = 0;
           jobStartTime = 0;
           jobStartOdometer = 0;
           jobStartIncome = 0;
@@ -3017,6 +3058,9 @@ function createSingleOverlayWindow() {
     overlayWin?.webContents.send('overlay-positions-updated', currentPositions);
 
     if (telemetryData) {
+      if (cachedRouteWaypoints && Array.isArray(cachedRouteWaypoints) && cachedRouteWaypoints.length > 0 && !telemetryData.routeWaypoints) {
+        telemetryData.routeWaypoints = cachedRouteWaypoints;
+      }
       overlayWin?.webContents.send('telemetry-update', telemetryData);
     }
   });
@@ -3414,6 +3458,9 @@ ipcMain.handle('overlay-get-state', () => {
     drivers: { x: driversX ?? 40, y: driversY ?? 440 },
     spotify: { x: spotifyX ?? 40, y: spotifyY ?? 580 }
   };
+  if (telemetryData && cachedRouteWaypoints && Array.isArray(cachedRouteWaypoints) && cachedRouteWaypoints.length > 0 && (!telemetryData.routeWaypoints || telemetryData.routeWaypoints.length === 0)) {
+    telemetryData.routeWaypoints = cachedRouteWaypoints;
+  }
   return {
     lock: isOverlayLocked,
     settings: overlaySettings,

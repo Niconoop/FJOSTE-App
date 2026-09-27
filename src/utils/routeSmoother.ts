@@ -1,21 +1,22 @@
 /**
  * Route Smoother for ETS2/ATS navigation paths.
- * Applies Tangent-Clamped Cubic Hermite Spline interpolation to game coordinates (in meters).
+ * Applies Convex-Hull Quadratic Bézier Fillet smoothing to game coordinates (in meters).
  * 
  * Benefits:
- * - Eliminates sharp polygonal chords in highway curves ('kantig')
- * - Prevents straight line chords from cutting across lanes ('liegt zwischen den Spuren')
- * - Tangent clamping at turns (> 35°) guarantees ZERO overshoot, NO bowing out into opposing lanes or grass
- * - Preserves sharp intersection angles and freeway ramp junctions so turn maneuvers remain crisp
+ * - Strictly respects the convex hull (Zero overshoot, zero oscillation, no Runge phenomenon)
+ * - Eliminates sharp Z-steps, chicanes, and bulging into oncoming lanes or grass
+ * - Eliminates 25m-50m polygonal chords ('kantig') by gently rounding highway bends
+ * - Preserves straight road sections clean and straight (fast rendering, zero lateral drift)
+ * - Preserves sharp intersection angles (> 85°) and freeway exits so turn maneuvers remain crisp
  */
 
 export interface SmoothRouteOptions {
   /** Target distance in meters between interpolated points on curves (default: 5m) */
   targetPointSpacing?: number;
-  /** Maximum angle in degrees between segments to apply curve smoothing (default: 35°) */
+  /** Maximum angle in degrees between segments to apply curve smoothing (default: 85°) */
   maxSmoothingAngleDeg?: number;
-  /** Maximum number of sub-points per segment to keep rendering fast (default: 10) */
-  maxSubdivisions?: number;
+  /** Minimum angle in degrees to apply curve smoothing (default: 1.0°) */
+  minSmoothingAngleDeg?: number;
 }
 
 /**
@@ -29,17 +30,16 @@ export function smoothRouteCoords(
     return coords ? [...coords] : [];
   }
 
-  const spacing = options.targetPointSpacing ?? 5.0;
-  const maxAngle = options.maxSmoothingAngleDeg ?? 35.0;
-  const maxSub = options.maxSubdivisions ?? 10;
+  const maxAngle = options.maxSmoothingAngleDeg ?? 85.0;
+  const minAngle = options.minSmoothingAngleDeg ?? 1.0;
 
-  // 1. Deduplicate consecutive points closer than 1.0m to prevent zero-length divisions
+  // 1. Deduplicate consecutive points closer than 1.5m to eliminate zero-length divisions and micro-jitter
   const deduped: [number, number][] = [coords[0]];
   for (let i = 1; i < coords.length; i++) {
     const prev = deduped[deduped.length - 1];
     const curr = coords[i];
     const d = Math.hypot(curr[0] - prev[0], curr[1] - prev[1]);
-    if (d >= 1.0) {
+    if (d >= 1.5) {
       deduped.push(curr);
     }
   }
@@ -47,113 +47,68 @@ export function smoothRouteCoords(
   const n = deduped.length;
   if (n < 3) return deduped;
 
-  const smoothed: [number, number][] = [deduped[0]];
+  const result: [number, number][] = [deduped[0]];
 
-  for (let i = 0; i < n - 1; i++) {
-    const p1 = deduped[i];
-    const p2 = deduped[i + 1];
-    const p0 = i > 0 ? deduped[i - 1] : p1;
-    const p3 = i < n - 2 ? deduped[i + 2] : p2;
+  for (let i = 1; i < n - 1; i++) {
+    const pPrev = deduped[i - 1];
+    const pCurr = deduped[i];
+    const pNext = deduped[i + 1];
 
-    const dx = p2[0] - p1[0];
-    const dy = p2[1] - p1[1];
-    const len = Math.hypot(dx, dy);
-    if (len < 1e-3) continue;
+    const v1x = pCurr[0] - pPrev[0];
+    const v1y = pCurr[1] - pPrev[1];
+    const l1 = Math.hypot(v1x, v1y);
 
-    // Evaluate turn angle at p1 (between incoming vector p0->p1 and current vector p1->p2)
-    let angle1 = 0;
-    let l0 = len;
-    if (i > 0) {
-      const v0x = p1[0] - p0[0];
-      const v0y = p1[1] - p0[1];
-      l0 = Math.hypot(v0x, v0y);
-      if (l0 > 1e-3) {
-        const dot = (v0x * dx + v0y * dy) / (l0 * len);
-        angle1 = Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
-      }
+    const v2x = pNext[0] - pCurr[0];
+    const v2y = pNext[1] - pCurr[1];
+    const l2 = Math.hypot(v2x, v2y);
+
+    if (l1 < 1e-3 || l2 < 1e-3) {
+      result.push(pCurr);
+      continue;
     }
 
-    // Evaluate turn angle at p2 (between current vector p1->p2 and outgoing vector p2->p3)
-    let angle2 = 0;
-    let l3 = len;
-    if (i < n - 2) {
-      const v3x = p3[0] - p2[0];
-      const v3y = p3[1] - p2[1];
-      l3 = Math.hypot(v3x, v3y);
-      if (l3 > 1e-3) {
-        const dot = (dx * v3x + dy * v3y) / (len * l3);
-        angle2 = Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
-      }
+    const u1x = v1x / l1;
+    const u1y = v1y / l1;
+    const u2x = v2x / l2;
+    const u2y = v2y / l2;
+
+    const dot = u1x * u2x + u1y * u2y;
+    const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * (180 / Math.PI);
+
+    // If nearly straight (< minAngle) or sharp intersection (> maxAngle), keep original vertex
+    if (angle < minAngle || angle > maxAngle) {
+      result.push(pCurr);
+      continue;
     }
 
-    // Tangent tension factors:
-    // Smooth cosine taper up to 85° to gracefully round corners and highway ramps without
-    // unnatural blocky 90-degree angles. Above 85°, clamp tangent along chord to prevent reverse loops.
-    const t1Factor = angle1 >= 85 ? 0 : Math.pow(Math.cos((angle1 * Math.PI) / 180), 0.75);
-    const t2Factor = angle2 >= 85 ? 0 : Math.pow(Math.cos((angle2 * Math.PI) / 180), 0.75);
+    // Proportional fillet radius: up to 42% of adjacent segment lengths (capped at 45m on freeways)
+    // Ensures adjacent fillets never overlap (0.42 + 0.42 < 1.0) and guarantees strict convex-hull containment
+    const maxRadius = Math.min(l1 * 0.42, l2 * 0.42, 45.0);
 
-    // Tangent magnitude bounds:
-    // Bound tangent length to 1.5x adjacent segment length to strictly prevent Catmull-Rom
-    // overshooting / bulging into the oncoming carriageway (Gegenfahrbahn) when long and short segments meet.
-    const effectiveLen1 = i > 0 ? Math.min(len, l0 * 1.5) : len;
-    const effectiveLen2 = (i < n - 2) ? Math.min(len, l3 * 1.5) : len;
+    // Start point of fillet arc along incoming segment
+    const startX = pCurr[0] - u1x * maxRadius;
+    const startY = pCurr[1] - u1y * maxRadius;
 
-    // Incoming tangent m1 at p1
-    let m1x = dx;
-    let m1y = dy;
-    if (t1Factor > 0 && i > 0 && l0 > 1e-3) {
-      const v0x = p1[0] - p0[0];
-      const v0y = p1[1] - p0[1];
-      const u0x = v0x / l0;
-      const u0y = v0y / l0;
-      const u1x = dx / len;
-      const u1y = dy / len;
-      const avgX = u0x + u1x;
-      const avgY = u0y + u1y;
-      const avgL = Math.hypot(avgX, avgY) || 1;
-      m1x = (avgX / avgL) * effectiveLen1 * t1Factor * 0.75;
-      m1y = (avgY / avgL) * effectiveLen1 * t1Factor * 0.75;
+    // End point of fillet arc along outgoing segment
+    const endX = pCurr[0] + u2x * maxRadius;
+    const endY = pCurr[1] + u2y * maxRadius;
+
+    result.push([startX, startY]);
+
+    // Subdivide along quadratic Bézier curve: B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
+    const steps = angle > 35 ? 6 : (angle > 15 ? 4 : (angle > 5 ? 3 : 2));
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      const oneMinusT = 1 - t;
+      const bx = oneMinusT * oneMinusT * startX + 2 * oneMinusT * t * pCurr[0] + t * t * endX;
+      const by = oneMinusT * oneMinusT * startY + 2 * oneMinusT * t * pCurr[1] + t * t * endY;
+      result.push([bx, by]);
     }
 
-    // Outgoing tangent m2 at p2
-    let m2x = dx;
-    let m2y = dy;
-    if (t2Factor > 0 && i < n - 2 && l3 > 1e-3) {
-      const v3x = p3[0] - p2[0];
-      const v3y = p3[1] - p2[1];
-      const u1x = dx / len;
-      const u1y = dy / len;
-      const u3x = v3x / l3;
-      const u3y = v3y / l3;
-      const avgX = u1x + u3x;
-      const avgY = u1y + u3y;
-      const avgL = Math.hypot(avgX, avgY) || 1;
-      m2x = (avgX / avgL) * effectiveLen2 * t2Factor * 0.75;
-      m2y = (avgY / avgL) * effectiveLen2 * t2Factor * 0.75;
-    }
-
-    // Subdivide when there is genuine curvature (angle > 0.8° and < 85°)
-    const hasCurvature = (angle1 > 0.8 && angle1 < 85) || (angle2 > 0.8 && angle2 < 85);
-    const numSteps = hasCurvature && len >= spacing * 1.2
-      ? Math.min(maxSub, Math.max(2, Math.round(len / spacing)))
-      : 1;
-
-    // Cubic Hermite spline evaluation
-    for (let s = 1; s <= numSteps; s++) {
-      const t = s / numSteps;
-      const t2 = t * t;
-      const t3 = t2 * t;
-      const h00 = 2 * t3 - 3 * t2 + 1;
-      const h10 = t3 - 2 * t2 + t;
-      const h01 = -2 * t3 + 3 * t2;
-      const h11 = t3 - t2;
-
-      const px = h00 * p1[0] + h10 * m1x + h01 * p2[0] + h11 * m2x;
-      const py = h00 * p1[1] + h10 * m1y + h01 * p2[1] + h11 * m2y;
-
-      smoothed.push([px, py]);
-    }
+    result.push([endX, endY]);
   }
 
-  return smoothed;
+  result.push(deduped[n - 1]);
+  return result;
 }
+

@@ -11,6 +11,13 @@ import { TrafficLightWidget } from '../components/TrafficLightWidget';
 import { detectApproachingTrafficLight, type ApproachingTrafficLight } from '../utils/trafficLightDetector';
 import { loadAllCities, findCity, findClosestCity } from '../data/ets2Cities';
 import { hexToRgbValues } from '../context/ThemeContext';
+import {
+  getActiveEventRoute,
+  ACTIVE_ROUTE_CHANGED_EVENT,
+  type ActiveEventRoute,
+} from '../utils/activeNavigation';
+import { findApproachingSpeedcam, type SpeedcamAlertInfo } from '../data/ets2Speedcams';
+import { projectGameToLatLng, computeExactBearing } from '../utils/projections';
 
 interface Telemetry {
   connected: boolean;
@@ -81,7 +88,9 @@ interface Settings {
   widgetSizes?: Record<string, { w: number, h: number }>;
   singleRowHud?: boolean;
   customAccentColor?: string;
+  cityEntryNotify?: boolean;
   trafficJamNotify?: boolean;
+  showSpeedcamNotify?: boolean;
   trafficServer?: string;
   showTacho?: boolean;
   tachoDesign?: 'modern' | 'classic' | 'racing' | 'custom';
@@ -124,11 +133,34 @@ function useTelemetry(initialTelemetry: Telemetry): Telemetry {
   useEffect(() => {
     try {
       const { ipcRenderer } = window.require('electron');
+
+      // Fetch initial state so routeWaypoints and telemetry are immediately available on load/reload
+      ipcRenderer.invoke('overlay-get-state').then((state: any) => {
+        if (state?.telemetry) {
+          if (Array.isArray(state.telemetry.routeWaypoints) && state.telemetry.routeWaypoints.length > 0) {
+            cachedRouteWaypointsRef.current = state.telemetry.routeWaypoints;
+          }
+          setTelemetry(prev => ({
+            ...state.telemetry,
+            routeWaypoints: (Array.isArray(state.telemetry.routeWaypoints) && state.telemetry.routeWaypoints.length > 0)
+              ? state.telemetry.routeWaypoints
+              : (cachedRouteWaypointsRef.current || (prev as any)?.routeWaypoints)
+          }));
+        }
+      }).catch(() => {});
+
       const listener = (_: any, data: Telemetry) => {
         if (data) {
-          if ((data as any).routeWaypoints !== undefined) {
-            cachedRouteWaypointsRef.current = (data as any).routeWaypoints;
-          } else if (cachedRouteWaypointsRef.current) {
+          const wp = (data as any).routeWaypoints;
+          if (Array.isArray(wp)) {
+            if (wp.length > 0) {
+              cachedRouteWaypointsRef.current = wp;
+            } else if (data.navDistance === 0 && data.navTime === 0) {
+              // Genuinely cleared route in game
+              cachedRouteWaypointsRef.current = null;
+            }
+          }
+          if (cachedRouteWaypointsRef.current && cachedRouteWaypointsRef.current.length > 0) {
             (data as any).routeWaypoints = cachedRouteWaypointsRef.current;
           }
         }
@@ -136,6 +168,9 @@ function useTelemetry(initialTelemetry: Telemetry): Telemetry {
         if (!rafRef.current) {
           rafRef.current = requestAnimationFrame(() => {
             if (pendingRef.current) {
+              if (cachedRouteWaypointsRef.current && !(pendingRef.current as any).routeWaypoints) {
+                (pendingRef.current as any).routeWaypoints = cachedRouteWaypointsRef.current;
+              }
               setTelemetry(pendingRef.current);
             }
             pendingRef.current = null;
@@ -191,6 +226,7 @@ const DEFAULT_SETTINGS: Settings = {
   blockCollisions: true,
   cityEntryNotify: true,
   trafficJamNotify: true,
+  showSpeedcamNotify: true,
   trafficServer: 'sim1',
   tachoDesign: 'modern',
   tachoWidgetPositions: {
@@ -365,10 +401,88 @@ const OverlayPage: React.FC = () => {
   }
 
   const [overlayNotify, setOverlayNotify] = useState<OverlayNotification | null>(null);
+  const [speedcamAlert, setSpeedcamAlert] = useState<SpeedcamAlertInfo | null>(null);
   const lastCityGameNameRef = useRef<string | null>(null);
   const lastWarnedTrafficJamsRef = useRef<Record<string, number>>({});
   const trafficDataRef = useRef<any[]>([]);
   const mapWidgetRef = useRef<GameMapWidgetHandle>(null);
+  const cachedRouteWaypointsRef = useRef<any>(null);
+
+  // Sync initial telemetry / routeWaypoints on mount
+  useEffect(() => {
+    try {
+      const { ipcRenderer } = window.require('electron');
+      ipcRenderer.invoke('overlay-get-state').then((state: any) => {
+        if (state?.telemetry?.routeWaypoints && Array.isArray(state.telemetry.routeWaypoints) && state.telemetry.routeWaypoints.length > 0) {
+          cachedRouteWaypointsRef.current = state.telemetry.routeWaypoints;
+        }
+      }).catch(() => {});
+    } catch {}
+  }, []);
+
+  // Active event navigation route state
+  const [activeEventRoute, setActiveEventRouteState] = useState<ActiveEventRoute | null>(() => getActiveEventRoute());
+
+  useEffect(() => {
+    const handleActiveRouteChange = (e: any) => {
+      const newRoute = e.detail ?? getActiveEventRoute();
+      setActiveEventRouteState(newRoute);
+      if (newRoute) {
+        setTimeout(() => {
+          mapWidgetRef.current?.recenter();
+        }, 150);
+      }
+    };
+    window.addEventListener(ACTIVE_ROUTE_CHANGED_EVENT, handleActiveRouteChange);
+    return () => window.removeEventListener(ACTIVE_ROUTE_CHANGED_EVENT, handleActiveRouteChange);
+  }, []);
+
+  // Speed Camera (Blitzer) proximity engine: keeps warnings active even when GameMapWidget is hidden
+  useEffect(() => {
+    if (settings.showSpeedcamNotify === false) {
+      if (speedcamAlert) setSpeedcamAlert(null);
+      return;
+    }
+    // If the map widget is rendered, GameMapWidget updates onSpeedcamAlert on each frame
+    if (settings.showGameMap) return;
+
+    if (!telemetry?.connected) {
+      if (speedcamAlert) setSpeedcamAlert(null);
+      return;
+    }
+
+    const px = telemetry.posX ?? (telemetry as any)?.gameX;
+    const pz = telemetry.posZ ?? (telemetry as any)?.gameY;
+    const speed = telemetry.speed ?? 0;
+    const heading = telemetry.heading;
+
+    if (px == null || pz == null) return;
+
+    const pos = projectGameToLatLng(px, pz);
+    if (!pos) {
+      if (speedcamAlert) setSpeedcamAlert(null);
+      return;
+    }
+
+    let bearing: number | undefined;
+    if (heading != null) {
+      const rawDeg = computeExactBearing(px, pz, heading, pos);
+      bearing = ((rawDeg % 360) + 360) % 360;
+    }
+
+    const alert = findApproachingSpeedcam(pos[0], pos[1], speed, 750, bearing);
+    setSpeedcamAlert(alert);
+  }, [
+    telemetry?.posX,
+    (telemetry as any)?.gameX,
+    telemetry?.posZ,
+    (telemetry as any)?.gameY,
+    telemetry?.speed,
+    telemetry?.heading,
+    telemetry?.connected,
+    settings.showGameMap,
+    settings.showSpeedcamNotify
+  ]);
 
   // Approaching traffic light detection
   const approachingLight = useMemo(() => {
@@ -763,6 +877,10 @@ const OverlayPage: React.FC = () => {
           content = event.type === 'start'
             ? `${event.cargo} von ${event.source} nach ${event.dest}`
             : `Fahrt beendet. Status: ${event.type === 'delivered' ? 'Erfolgreich' : 'Abgebrochen'}`;
+        }
+
+        if (event.type === 'delivered' || event.type === 'cancelled') {
+          mapWidgetRef.current?.clearRoute();
         }
 
         // Trigger visual toast notifications
@@ -1285,25 +1403,54 @@ const OverlayPage: React.FC = () => {
     return <SpotifyWidget themeClasses={c} isLocked={isLocked} />;
   };
 
+  const effectiveRouteWaypoints = useMemo(() => {
+    if (activeEventRoute && activeEventRoute.gameCoords && activeEventRoute.gameCoords.length > 0) {
+      return activeEventRoute.gameCoords;
+    }
+    const wp = (telemetry as any)?.routeWaypoints;
+    if (Array.isArray(wp) && wp.length > 0) {
+      cachedRouteWaypointsRef.current = wp;
+      return wp;
+    }
+    if (cachedRouteWaypointsRef.current && cachedRouteWaypointsRef.current.length > 0) {
+      if (telemetry?.connected && telemetry.navDistance === 0 && telemetry.navTime === 0) {
+        cachedRouteWaypointsRef.current = null;
+        return undefined;
+      }
+      return cachedRouteWaypointsRef.current;
+    }
+    return undefined;
+  }, [activeEventRoute, (telemetry as any)?.routeWaypoints, telemetry?.connected, telemetry?.navDistance, telemetry?.navTime]);
+
+  const effectiveDest = activeEventRoute ? activeEventRoute.endCity : (telemetry?.jobActive ? telemetry?.dest : undefined);
+  const effectiveDestCompany = activeEventRoute ? activeEventRoute.endCompany : (telemetry?.jobActive ? ((telemetry as any)?.dest_company || (telemetry as any)?.destCompany) : undefined);
+  const effectiveSource = activeEventRoute ? (activeEventRoute.startCompany ? `${activeEventRoute.startCity} (${activeEventRoute.startCompany})` : activeEventRoute.startCity) : (telemetry?.jobActive ? telemetry?.source : undefined);
+
   const renderGameMap = () => {
     const mapW = settings.widgetSizes?.gameMap?.w || 300;
     const mapH = settings.widgetSizes?.gameMap?.h || 200;
+    const isBlueAccent = !activeAccent || ['#3b82f6', '#2563eb', '#1d4ed8', '#0ea5e9', '#0284c7', '#007aff'].includes(activeAccent.toLowerCase());
+    const mapAccent = isBlueAccent ? '#a855f7' : activeAccent;
     return (
       <GameMapWidget
         ref={mapWidgetRef}
         gameX={telemetry?.posX ?? (telemetry as any)?.gameX}
         gameY={telemetry?.posZ ?? (telemetry as any)?.gameY}
         heading={telemetry?.heading}
-        routeWaypoints={(telemetry as any)?.routeWaypoints}
+        currentSpeed={telemetry?.speed}
+        speedLimit={telemetry?.speedLimit}
+        routeWaypoints={effectiveRouteWaypoints}
         nearbyVehicles={(telemetry as any)?.nearbyVehicles}
-        source={telemetry?.source || undefined}
-        dest={telemetry?.dest || undefined}
-        destCompany={(telemetry as any)?.dest_company || (telemetry as any)?.destCompany || undefined}
+        source={effectiveSource}
+        dest={effectiveDest}
+        destCompany={effectiveDestCompany}
         navDistance={telemetry?.navDistance || undefined}
         connected={telemetry?.connected ?? false}
-        accentColor={activeAccent}
+        accentColor={mapAccent}
         width={mapW}
         height={mapH}
+        showSpeedcams={settings.showSpeedcamNotify !== false}
+        onSpeedcamAlert={setSpeedcamAlert}
       />
     );
   };
@@ -1387,68 +1534,128 @@ const OverlayPage: React.FC = () => {
         </div>
       )}
 
-      {/* Top Overlay Notification Banner (City Entry & Traffic Jam Warning) */}
-      <AnimatePresence>
-        {overlayNotify && (
-          <motion.div
-            key={overlayNotify.id}
-            initial={{ opacity: 0, y: -40, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -40, scale: 0.9 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] pointer-events-auto"
-          >
-            <div
-              className={`px-5 py-3 rounded-2xl border backdrop-blur-2xl flex items-center gap-3.5 ${
-                overlayNotify.type === 'traffic'
-                  ? 'bg-zinc-950/95 border-red-500/50 text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)]'
-                  : 'bg-zinc-950/95 text-white'
-              }`}
-              style={
-                overlayNotify.type === 'traffic'
-                  ? undefined
-                  : {
-                      borderColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.5)`,
-                      boxShadow: `0 10px 30px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.45)`,
-                    }
-              }
+      {/* Top Overlay Notification Stack (Speedcam Alerts & City/Traffic Warnings) */}
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[99999] flex flex-col items-center gap-2.5 pointer-events-auto select-none">
+        {/* Speed Camera Proximity Alert HUD */}
+        <AnimatePresence>
+          {speedcamAlert && settings.showSpeedcamNotify !== false && (
+            <motion.div
+              key="speedcam-alert-hud"
+              initial={{ opacity: 0, y: -30, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -25, scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 26 }}
             >
               <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${
+                  speedcamAlert.isSpeeding
+                    ? 'bg-rose-950/95 border-rose-500 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse'
+                    : 'bg-zinc-950/95 border-amber-500/60 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+                }`}
+              >
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${
+                    speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'
+                  }`}
+                >
+                  {speedcamAlert.isSpeeding ? (
+                    <AlertTriangle size={20} className="text-white" />
+                  ) : (
+                    <span className="text-lg">📷</span>
+                  )}
+                </div>
+
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider font-mono">
+                      {speedcamAlert.isSpeeding ? '⚠️ GESCHWINDIGKEITSBLITZER' : '📷 FESTBLITZER VORAUS'}
+                    </span>
+                    <span className="text-[11px] font-black px-2 py-0.5 rounded bg-black/70 border border-white/10 font-mono text-white">
+                      in {speedcamAlert.distanceMeters} m
+                    </span>
+                  </div>
+                  <div className="text-[11px] opacity-90 flex items-center gap-1.5 mt-0.5">
+                    <span className="text-zinc-300">
+                      Tempolimit: <strong className="text-white">{speedcamAlert.camera.speedLimit} km/h</strong> auf {speedcamAlert.camera.road}
+                    </span>
+                    {speedcamAlert.isSpeeding && (
+                      <span className="text-rose-400 font-black">
+                        (+{speedcamAlert.overspeedKmh} km/h zu schnell!)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-8 h-8 rounded-full bg-white border-2 border-rose-600 flex items-center justify-center text-slate-950 font-black text-xs font-mono shrink-0 shadow-md">
+                  {speedcamAlert.camera.speedLimit}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Existing City Entry & Traffic Jam Warning Banner */}
+        <AnimatePresence>
+          {overlayNotify && (
+            <motion.div
+              key={overlayNotify.id}
+              initial={{ opacity: 0, y: -40, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -40, scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            >
+              <div
+                className={`px-5 py-3 rounded-2xl border backdrop-blur-2xl flex items-center gap-3.5 ${
+                  overlayNotify.type === 'traffic'
+                    ? 'bg-zinc-950/95 border-red-500/50 text-white shadow-[0_10px_30px_rgba(239,68,68,0.35)]'
+                    : 'bg-zinc-950/95 text-white'
+                }`}
                 style={
                   overlayNotify.type === 'traffic'
                     ? undefined
                     : {
-                        backgroundColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2)`,
-                        color: activeAccent,
-                        boxShadow: `0 0 15px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.25)`,
+                        borderColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.5)`,
+                        boxShadow: `0 10px 30px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.45)`,
                       }
                 }
               >
-                {overlayNotify.type === 'traffic' ? (
-                  <AlertTriangle size={20} className="animate-pulse text-red-400" />
-                ) : (
-                  <MapPin size={20} />
-                )}
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={
+                    overlayNotify.type === 'traffic'
+                      ? undefined
+                      : {
+                          backgroundColor: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.2)`,
+                          color: activeAccent,
+                          boxShadow: `0 0 15px rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.25)`,
+                        }
+                  }
+                >
+                  {overlayNotify.type === 'traffic' ? (
+                    <AlertTriangle size={20} className="animate-pulse text-red-400" />
+                  ) : (
+                    <MapPin size={20} />
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                    {overlayNotify.title}
+                  </h4>
+                  <p className="text-[11px] font-bold text-slate-300">
+                    {overlayNotify.message}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setOverlayNotify(null)}
+                  className="ml-2 p-1 text-slate-500 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
               </div>
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-white">
-                  {overlayNotify.title}
-                </h4>
-                <p className="text-[11px] font-bold text-slate-300">
-                  {overlayNotify.message}
-                </p>
-              </div>
-              <button
-                onClick={() => setOverlayNotify(null)}
-                className="ml-2 p-1 text-slate-500 hover:text-white rounded-lg transition-colors cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Widgets */}
       {settings.widgetOrder.map((widget) => {

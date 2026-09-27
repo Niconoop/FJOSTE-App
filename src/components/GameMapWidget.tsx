@@ -1425,7 +1425,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     // Speedcam Proximity Detection
     if (showSpeedcams !== false && pos) {
-      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750);
+      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750, desiredBearing);
       onSpeedcamAlertRef.current?.(alert);
     }
 
@@ -1613,8 +1613,14 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           w[2] != null ? w[2] : w[1]
         ]);
         
-        // 1:1 In-Game Route: Take exact physical road waypoints directly from ETS2/ATS without synthetic spline distortion
-        const remainingCoords = rawCoords
+        // Smooth in-game physical waypoints using Convex-Hull Quadratic Bézier Fillet smoothing
+        // Eliminates sharp 25m-50m polygonal chords ('zackig') and lateral Z-kinks while strictly preserving turn maneuvers and road curvature
+        const smoothedCoords = smoothRouteCoords(rawCoords, {
+          maxSmoothingAngleDeg: 85.0,
+          minSmoothingAngleDeg: 1.0,
+        });
+
+        const remainingCoords = smoothedCoords
           .map(([gx, gz]) => {
             const pt = projectGameToLatLng(gx, gz);
             return pt ? ([pt[1], pt[0]] as [number, number]) : null;
@@ -1690,8 +1696,16 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         }
       }
 
-      // 2. If routeWaypoints is explicitly empty or no destination is present, clear route immediately
-      if ((Array.isArray(routeWaypoints) && routeWaypoints.length === 0) || (!dest && !destCompany)) {
+      // 2. Clear route if explicitly empty array or if neither direct waypoints nor destination exist
+      const hasDirectWaypoints = Array.isArray(routeWaypoints) && routeWaypoints.length >= 2;
+      const isExplicitlyCleared = Array.isArray(routeWaypoints) && routeWaypoints.length === 0;
+
+      // Retain active in-memory direct route if routeWaypoints is momentarily undefined between telemetry frames
+      if (routeWaypoints === undefined && rawRouteCoordsRef.current.length > 0) {
+        return;
+      }
+
+      if (!hasDirectWaypoints && (isExplicitlyCleared || (!dest && !destCompany))) {
         lastRouteKeyRef.current = '';
         lastDirectWaypointsHashRef.current = '';
         lastRouteCalcPosRef.current = null;
@@ -1824,15 +1838,19 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         }
       };
 
+      // Effective route line color: if accentColor is blue (which blends into ETS2 blue freeways #3b82f6), use vivid neon purple (#a855f7)
+      const isBlueAccent = !accentColor || ['#3b82f6', '#2563eb', '#1d4ed8', '#0ea5e9', '#0284c7', '#007aff'].includes(accentColor.toLowerCase());
+      const effectiveRouteColor = isBlueAccent ? '#a855f7' : accentColor;
+
       if (map.getSource('route-remaining')) {
         if (map.getLayer('route-traveled-line')) {
-          map.setPaintProperty('route-traveled-line', 'line-color', accentColor);
+          map.setPaintProperty('route-traveled-line', 'line-color', effectiveRouteColor);
         }
         if (map.getLayer('route-remaining-glow')) {
-          map.setPaintProperty('route-remaining-glow', 'line-color', accentColor);
+          map.setPaintProperty('route-remaining-glow', 'line-color', effectiveRouteColor);
         }
         if (map.getLayer('route-remaining-line')) {
-          map.setPaintProperty('route-remaining-line', 'line-color', accentColor);
+          map.setPaintProperty('route-remaining-line', 'line-color', effectiveRouteColor);
         }
         const remSource = map.getSource('route-remaining') as maplibregl.GeoJSONSource;
         if (remSource && remSource.setData) remSource.setData(routeGeoJson.remaining);
@@ -1865,12 +1883,34 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       // Find first POI/sprite layer so route is placed beneath all sprites
       const beforeLayer = ['ets2-pois', 'ets2-companies', 'ets2-traffic', 'ets2-cities'].find(id => map.getLayer(id));
 
+      // Route Casing layer (dark outline behind the route line for crisp contrast on both dark terrain and blue freeway roads)
+      map.addLayer({
+        id: 'route-remaining-casing',
+        type: 'line',
+        source: 'route-remaining',
+        paint: {
+          'line-color': '#020617',
+          'line-width': [
+            'interpolate',
+            ['exponential', 1.5],
+            ['zoom'],
+            4, 4.5,
+            7, 8,
+            9, 13,
+            11, 19,
+            12, 24
+          ],
+          'line-opacity': 0.9,
+        },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      }, beforeLayer);
+
       map.addLayer({
         id: 'route-traveled-line',
         type: 'line',
         source: 'route-traveled',
         paint: {
-          'line-color': accentColor,
+          'line-color': effectiveRouteColor,
           'line-width': [
             'interpolate',
             ['exponential', 1.5],
@@ -1891,7 +1931,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         type: 'line',
         source: 'route-remaining',
         paint: {
-          'line-color': accentColor,
+          'line-color': effectiveRouteColor,
           'line-width': [
             'interpolate',
             ['exponential', 1.5],
@@ -1913,7 +1953,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         type: 'line',
         source: 'route-remaining',
         paint: {
-          'line-color': accentColor,
+          'line-color': effectiveRouteColor,
           'line-width': [
             'interpolate',
             ['exponential', 1.5],
