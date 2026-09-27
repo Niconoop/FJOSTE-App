@@ -2,6 +2,38 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.7.66] - 2026-09-27
+
+### ⏱️ Fehlerbehebung: Discord RPC Countdown nutzt echte Restzeit statt In-Game-Spielzeit
+  - **Echte Restzeit-Berechnung ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - **Problem**: Bei eingeschaltetem ETA Live-Countdown im Discord Rich Presence Status wurde die verbleibende Navigationszeit `navTime` aus dem SCS Telemetrie-SDK direkt als Sekunden-Offset übergeben. Da ETS2 und ATS mit komprimierter Spielzeit laufen (`1:19` bzw. `1:20`), zeigte Discord fälschlicherweise mehrstündige Restzeiten an (z. B. 4 Stunden statt 13 Minuten realer Fahrzeit).
+    - **Umrechnung in Realzeit**:
+      - `telemetryData.navTime` wird nun durch die ETS2/ATS-Zeitskalierung dividiert (`19` für ETS2, `20` für ATS).
+      - **Stadt- und Zielbereichs-Dämpfung**: Liegt die Restdistanz unter 3.000 m, wird der Zeitfaktor dynamisch und stufenlos in Richtung des Stadt-Faktors `1:3` angepasst, um auch die letzten Meter vor dem Abladepunkt realistisch abzubilden.
+      - **Discord-Profil**: Der rückwärts zählende Countdown im Discord-Profil entspricht nun exakt der tatsächlichen Zeit am Steuer.
+    - **Settings-Text**: Beschreibung in den App-Einstellungen präzisiert.
+
+## [1.7.65] - 2026-09-25
+
+### 🗺️ Fehlerbehebung: In-Game GPS-Routenextraktion nach ETS2-Update wiederhergestellt
+  - **Signatur-Aktualisierung in OPCGameBridge ([routedata.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/routedata.cpp), [traffic.h](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.h), [traffic.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.cpp))**:
+    - Das veraltete AOB-Muster für `base_ctrl` verhinderte das Lokalisieren der Navigation im neuen ETS2-Update (1.61+).
+    - `routedata.cpp` teilt sich nun nahtlos den bereits ermittelten `base_ctrl`-Pointer mit dem `traffic`-Modul und verfügt über dieselbe Multi-Muster-Erkennung für ETS2 1.61+ mit Fallback auf frühere Versionen.
+    - Die Wegpunkte werden nun wieder zuverlässig aus der Prism3D-Engine in `Local\OPCRouteData` geschrieben und von der App dargestellt.
+    - `OPCGameBridge.dll` wurde neu gebaut und in das ETS2-Plugins-Verzeichnis kopiert.
+
+## [1.7.64] - 2026-09-25
+
+### 🚦 Fehlerbehebung: Ampelerkennung nach neuem ETS2-Update wiederhergestellt
+  - **Neues base_ctrl Signatur-Muster ([telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs), [traffic.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/traffic.cpp))**:
+    - Im neuen ETS2-Update hat SCS Software die Funktionen im Spielcode neu assembliert. Das alte RDX-Muster (`48 8B 15 ...`) griff ins Leere. Es wurde durch das exakte neue RCX-Muster (`48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 86 B8 02 00 00 01`) sowie einen Fast-Check auf `0xFF36F3` ergänzt.
+  - **Dynamischer KDOP-Array-Offset (0x650 / 0x648)**:
+    - Durch interne Änderungen an `base_ctrl` rückte das KDOP-Array von Offset `0x648` auf `0x650`. Die Telemetrie-Bridge und das C++-Plugin prüfen nun dynamisch `0x650` (ETS2 1.61+) und `0x648` (Fallback für ältere Versionen).
+  - **Ampelerkennung auch bei aktivem TruckersMP**:
+    - Bisher beendete `traffic.cpp` bei aktivem TruckersMP SDK die Abfrage vorzeitig mit `return`, wodurch zwar Multiplayer-Fahrzeuge erfasst wurden, aber das Auslesen lokaler Semaphoren (Ampeln) fälschlicherweise übersprungen wurde. Der TruckersMP-Check schützt nun gezielt ausschließlich die AI-Fahrzeugliste; Semaphoren werden sowohl im Singleplayer als auch in TruckersMP durchgehend synchronisiert.
+  - **Aktualisierung der Kompilate**:
+    - `OPCGameBridge.dll` wurde neu gebaut und im ETS2-Plugins-Verzeichnis installiert. `opc-telemetry-bridge.exe` wurde neu kompiliert und bereitgestellt.
+
 ## [1.7.63] - 2026-09-22
 
 ### 🔍 Perfekte Ausrichtung für Statistiken, Team-Karten & Fahrerprofil

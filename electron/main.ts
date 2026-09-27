@@ -1167,13 +1167,27 @@ function updateRpc() {
     activity.smallImageText = currentUsername ? `Open Pipe Club • ${currentUsername}` : 'Open Pipe Club VTC';
 
     // Time handling: ETA Countdown vs Elapsed
-    const hasNavTime = telemetryData.navTime && telemetryData.navTime > 30;
+    // SCS SDK provides navTime in in-game seconds (Spielzeit).
+    // Convert to real time based on ETS2 (1:19) / ATS (1:20) simulation scaling.
+    if (!rpcStartTime) rpcStartTime = new Date();
+    const isATS = telemetryData.gameType === 2;
+    const highwayScale = isATS ? 20 : 19;
+
+    let timeScale = highwayScale;
+    if (telemetryData.navDistance && telemetryData.navDistance > 0 && telemetryData.navDistance <= 3000) {
+      const distRatio = Math.max(0, Math.min(1, telemetryData.navDistance / 3000));
+      timeScale = 3 + distRatio * (highwayScale - 3);
+    }
+
+    const realRemainingSecs = (telemetryData.navTime && !isNaN(telemetryData.navTime) && telemetryData.navTime > 0)
+      ? Math.round(telemetryData.navTime / timeScale)
+      : 0;
+    const hasNavTime = realRemainingSecs >= 10;
+
     if (rpcSettings.showEtaCountdown && hasNavTime && !telemetryData.paused && preset !== 'privacy') {
-      const remainingSecs = Math.round(telemetryData.navTime);
-      activity.endTimestamp = Math.floor(Date.now() / 1000) + remainingSecs;
+      activity.endTimestamp = Math.floor(Date.now() / 1000) + realRemainingSecs;
       delete activity.startTimestamp;
     } else {
-      if (!rpcStartTime) rpcStartTime = new Date();
       activity.startTimestamp = rpcStartTime;
       delete activity.endTimestamp;
     }

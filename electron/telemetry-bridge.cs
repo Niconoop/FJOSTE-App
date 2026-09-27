@@ -559,9 +559,15 @@ namespace OpenPipeClub {
                     long modBase = p.MainModule.BaseAddress.ToInt64();
                     long modSize = p.MainModule.ModuleMemorySize;
 
-                    // 1. Fast check at known offset 0x77D8BA
+                    // 1. Fast check at known offsets (0xFF36F3 for ETS2 1.61+, 0x77D8BA for legacy ETS2)
                     IntPtr readFast;
-                    if (WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(modBase + 0x77D8BA), _fastCheck, 7, out readFast)) {
+                    if (WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(modBase + 0xFF36F3), _fastCheck, 7, out readFast)) {
+                        if (_fastCheck[0] == 0x48 && _fastCheck[1] == 0x8B && _fastCheck[2] == 0x0D) {
+                            int disp = BitConverter.ToInt32(_fastCheck, 3);
+                            _cachedBaseCtrlPtrAddr = (modBase + 0xFF36F3) + 7 + disp;
+                        }
+                    }
+                    if (_cachedBaseCtrlPtrAddr == 0 && WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(modBase + 0x77D8BA), _fastCheck, 7, out readFast)) {
                         if (_fastCheck[0] == 0x48 && _fastCheck[1] == 0x8B && _fastCheck[2] == 0x15) {
                             int disp = BitConverter.ToInt32(_fastCheck, 3);
                             _cachedBaseCtrlPtrAddr = (modBase + 0x77D8BA) + 7 + disp;
@@ -575,7 +581,18 @@ namespace OpenPipeClub {
                             IntPtr read;
                             if (!WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(modBase + offset), _scanChunk, chunkSize, out read)) continue;
                             int len = read.ToInt32();
-                            for (int i = 0; i < len - 20; i++) {
+                            for (int i = 0; i < len - 24; i++) {
+                                // Match ETS2 1.61+ pattern: 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 86 (B8|78) 02 00 00 01
+                                if (_scanChunk[i] == 0x48 && _scanChunk[i+1] == 0x8B && _scanChunk[i+2] == 0x0D &&
+                                    _scanChunk[i+7] == 0xE8 &&
+                                    _scanChunk[i+12] == 0xC6 && _scanChunk[i+13] == 0x86 &&
+                                    (_scanChunk[i+14] == 0xB8 || _scanChunk[i+14] == 0x78) &&
+                                    _scanChunk[i+15] == 0x02 && _scanChunk[i+16] == 0x00 && _scanChunk[i+17] == 0x00 && _scanChunk[i+18] == 0x01) {
+                                    int disp = BitConverter.ToInt32(_scanChunk, i + 3);
+                                    _cachedBaseCtrlPtrAddr = (modBase + offset + i) + 7 + disp;
+                                    break;
+                                }
+                                // Match legacy pattern: 48 8B 15 ?? ?? ?? ?? 48 8B ?? 48 8B 41 ?? 48 8B 92
                                 if (_scanChunk[i] == 0x48 && _scanChunk[i+1] == 0x8B && _scanChunk[i+2] == 0x15 &&
                                     _scanChunk[i+7] == 0x48 && _scanChunk[i+8] == 0x8B &&
                                     _scanChunk[i+10] == 0x48 && _scanChunk[i+11] == 0x8B && _scanChunk[i+12] == 0x41 &&
@@ -603,10 +620,21 @@ namespace OpenPipeClub {
                 long baseCtrlInst = BitConverter.ToInt64(_procBuffer8, 0);
                 if (baseCtrlInst == 0) return;
 
-                // kdop is at baseCtrlInst + 0x648 (pointer at +8, count at +16)
-                if (!WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(baseCtrlInst + 0x648), _procBuffer32, 24, out bytesRead)) return;
-                long kdopItems = BitConverter.ToInt64(_procBuffer32, 8);
-                long kdopCount = BitConverter.ToInt64(_procBuffer32, 16);
+                // kdop is at baseCtrlInst + 0x650 (ETS2 1.61+) or 0x648 (ETS2 1.50)
+                long kdopItems = 0;
+                long kdopCount = 0;
+                int[] candidateKdopOffsets = new int[] { 0x650, 0x648 };
+                foreach (int off in candidateKdopOffsets) {
+                    if (WinAPI.ReadProcessMemory(_gameProcessHandle, new IntPtr(baseCtrlInst + off), _procBuffer32, 24, out bytesRead)) {
+                        long items = BitConverter.ToInt64(_procBuffer32, 8);
+                        long count = BitConverter.ToInt64(_procBuffer32, 16);
+                        if (count > 0 && count <= 5000 && items != 0) {
+                            kdopItems = items;
+                            kdopCount = count;
+                            break;
+                        }
+                    }
+                }
                 if (kdopCount <= 0 || kdopItems == 0) return;
 
                 int maxKdop = (int)Math.Min(kdopCount, 512);

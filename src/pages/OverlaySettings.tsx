@@ -3642,7 +3642,7 @@ const OverlaySettings = () => {
                                 <div className="p-2.5 rounded-xl bg-zinc-900/40 border border-white/5 flex items-center justify-between gap-3">
                                   <div className="min-w-0">
                                     <span className="text-xs font-bold text-white block">⏳ ETA Live-Countdown</span>
-                                    <span className="text-[10px] text-zinc-400 block truncate">Restfahrzeit läuft im Profil rückwärts</span>
+                                    <span className="text-[10px] text-zinc-400 block truncate">Echte Restzeit läuft im Discord-Profil rückwärts</span>
                                   </div>
                                   <label className="relative cursor-pointer shrink-0">
                                     <input
