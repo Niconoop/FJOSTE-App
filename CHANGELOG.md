@@ -2,6 +2,16 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.7.67] - 2026-09-27
+
+### 🗺️ ETS2 1:1 Routen-Übernahme, CarPlay Routen-Bereinigung & Nahtlose Job-Fortführung
+  - **1:1 GPS-Wegpunkte aus dem Spiel ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Spielrouten werden direkt 1:1 ohne verzerrende Spline-Glättung übernommen.
+  - **Zuverlässige Routen-Entfernung bei Auftragsabgabe im CarPlay ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Sofortiges Leeren der Navigationsroute und Wegpunkte bei `job_delivered` und `job_cancelled`.
+  - **Schutz vor falscher Auftragsabgabe beim Beenden des Spiels ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Auftragsende wird strikt an echten In-World-Status und SDK-Events gekoppelt. Beim Spiel-Neustart wird der laufende Auftrag nahtlos fortgesetzt.
+
 ## [1.7.66] - 2026-09-27
 
 ### ⏱️ Fehlerbehebung: Discord RPC Countdown nutzt echte Restzeit statt In-Game-Spielzeit

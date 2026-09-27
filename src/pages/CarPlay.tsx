@@ -736,10 +736,12 @@ export default function CarPlayPage() {
     activeEventRoute ||
     customDest ||
     (telemetry.connected && (
-      (telemetry.navDistance && telemetry.navDistance > 0) ||
-      (telemetry.navTime && telemetry.navTime > 0) ||
       ((telemetry as any).routeWaypoints && (telemetry as any).routeWaypoints.length > 0) ||
-      (telemetry.dest && telemetry.dest.trim().length > 0 && telemetry.dest.toLowerCase() !== 'none')
+      (telemetry.jobActive && (
+        (telemetry.navDistance && telemetry.navDistance > 0) ||
+        (telemetry.navTime && telemetry.navTime > 0) ||
+        (telemetry.dest && telemetry.dest.trim().length > 0 && telemetry.dest.toLowerCase() !== 'none')
+      ))
     ))
   );
 
@@ -768,12 +770,20 @@ export default function CarPlayPage() {
     if (activeEventRoute && activeEventRoute.gameCoords && activeEventRoute.gameCoords.length > 0) {
       return activeEventRoute.gameCoords;
     }
-    return telemetry.connected ? (telemetry as any).routeWaypoints : undefined;
-  }, [activeEventRoute, telemetry.connected, (telemetry as any).routeWaypoints]);
+    if (customDest) {
+      return undefined;
+    }
+    if (telemetry.connected) {
+      const wp = (telemetry as any).routeWaypoints;
+      if (Array.isArray(wp) && wp.length > 0) return wp;
+      if (!telemetry.jobActive) return [];
+    }
+    return undefined;
+  }, [activeEventRoute, customDest, telemetry.connected, telemetry.jobActive, (telemetry as any).routeWaypoints]);
 
-  const effectiveDest = customDest ? customDest.dest : (activeEventRoute ? activeEventRoute.endCity : (telemetry.connected ? telemetry.dest : undefined));
-  const effectiveDestCompany = customDest ? customDest.destCompany : (activeEventRoute ? activeEventRoute.endCompany : (telemetry.connected ? telemetry.dest_company : undefined));
-  const effectiveSource = activeEventRoute ? (activeEventRoute.startCompany ? `${activeEventRoute.startCity} (${activeEventRoute.startCompany})` : activeEventRoute.startCity) : (telemetry.connected ? telemetry.source : undefined);
+  const effectiveDest = customDest ? customDest.dest : (activeEventRoute ? activeEventRoute.endCity : ((telemetry.connected && telemetry.jobActive) ? telemetry.dest : undefined));
+  const effectiveDestCompany = customDest ? customDest.destCompany : (activeEventRoute ? activeEventRoute.endCompany : ((telemetry.connected && telemetry.jobActive) ? telemetry.dest_company : undefined));
+  const effectiveSource = activeEventRoute ? (activeEventRoute.startCompany ? `${activeEventRoute.startCity} (${activeEventRoute.startCompany})` : activeEventRoute.startCity) : ((telemetry.connected && telemetry.jobActive) ? telemetry.source : undefined);
 
   useEffect(() => {
     if (isRouteActive) {
@@ -1789,7 +1799,10 @@ export default function CarPlayPage() {
           try {
             const data = JSON.parse(e.data);
             if (data) {
-              if (data.routeWaypoints !== undefined) {
+              if (!data.jobActive && !customDest && !activeEventRoute) {
+                cachedRouteWaypointsRef.current = null;
+                data.routeWaypoints = [];
+              } else if (data.routeWaypoints !== undefined) {
                 cachedRouteWaypointsRef.current = data.routeWaypoints;
               } else if (cachedRouteWaypointsRef.current) {
                 data.routeWaypoints = cachedRouteWaypointsRef.current;
@@ -1887,7 +1900,10 @@ export default function CarPlayPage() {
     let telemetryRaf: number | null = null;
     const telemetryListener = (_: any, data: Telemetry) => {
       if (data) {
-        if (data.routeWaypoints !== undefined) {
+        if (!data.jobActive && !customDest && !activeEventRoute) {
+          cachedRouteWaypointsRef.current = null;
+          data.routeWaypoints = [];
+        } else if (data.routeWaypoints !== undefined) {
           cachedRouteWaypointsRef.current = data.routeWaypoints;
         } else if (cachedRouteWaypointsRef.current) {
           data.routeWaypoints = cachedRouteWaypointsRef.current;
@@ -2005,8 +2021,16 @@ export default function CarPlayPage() {
         color = 'bg-[#18181b]/95 border-purple-500/40 backdrop-blur-2xl shadow-purple-950/40';
         icon = <Calendar size={22} className="text-purple-400" />;
         shouldShow = settings.carPlayNotifyEvent !== false;
-      } else if (event.type === 'start' || event.type === 'delivered' || event.type === 'cancelled' || event.type === 'resumed') {
-        return; 
+      } else if (event.type === 'delivered' || event.type === 'cancelled') {
+        cachedRouteWaypointsRef.current = null;
+        mapWidgetRef.current?.clearRoute();
+        maxMapWidgetRef.current?.clearRoute();
+        setCustomDest(null);
+        setCustomRouteInfo(null);
+        setPendingDest(null);
+        return;
+      } else if (event.type === 'start' || event.type === 'resumed') {
+        return;
       }
 
       if (shouldShow) {

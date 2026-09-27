@@ -193,6 +193,8 @@ export interface ActiveJobSession {
   startOdometer: number;
   startIncome: number;
   plannedDistance: number;
+  startDeliveredRevenue?: number;
+  startDeliveredXp?: number;
   totalSpeed: number;
   speedTicks: number;
   maxSpeed: number;
@@ -455,6 +457,8 @@ let jobStartTime = 0;
 let jobStartOdometer = 0;
 let jobStartIncome = 0;
 let jobPlannedDistance = 0;
+let jobStartDeliveredRevenue = 0;
+let jobStartDeliveredXp = 0;
 let jobTotalSpeed = 0;
 let jobSpeedTicks = 0;
 let jobMaxSpeed = 0;
@@ -548,6 +552,8 @@ async function loadSettings(isAppStart = false) {
       jobStartOdometer = activeJobSession.startOdometer;
       jobStartIncome = activeJobSession.startIncome;
       jobPlannedDistance = activeJobSession.plannedDistance;
+      jobStartDeliveredRevenue = activeJobSession.startDeliveredRevenue || 0;
+      jobStartDeliveredXp = activeJobSession.startDeliveredXp || 0;
       jobTotalSpeed = activeJobSession.totalSpeed || 0;
       jobSpeedTicks = activeJobSession.speedTicks || 0;
       jobMaxSpeed = activeJobSession.maxSpeed || 0;
@@ -2477,6 +2483,8 @@ async function handleTrackingLogic(current: any, prev: any) {
         jobStartOdometer = activeJobSession.startOdometer;
         jobStartIncome = activeJobSession.startIncome;
         jobPlannedDistance = activeJobSession.plannedDistance;
+        jobStartDeliveredRevenue = activeJobSession.startDeliveredRevenue || 0;
+        jobStartDeliveredXp = activeJobSession.startDeliveredXp || 0;
         jobTotalSpeed = activeJobSession.totalSpeed || 0;
         jobSpeedTicks = activeJobSession.speedTicks || 0;
         jobMaxSpeed = activeJobSession.maxSpeed || 0;
@@ -2529,6 +2537,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       jobStartOdometer = current.odometer || 0;
       jobStartIncome = current.income || 0;
       jobPlannedDistance = current.plannedDistance || 0;
+      jobStartDeliveredRevenue = current.jobDeliveredRevenue ? Number(current.jobDeliveredRevenue) : 0;
+      jobStartDeliveredXp = current.jobDeliveredEarnedXp ? Number(current.jobDeliveredEarnedXp) : 0;
       jobTotalSpeed = 0;
       jobSpeedTicks = 0;
       jobMaxSpeed = 0;
@@ -2563,6 +2573,8 @@ async function handleTrackingLogic(current: any, prev: any) {
         startOdometer: jobStartOdometer,
         startIncome: jobStartIncome,
         plannedDistance: jobPlannedDistance,
+        startDeliveredRevenue: jobStartDeliveredRevenue,
+        startDeliveredXp: jobStartDeliveredXp,
         totalSpeed: jobTotalSpeed,
         speedTicks: jobSpeedTicks,
         maxSpeed: jobMaxSpeed,
@@ -2611,6 +2623,18 @@ async function handleTrackingLogic(current: any, prev: any) {
 
   // 3. Job Delivered / Cancelled Detection
   if (!cargoValid && (activeJobSession || lastJobDetails !== null)) {
+    // CRUCIAL SAFETY CHECK:
+    // Player MUST be connected and loaded into a drivable truck in the game world!
+    // If the game was closed, paused, or the player is in the main menu / profile selection / loading screen:
+    // DO NOT touch activeJobSession! It must stay safely persisted on disk!
+    const isInWorld = Boolean(current.connected && current.brand && current.brand.length > 0 && current.odometer > 0);
+
+    if (!isInWorld) {
+      // In loading screen, main menu, or game shut down -> Keep job safe on disk
+      noCargoInWorldTicks = 0;
+      return;
+    }
+
     const session = activeJobSession || {
       jobId: currentJobId || crypto.randomUUID(),
       jobDetails: lastJobDetails || "",
@@ -2626,6 +2650,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       startOdometer: jobStartOdometer,
       startIncome: jobStartIncome,
       plannedDistance: jobPlannedDistance,
+      startDeliveredRevenue: jobStartDeliveredRevenue,
+      startDeliveredXp: jobStartDeliveredXp,
       totalSpeed: jobTotalSpeed,
       speedTicks: jobSpeedTicks,
       maxSpeed: jobMaxSpeed,
@@ -2634,12 +2660,20 @@ async function handleTrackingLogic(current: any, prev: any) {
       updatedAt: now
     };
 
-    // Check delivery conditions
-    const hasDeliveryStats = (current.jobDeliveredRevenue && current.jobDeliveredRevenue > 0) ||
-      (current.jobDeliveredEarnedXp && current.jobDeliveredEarnedXp > 0) ||
-      (current.jobDeliveredDistanceKm && current.jobDeliveredDistanceKm > 0);
-    const wasNearDestination = prev && prev.navDistance < 2500;
-    const isDelivered = hasDeliveryStats || wasNearDestination;
+    // Real Delivery Conditions:
+    // 1. Direct gameplay event jobDelivered from SCS Telemetry SDK (via OPCGameBridge special_b.jobDelivered)
+    const isDirectlyDelivered = current.jobDelivered === true;
+    // 2. Incremental delivery revenue/XP higher than starting baseline of this job
+    const baseRevenue = session.startDeliveredRevenue ?? jobStartDeliveredRevenue;
+    const baseXp = session.startDeliveredXp ?? jobStartDeliveredXp;
+    const hasNewDeliveryStats = Boolean(
+      (current.jobDeliveredRevenue && current.jobDeliveredRevenue > baseRevenue) ||
+      (current.jobDeliveredEarnedXp && current.jobDeliveredEarnedXp > baseXp)
+    );
+    // 3. Stopped directly inside destination delivery trigger (< 60m)
+    const wasAtDeliveryPoint = Boolean(prev && prev.navDistance > 0 && prev.navDistance < 60 && (current.speed || 0) < 2);
+
+    const isDelivered = isDirectlyDelivered || hasNewDeliveryStats || wasAtDeliveryPoint;
 
     if (isDelivered) {
       writeToLog(`🏁 Tracking: Job erfolgreich abgeschlossen (delivered) [Job-ID: ${session.jobId}]`);
@@ -2730,6 +2764,8 @@ async function handleTrackingLogic(current: any, prev: any) {
       lastJobDetails = null;
       currentJobId = null;
       noCargoInWorldTicks = 0;
+      jobStartDeliveredRevenue = 0;
+      jobStartDeliveredXp = 0;
       saveSettings();
 
       // Reset stats
@@ -2744,10 +2780,28 @@ async function handleTrackingLogic(current: any, prev: any) {
       jobRoutePoints = [];
       jobLastRecordedPos = null;
 
+      // Clear route in CarPlay, Overlay, and Frontend
+      cachedRouteWaypoints = null;
+      if (telemetryData) {
+        telemetryData.routeWaypoints = [];
+        telemetryData.dest = "";
+        telemetryData.source = "";
+        telemetryData.dest_company = "";
+        telemetryData.source_company = "";
+        telemetryData.cargo = "";
+        telemetryData.jobActive = false;
+        telemetryData.navDistance = 0;
+        telemetryData.navTime = 0;
+        safeSend(carplayWin, 'telemetry-update', telemetryData);
+        safeSend(overlayWin, 'telemetry-update', telemetryData);
+        safeSend(win, 'telemetry-update', telemetryData);
+        broadcastCarPlaySse('telemetry-update', telemetryData);
+      }
+
       safeSend(win, 'job-update', jobData);
     } else {
       // Check if player is actively driving in the world without cargo
-      const isInWorldDriving = current.brand && current.brand.length > 0 && current.odometer > 0 && !current.paused;
+      const isInWorldDriving = isInWorld && !current.paused;
 
       if (isInWorldDriving) {
         noCargoInWorldTicks++;
@@ -2781,6 +2835,8 @@ async function handleTrackingLogic(current: any, prev: any) {
           lastJobDetails = null;
           currentJobId = null;
           noCargoInWorldTicks = 0;
+          jobStartDeliveredRevenue = 0;
+          jobStartDeliveredXp = 0;
           saveSettings();
 
           jobStartFuel = 0;
@@ -2794,10 +2850,28 @@ async function handleTrackingLogic(current: any, prev: any) {
           jobRoutePoints = [];
           jobLastRecordedPos = null;
 
+          // Clear route in CarPlay, Overlay, and Frontend
+          cachedRouteWaypoints = null;
+          if (telemetryData) {
+            telemetryData.routeWaypoints = [];
+            telemetryData.dest = "";
+            telemetryData.source = "";
+            telemetryData.dest_company = "";
+            telemetryData.source_company = "";
+            telemetryData.cargo = "";
+            telemetryData.jobActive = false;
+            telemetryData.navDistance = 0;
+            telemetryData.navTime = 0;
+            safeSend(carplayWin, 'telemetry-update', telemetryData);
+            safeSend(overlayWin, 'telemetry-update', telemetryData);
+            safeSend(win, 'telemetry-update', telemetryData);
+            broadcastCarPlaySse('telemetry-update', telemetryData);
+          }
+
           safeSend(win, 'job-update', jobData);
         }
       } else {
-        // Player is in main menu, loading screen, or game paused -> DO NOT CANCEL! Keep activeJobSession safe on disk.
+        // Player is paused -> keep counter reset
         noCargoInWorldTicks = 0;
       }
     }

@@ -1613,10 +1613,8 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           w[2] != null ? w[2] : w[1]
         ]);
         
-        // Smooth route points with tangent-clamped Hermite spline (curves stay strictly on road, corners remain sharp)
-        const smoothedCoords = smoothRouteCoords(rawCoords);
-
-        const remainingCoords = smoothedCoords
+        // 1:1 In-Game Route: Take exact physical road waypoints directly from ETS2/ATS without synthetic spline distortion
+        const remainingCoords = rawCoords
           .map(([gx, gz]) => {
             const pt = projectGameToLatLng(gx, gz);
             return pt ? ([pt[1], pt[0]] as [number, number]) : null;
@@ -1692,10 +1690,13 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         }
       }
 
-      // 2. Fallback: If no direct plugin route waypoints are available, calculate via destination & route-service
-      if (!dest && !destCompany) {
+      // 2. If routeWaypoints is explicitly empty or no destination is present, clear route immediately
+      if ((Array.isArray(routeWaypoints) && routeWaypoints.length === 0) || (!dest && !destCompany)) {
         lastRouteKeyRef.current = '';
+        lastDirectWaypointsHashRef.current = '';
         lastRouteCalcPosRef.current = null;
+        fullRemainingCoordsRef.current = [];
+        rawRouteCoordsRef.current = [];
         setRawRouteCoords([]);
         setJsonTurnPoints([]);
         setSegmentLanes([]);

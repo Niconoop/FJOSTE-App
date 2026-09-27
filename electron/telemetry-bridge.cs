@@ -280,6 +280,15 @@ namespace OpenPipeClub {
                                     AppendJsonProp(_sb, "jobDeliveredEarnedXp", BitConverter.ToInt32(_rawBuffer, 636));
                                     _sb.Append(',');
                                     AppendJsonProp(_sb, "jobMarket", GetString(_rawBuffer, 3404, 32));
+                                    _sb.Append(',');
+                                    bool onJob = _rawBuffer[4300] > 0;
+                                    bool jobDelivered = _rawBuffer[4303] > 0;
+                                    bool jobCancelled = _rawBuffer[4302] > 0;
+                                    AppendJsonProp(_sb, "onJob", onJob);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "jobDelivered", jobDelivered);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "jobCancelled", jobCancelled);
 
                                     _sb.Append(',');
                                     AppendJsonProp(_sb, "parkBrake", _rawBuffer[1566] > 0);
@@ -329,7 +338,7 @@ namespace OpenPipeClub {
                                                 uint count = _routeAccessor.ReadUInt32(8);
                                                 _sb.Append(',');
                                                 _sb.Append("\"routeWaypoints\":[");
-                                                if (count > 0 && count <= 2000) {
+                                                if (count > 0 && count <= 4000) {
                                                     for (uint i = 0; i < count; i++) {
                                                         long offset = 68 + (i * 12);
                                                         float wx = _routeAccessor.ReadSingle(offset);
