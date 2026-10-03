@@ -5123,14 +5123,48 @@ ipcMain.handle('check-app-update', async () => {
   }
 });
 
-function downloadAndApplyUpdate(url: string, event: any) {
-  const tempUpdatePath = path.join(app.getPath('temp'), 'Open Pipe Club App Setup.exe');
+async function launchUpdateInstaller(installerPath: string): Promise<void> {
+  // Give OS, Defender and file system a moment to fully release all locks
+  await new Promise(res => setTimeout(res, 600));
 
-  if (fs.existsSync(tempUpdatePath)) {
-    try {
-      fs.unlinkSync(tempUpdatePath);
-    } catch (e) { }
+  // 1. Try launching through native Windows ShellExecute (handles UAC & file locks gracefully without CMD window)
+  try {
+    const shellError = await shell.openPath(installerPath);
+    if (!shellError) {
+      writeToLog(`[Updater] Installer launched via shell.openPath: ${installerPath}`);
+      return;
+    }
+    writeToLog(`[Updater] shell.openPath returned: "${shellError}", falling back to spawn with retries...`);
+  } catch (err: any) {
+    writeToLog(`[Updater] shell.openPath error: ${err?.message}, falling back to spawn with retries...`);
   }
+
+  // 2. Fallback to child_process.spawn with retry logic for Windows EBUSY / sharing violations
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      const child = spawn(installerPath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      writeToLog(`[Updater] Installer spawned on attempt ${attempt}: ${installerPath}`);
+      return;
+    } catch (err: any) {
+      lastError = err;
+      if (err.code === 'EBUSY' && attempt < 6) {
+        writeToLog(`[Updater] File locked (EBUSY), retrying in 500ms (attempt ${attempt}/6)...`);
+        await new Promise(res => setTimeout(res, 500));
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (lastError) throw lastError;
+}
+
+function downloadAndApplyUpdate(url: string, event: any) {
+  const tempUpdatePath = path.join(app.getPath('temp'), `OpenPipeClub-Setup-${Date.now()}.exe`);
 
   const file = fs.createWriteStream(tempUpdatePath, { highWaterMark: 1024 * 1024 });
 
@@ -5185,9 +5219,8 @@ function downloadAndApplyUpdate(url: string, event: any) {
     try { fs.unlinkSync(tempUpdatePath); } catch (e) { }
   });
 
-  file.on('finish', () => {
-    file.close();
-
+  // Wait for 'close' event to guarantee the OS file handle has been completely closed!
+  file.on('close', async () => {
     event.sender.send('install-update-progress', { progress: 95, status: 'Bereite Anwendung vor...' });
 
     if (!app.isPackaged) {
@@ -5198,21 +5231,16 @@ function downloadAndApplyUpdate(url: string, event: any) {
     }
 
     try {
-      // Direktes Starten des NSIS-Installationsassistenten ohne cmd.exe oder .bat
-      // Verhindert zu 100% das unschöne, kurz aufploppende schwarze CMD-Konsolenfenster!
-      const child = spawn(tempUpdatePath, [], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
+      await launchUpdateInstaller(tempUpdatePath);
 
       event.sender.send('install-update-progress', { progress: 100, status: 'Installationsassistent wird gestartet...', success: true });
 
       setTimeout(() => {
         app.quit();
-      }, 1000);
+      }, 1200);
     } catch (err: any) {
       console.error('Failed to run update installer:', err);
+      writeToLog(`[Updater] Failed to run update installer: ${err.message}`);
       event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Starten des Installers: ${err.message}`, error: true });
     }
   });
