@@ -53,12 +53,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(res.data);
       if (typeof localStorage !== 'undefined') localStorage.setItem(CACHED_USER_KEY, JSON.stringify(res.data));
       try { window.require('electron').ipcRenderer.send('set-auth-username', res.data.username); } catch(e) {}
-    } catch (err) {
+    } catch (err: any) {
       console.error("Auth verify failed", err);
-      localStorage.removeItem('token');
-      localStorage.removeItem(CACHED_USER_KEY);
-      setToken(null);
-      setUser(null);
+      // Only remove credentials if server explicitly told us the token is invalid/expired (401)
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem(CACHED_USER_KEY);
+        setToken(null);
+        setUser(null);
+      }
     } finally {
       if (loadingTimerRef.current) {
         clearTimeout(loadingTimerRef.current);
@@ -107,10 +110,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!token) return;
     const interval = setInterval(() => {
       axios.get(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-        .catch(() => {
-          setToken(null);
-          setUser(null);
-          localStorage.removeItem('token');
+        .catch((err: any) => {
+          // Only log out if the backend explicitly rejected the token with 401 Unauthorized
+          // Never log out on temporary network issues, 500 server errors, or timeouts
+          if (err.response?.status === 401) {
+            console.warn("Session abgelaufen (401 Unauthorized) - melde Benutzer ab");
+            setToken(null);
+            setUser(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem(CACHED_USER_KEY);
+          }
         });
     }, 30000);
     return () => clearInterval(interval);

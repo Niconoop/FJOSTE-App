@@ -1,7 +1,7 @@
 {
   "name": "open-pipe-club-app",
   "private": true,
-  "version": "1.8.3",
+  "version": "1.8.4",
   "description": "Open Pipe Club App",
   "author": "Open Pipe Club",
   "type": "module",
@@ -35,10 +35,15 @@
       "!**/tsconfig*.json"
     ],
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "deleteAppDataOnUninstall": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Open Pipe Club App",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
       "artifactName": "${productName} Setup.${ext}"
     },
     "portable": {
@@ -64,7 +69,9 @@
     }
   },
   "dependencies": {
-    "discord-rpc": "^4.0.1"
+    "@types/three": "^0.186.0",
+    "discord-rpc": "^4.0.1",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

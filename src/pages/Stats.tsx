@@ -191,7 +191,7 @@ const Stats = () => {
             transition={{ duration: 0.2 }}
             className="space-y-10"
           >
-            <div id="tour-stats-container">
+            <div id="tour-stats-kpis">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-1 h-4 bg-primary rounded-full" />
                 <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
@@ -208,7 +208,7 @@ const Stats = () => {
               </div>
             </div>
 
-            <div>
+            <div id="tour-stats-charts">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-1 h-4 bg-primary rounded-full" />
                 <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
@@ -221,7 +221,7 @@ const Stats = () => {
               </div>
             </div>
 
-            <div>
+            <div id="tour-stats-leaderboard">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-1 h-4 bg-primary rounded-full" />
                 <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">

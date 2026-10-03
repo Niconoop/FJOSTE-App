@@ -812,6 +812,22 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   const [showTerrain3D, setShowTerrain3D] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
 
+  // Sync with interactive onboarding spotlight tour
+  useEffect(() => {
+    const handleTourStep = (e: any) => {
+      const id = e.detail?.stepId;
+      if (id === 'map-layers' || id === 'map-server') {
+        setControlsOpen(true);
+        if (id === 'map-server') setShowTraffic(true);
+      }
+      if (id === 'map-sidebar') {
+        setSidebarOpen(true);
+      }
+    };
+    window.addEventListener('opc-tour-step', handleTourStep);
+    return () => window.removeEventListener('opc-tour-step', handleTourStep);
+  }, []);
+
   const toggle3dMode = useCallback(() => {
     if (!mapRef.current) return;
     setIs3DMode(prev => {
@@ -1720,7 +1736,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
         {/* Map Overlays */}
         <div id="tour-map-controls" className="absolute top-24 left-6 z-30 flex flex-col gap-2">
-          <div className="frosted-card !p-3.5 backdrop-blur-xl shadow-2xl border border-white/5 flex items-center justify-between gap-4">
+          <div id="tour-map-status" className="frosted-card !p-3.5 backdrop-blur-xl shadow-2xl border border-white/5 flex items-center justify-between gap-4">
             <div>
               <h3 className="font-unbounded text-xs font-bold text-white uppercase tracking-widest mb-1">Live Karte</h3>
               <div className="flex items-center gap-2">
@@ -1738,7 +1754,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
           </div>
 
           {/* Traffic & Map Layer Control Card */}
-          <div className="frosted-card !p-2.5 backdrop-blur-xl shadow-2xl border border-white/10 flex flex-col gap-2 transition-all">
+          <div id="tour-map-layers" className="frosted-card !p-2.5 backdrop-blur-xl shadow-2xl border border-white/10 flex flex-col gap-2 transition-all">
             <button
               onClick={() => setControlsOpen(!controlsOpen)}
               className="flex items-center justify-between gap-3 w-full px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-all cursor-pointer bg-white/[0.02] hover:bg-white/5"
@@ -1829,7 +1845,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
 
 
                   {showTraffic && (
-                    <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
+                    <div id="tour-map-server" className="flex flex-col gap-2 pt-2 border-t border-white/5">
                       <div className="flex items-center gap-2">
                         <div>
                           <ServerDropdown

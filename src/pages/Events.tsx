@@ -2,11 +2,12 @@ import { useEffect, useState, useMemo, useCallback, Component } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, MapPin, Plus, Trash2, Loader2, ChevronDown, Clock, Users, List, CalendarDays, ChevronLeft, ChevronRight, Upload, X, Image as ImageIcon, LayoutGrid, Calendar as CalendarIcon, Link2, Shield, MessageCircle, Pencil, UserPlus, UserCheck, Sparkles, Navigation } from "lucide-react";
+import { Calendar, MapPin, Plus, Trash2, Loader2, ChevronDown, Clock, Users, List, CalendarDays, ChevronLeft, ChevronRight, Upload, X, Image as ImageIcon, LayoutGrid, Calendar as CalendarIcon, Link2, Shield, MessageCircle, Pencil, UserPlus, UserCheck, Sparkles, Navigation, Compass } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import { API_URL, getAvatarUrl } from "../config";
 import { RoutePlanner, type RouteWaypoint } from "../components/RoutePlanner";
+import { RoutePlannerExportModal } from "../components/RoutePlannerExportModal";
 import { setActiveEventRoute, getActiveEventRoute, ACTIVE_ROUTE_CHANGED_EVENT } from "../utils/activeNavigation";
 import { findCity } from "../data/ets2Cities";
 
@@ -273,6 +274,7 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
   const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
   const [activeNavEventId, setActiveNavEventId] = useState<string | number | null>(() => getActiveEventRoute()?.eventId ?? null);
   const [isRoutePlannerFullscreen, setIsRoutePlannerFullscreen] = useState(false);
+  const [showRouteExportModal, setShowRouteExportModal] = useState(false);
   const [generatedRouteMeta, setGeneratedRouteMeta] = useState<{
     distanceKm: number;
     durationMinutes: number;
@@ -559,7 +561,31 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
             <button onClick={() => setView("list")} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-300 ${view === "list" ? "bg-primary text-black shadow-md shadow-primary/20" : "text-zinc-400 hover:text-white"}`}><LayoutGrid size={13} /> Liste</button>
             <button onClick={() => setView("calendar")} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-300 ${view === "calendar" ? "bg-primary text-black shadow-md shadow-primary/20" : "text-zinc-400 hover:text-white"}`}><CalendarIcon size={13} /> Kalender</button>
           </div>
-          {canManageEvents && <button onClick={() => setShowForm(!showForm)} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${showForm ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-primary text-black hover:bg-primary/90"}`}>{showForm ? <X size={16} /> : <Plus size={16} />}{showForm ? "Abbrechen" : "Event planen"}</button>}
+          {canManageEvents && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRouteExportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-lg shadow-amber-500/10 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                title="Routenplaner öffnen & 4K-Routenbild exportieren"
+              >
+                <Compass size={16} className="text-amber-400" />
+                <span>Routenplaner & Export</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm(!showForm)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all cursor-pointer ${
+                  showForm
+                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                    : "bg-primary text-black hover:bg-primary/90"
+                }`}
+              >
+                {showForm ? <X size={16} /> : <Plus size={16} />}
+                {showForm ? "Abbrechen" : "Event planen"}
+              </button>
+            </div>
+          )}
         </div>
 
         <ErrorBoundary>
@@ -1290,6 +1316,21 @@ export default function Events({ selectedId, onClearSelectedId }: any) {
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Standalone Route Planner & Export Modal for Event Team */}
+      <RoutePlannerExportModal
+        isOpen={showRouteExportModal}
+        onClose={() => setShowRouteExportModal(false)}
+        initialOrganizer={form.organizer || "Open Pipe Club"}
+        initialTitle={form.title || "Community Konvoi"}
+        initialStartDate={form.start_date}
+        initialServer={form.server || "Simulation 1"}
+        initialGame={form.game || "ETS2"}
+        initialStartCity={form.start_city}
+        initialStartCompany={form.start_company}
+        initialEndCity={form.end_city}
+        initialEndCompany={form.end_company}
+      />
 
     </div>
   );

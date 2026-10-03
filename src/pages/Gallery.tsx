@@ -164,7 +164,7 @@ const Gallery = () => {
       </div>
 
       <div id="tour-gallery-container" className="space-y-8">
-        <div className="flex items-center justify-end gap-3">
+        <div id="tour-gallery-upload" className="flex items-center justify-end gap-3">
           <input
             type="text"
             placeholder="Upload-Caption..."
@@ -190,12 +190,13 @@ const Gallery = () => {
           />
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-4 bg-primary rounded-full" />
-          <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
-            Alle Aufnahmen
-          </h2>
-        </div>
+        <div id="tour-gallery-grid">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-1 h-4 bg-primary rounded-full" />
+            <h2 className="font-unbounded text-sm font-bold text-primary uppercase tracking-widest">
+              Alle Aufnahmen
+            </h2>
+          </div>
 
         {loading && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -274,6 +275,7 @@ const Gallery = () => {
             ))}
           </motion.div>
         )}
+        </div>
       </div>
 
       {/* Lightbox */}

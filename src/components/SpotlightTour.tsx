@@ -115,50 +115,111 @@ export const TOUR_STEPS: TourStep[] = [
     tip: 'Über das Plus-Symbol kannst du auch eigene Gruppenchats für dich und deine Mitfahrer anlegen.',
     preferredPosition: 'right',
   },
+  // ── 1. KARTE ──
   {
-    id: 'map-controls',
+    id: 'map-status',
     pageId: 'map',
-    target: '#tour-map-controls',
+    target: '#tour-map-status',
     category: 'Live-Karte',
-    title: 'Interaktive Karte & Stau-Warner',
+    title: 'Live-Status & Aktive Fahrer',
     description:
-      'Die Live-Karte ortet alle Clubmitglieder in Echtzeit auf den TruckersMP-Servern. Zudem warnt sie dich vor Staus und hohem Verkehrsaufkommen auf Strecken wie der C-D Road (Duisburg–Calais).',
-    tip: 'Über „Ebenen & Filter“ kannst du Stauzonen, die 3D-Ansicht und deinen TruckersMP-Server wählen.',
+      'Hier siehst du auf einen Blick, wie viele Club-Kollegen gerade online auf den Straßen unterwegs sind. Mit dem Refresh-Button kannst du die Positionen und Verkehrsdaten jederzeit manuell aktualisieren.',
+    tip: 'Der Zähler aktualisiert sich im Hintergrund automatisch alle paar Sekunden.',
+    preferredPosition: 'bottom',
+  },
+  {
+    id: 'map-layers',
+    pageId: 'map',
+    target: '#tour-map-layers',
+    category: 'Live-Karte',
+    title: 'Ebenen, Filter & Stau-Warner',
+    description:
+      'Passe die Kartenansicht flexibel an: Schalte die Live-Stauanzeige ein, aktiviere feste Geschwindigkeitsblitzer mit Tempolimits, blende das 3D-Geländerelief (Berge & Höhenringe) ein und wechsle zwischen 2D-Draufsicht und geneigter 3D-Kamera.',
+    tip: 'In der 3D-Kamera kannst du mit gedrückter rechter Maustaste die Karte kippen und drehen.',
     preferredPosition: 'right',
+  },
+  {
+    id: 'map-server',
+    pageId: 'map',
+    target: '#tour-map-server',
+    category: 'Live-Karte',
+    title: 'Server-Auswahl & Stau-Hotspots',
+    description:
+      'Wähle deinen aktuellen TruckersMP-Server (z. B. Simulation 1, Simulation 2 oder ProMods), um punktgenau die Staus und Mitspieler für deine Spielwelt zu filtern. Über die Hotspot-Liste kannst du bekannte Engpässe wie die C-D Road mit Staulänge und Durchschnittstempo aufrufen und direkt dorthin springen.',
+    tip: 'Die Verkehrsdaten stammen in Echtzeit direkt aus der offiziellen TruckersMP-API.',
+    preferredPosition: 'bottom',
   },
   {
     id: 'map-sidebar',
     pageId: 'map',
     target: '#tour-map-sidebar',
     category: 'Live-Karte',
-    title: 'Fahrerliste & Kamera-Fokus',
+    title: 'Fahrerliste & TruckersMP-ID Ortung',
     description:
-      'Hier siehst du alle Kollegen, die aktuell auf Achse sind. Ein Klick auf einen Fahrer zentriert die Karte sofort auf seine Position mit Live-Tempo und Frachtinfo.',
-    tip: 'Nutze das Suchfeld, um gezielt nach bestimmten Fahrernamen oder TruckersMP-IDs zu filtern.',
+      'Die Seitenleiste listet alle Kollegen auf Achse mit LKW-Modell, aktuellem Tempo, Frachtziel und Server. Klicke auf einen Fahrer, um die Kamera sofort auf seine Position zu zentrieren. Über das Suchfeld kannst du Kollegen suchen oder durch Eingabe einer TruckersMP-ID (z. B. #12345) jeden beliebigen Spieler live aufspüren.',
+    tip: 'Über das Kreuz oder den Button am rechten Bildschirmrand kannst du die Leiste jederzeit ein- und ausklappen.',
     preferredPosition: 'left',
   },
+
+  // ── 2. GALERIE ──
   {
-    id: 'gallery-container',
+    id: 'gallery-upload',
     pageId: 'gallery',
-    target: '#tour-gallery-container',
+    target: '#tour-gallery-upload',
     category: 'Galerie',
-    title: 'Community-Galerie & Schnappschüsse',
+    title: 'Screenshots & Momente hochladen',
     description:
-      'Teile deine schönsten LKW-Momente: Lade eigene Screenshots von Raststätten, Werkstatt-Tunings oder Konvois mit Bildunterschrift hoch und betrachte die Aufnahmen deiner Kollegen.',
-    tip: 'Ein Klick auf ein Bild öffnet es in voller Auflösung in der Lightbox.',
+      'Teile deine besten ETS2/ATS-Momente mit der Community: Gib im Feld optional eine aussagekräftige Bildunterschrift ein (z. B. Konvoi-Pause, Skandinavien-Tour oder neues Werkstatt-Tuning) und klicke auf „Upload“. Auch Mehrfachauswahl von mehreren Screenshots gleichzeitig wird voll unterstützt.',
+    tip: 'PNG- und JPEG-Dateien werden automatisch optimiert und in bester Schärfe gespeichert.',
+    preferredPosition: 'bottom',
+  },
+  {
+    id: 'gallery-grid',
+    pageId: 'gallery',
+    target: '#tour-gallery-grid',
+    category: 'Galerie',
+    title: 'Community-Fotowand & Vollbild-Lightbox',
+    description:
+      'Hier findest du alle hochgeladenen Bilder der Clubfahrer. Fahre mit der Maus über eine Aufnahme, um den Fotografen zu sehen. Bei deinen eigenen Bildern kannst du mit dem Stift-Symbol die Bildunterschrift nachträglich anpassen oder das Bild mit dem Mülleimer-Symbol löschen.',
+    tip: 'Ein Klick auf ein beliebiges Bild öffnet die Lightbox – blättere dort mit den Pfeiltasten links/rechts bequem in voller Auflösung durch alle Fotos.',
+    preferredPosition: 'top',
+  },
+
+  // ── 3. STATISTIKEN ──
+  {
+    id: 'stats-kpis',
+    pageId: 'statistiken',
+    target: '#tour-stats-kpis',
+    category: 'Statistiken',
+    title: 'Speditions-Kennzahlen & Gesamtleistungen',
+    description:
+      'Hier siehst du die aggregierten Leistungsdaten des Open Pipe Clubs im Überblick: Aktive registrierte Fahrer, insgesamt erfolgreich abgeschlossene Aufträge, gesamte Flottendistanz in Kilometern, erwirtschafteter Bruttoumsatz, transportierte Frachtmenge in Tonnen und das höchste erreichte Fahrer-Level.',
+    tip: 'Alle Werte aktualisieren sich vollautomatisch, sobald Fahrer Aufträge im Spiel abschließen.',
+    preferredPosition: 'bottom',
+  },
+  {
+    id: 'stats-charts',
+    pageId: 'statistiken',
+    target: '#tour-stats-charts',
+    category: 'Statistiken',
+    title: 'Fahrer-Vergleich (Kilometer & Umsatz)',
+    description:
+      'Interaktive Säulendiagramme visualisieren die aktivsten Fahrer der Spedition: Vergleiche die gefahrenen Gesamtkilometer und den erwirtschafteten Bruttoumsatz der Top-Fahrer auf einen Blick. Fahre mit der Maus über die Balken, um exakte Zahlenwerte einzublenden.',
+    tip: 'Mit regelmäßigen Konvoi-Fahrten und Schwerlast-Touren kletterst du in den Diagrammen schnell nach oben.',
     preferredPosition: 'top',
   },
   {
-    id: 'stats-container',
+    id: 'stats-leaderboard',
     pageId: 'statistiken',
-    target: '#tour-stats-container',
+    target: '#tour-stats-leaderboard',
     category: 'Statistiken',
-    title: 'Fahrtenbuch & Fahrer-Rangliste',
+    title: 'Umsatzanteile & Detaillierte Fahrer-Rangliste',
     description:
-      'Hier siehst du die aggregierten Leistungsdaten des Clubs: Gesamtkilometer, Jobs, Frachttonnage und Gesamtumsatz sowie die Top-10-Rangliste der aktivsten Fahrer.',
-    tip: 'Schließe Aufträge im Spiel ab, um mit deinen Kilometern und Umsätzen in der Rangliste aufzusteigen.',
-    preferredPosition: 'bottom',
+      'Das Tortendiagramm zeigt die prozentuale Umsatzverteilung im Club. Rechts daneben listet die Rangliste die Top-10-Fahrer mit Platzierung, Fahrer-Avatar, Job-Anzahl, präziser Kilometerleistung, Frachtgewicht und Gesamtumsatz auf.',
+    tip: 'Platz 1 erhält ein goldenes Abzeichen mit speziellem Leuchteffekt.',
+    preferredPosition: 'top',
   },
+
   {
     id: 'team-container',
     pageId: 'team',
@@ -170,27 +231,97 @@ export const TOUR_STEPS: TourStep[] = [
     tip: 'Klicke auf eine Fahrer-Karte, um sein vollständiges Profil mit Biografie, Social Links und TruckersMP-ID aufzurufen.',
     preferredPosition: 'bottom',
   },
+
+  // ── 4. AFK BOT ──
   {
-    id: 'afkbot-card',
+    id: 'afkbot-status',
     pageId: 'afkbot',
-    target: '#tour-afkbot-card',
+    target: '#tour-afkbot-status',
     category: 'Anti-AFK Bot',
-    title: 'Schutz vor Server-Kicks',
+    title: 'Schutz vor Server-Kicks & Aktivierung',
     description:
-      'Verhindert automatische Inaktivitäts-Kicks auf vollen TruckersMP-Servern während deiner Raststätten-Pausen: Der Bot sendet in festgelegten Intervallen Chat-Nachrichten ins Spiel, solange ETS2 aktiv ist.',
-    tip: 'Passe den Hotkey und deine Nachrichten in der Konfiguration frei an. Parke deinen LKW stets sicher auf Rastplätzen!',
+      'Schützt dich vor automatischen Inaktivitäts-Kicks auf vollen TruckersMP-Servern während deiner Raststätten-Pausen: Der Bot tippt in regelmäßigen Intervallen Chat-Nachrichten ins Spiel. Ein integrierter Sicherheitsmechanismus stellt sicher, dass Tastendrücke nur gesendet werden, wenn Euro Truck Simulator 2 oder TruckersMP wirklich das aktive Vordergrund-Fenster ist!',
+    tip: 'Parke deinen LKW während Pausen immer sicher auf Rastplätzen oder Firmenhöfen, um keine anderen Spieler zu blockieren.',
     preferredPosition: 'right',
   },
   {
-    id: 'overlay-container',
-    pageId: 'overlay-settings',
-    target: '#tour-overlay-container',
-    category: 'Overlay & CarPlay',
-    title: 'Ingame-HUD & CarPlay-Cockpit',
+    id: 'afkbot-config',
+    pageId: 'afkbot',
+    target: '#tour-afkbot-config',
+    category: 'Anti-AFK Bot',
+    title: 'Hotkey, Sende-Intervall & Sound-Feedback',
     description:
-      'Passe dein transparentes Ingame-HUD (Taste F9 im Spiel) oder dein CarPlay-Armaturenbrett für Tablets und Zweitmonitore individuell an. Wähle Designs, Farben und Widgets frei aus.',
-    tip: 'Mit der Taste F9 kannst du das Ingame-Overlay jederzeit während der Fahrt ein- und ausblenden.',
+      'Passe das Bot-Verhalten an: Klicke in das Hotkey-Feld und drücke eine beliebige Taste (z. B. F9, F12 oder Strg+K), um den Bot direkt während der Fahrt ein- und auszuschalten. Lege das Sende-Intervall in Sekunden fest (z. B. 60s) und aktiviere Start-/Stop-Sounds zur akustischen Rückmeldung.',
+    tip: 'Wähle einen Hotkey, der im Spiel nicht anderweitig belegt ist.',
+    preferredPosition: 'left',
+  },
+  {
+    id: 'afkbot-messages',
+    pageId: 'afkbot',
+    target: '#tour-afkbot-messages',
+    category: 'Anti-AFK Bot',
+    title: 'Getrennte Nachrichten-Pools (Fahrt & Pause)',
+    description:
+      'Definiere eigene Nachrichtensätze für verschiedene Situationen: „Aktiv (Fahrt)“ für Statusmeldungen während der Fahrt und „Pausiert“ für Rastplatzpausen (z. B. „Bin kurz AFK“, „Kaffeepause“, „/fix“). Der Bot wählt bei jedem Senden zufällig eine Nachricht aus dem aktiven Pool.',
+    tip: 'Tippe deine Wunsch-Nachricht (bis 200 Zeichen) in das Eingabefeld und klicke auf „Hinzufügen“. Ungewollte Sätze lassen sich per Papierkorb-Symbol entfernen.',
+    preferredPosition: 'top',
+  },
+
+  // ── 5. OVERLAY SETTINGS ──
+  {
+    id: 'overlay-tabs',
+    pageId: 'overlay-settings',
+    target: '#tour-overlay-tabs',
+    category: 'Overlay & CarPlay',
+    title: 'Overlay, CarPlay, App-Design & TruckersMP UI',
+    description:
+      'Hier steuerst du dein gesamtes Ingame- und Cockpit-Erlebnis über vier spezialisierte Bereiche: „Overlay“ für das transparente Ingame-HUD (Taste F9), „CarPlay“ für Tablets & Zweitmonitore, „App“ für Akzentfarben & Discord RPC und „TMP UI“ für Ladebildschirme und Spiel-Menüs.',
+    tip: 'Klicke auf die Tabs, um zwischen den Konfigurationsbereichen zu wechseln.',
     preferredPosition: 'bottom',
+  },
+  {
+    id: 'overlay-preview',
+    pageId: 'overlay-settings',
+    target: '#tour-overlay-preview',
+    category: 'Overlay & CarPlay',
+    title: 'Live-HUD Vorschau & Freies Verschieben',
+    description:
+      'Eine exakte Vorschau deines Ingame-Overlays: Schalte „Vorschau auf Desktop“ ein, um das Overlay transparent über deinen Bildschirminhalt zu legen. Im Simulator kannst du alle Widgets (Tempo/Gang, Minikarte, Fahrerliste, Spotify, Events) mit der Maus an deine gewünschte Position ziehen. Das Overlay merkt sich deine Anordnung pixelgenau.',
+    tip: 'Mit „Reset Layout“ bringst du alle Widgets mit einem Klick in die Standard-Position zurück.',
+    preferredPosition: 'bottom',
+  },
+  {
+    id: 'overlay-controls',
+    pageId: 'overlay-settings',
+    target: '#tour-overlay-controls',
+    category: 'Overlay & CarPlay',
+    title: 'HUD-Stile, Widget-Auswahl & Transparenz',
+    description:
+      'Passe das Aussehen deines Ingame-HUDs an: Wähle zwischen Styles wie Neon, Carbon oder Minimal, stelle die Hintergrund-Transparenz und den Zoomfaktor ein und wähle genau aus, welche Widgets sichtbar sein sollen (Geschwindigkeit, Tank, Restkilometer, ETA, Fracht, Spotify-Player, Game-Map oder Ampel-Assistent). Zudem kannst du Push-Warnungen für Blitzer, Ortseinfahrten und Staus im Spiel aktivieren.',
+    tip: 'Mit der Taste F9 kannst du das Ingame-Overlay jederzeit während der Fahrt ein- und ausblenden.',
+    preferredPosition: 'right',
+  },
+  {
+    id: 'overlay-carplay',
+    pageId: 'overlay-settings',
+    target: '#tour-overlay-carplay-overview',
+    category: 'Overlay & CarPlay',
+    title: 'CarPlay Cockpit-Display für Tablets & Smartphones',
+    description:
+      'Verwandle dein Tablet, Smartphone oder einen Zweitbildschirm in ein echtes LKW-Armaturenbrett! Scanne den QR-Code oder öffne die angezeigte Netzwerk-Adresse im Browser deines Mobilgeräts. Zeigt dir Navi, Frachtdaten, LKW-Telemetrie und Musiksteuerung in Echtzeit.',
+    tip: 'Hier kannst du Lenkrad-Hotkeys belegen und einstellen, bei welchen Ereignissen (Schaden, Blitzer, Tankreserve) akustische und optische Warnungen aufpoppen sollen.',
+    preferredPosition: 'bottom',
+  },
+  {
+    id: 'overlay-tmp',
+    pageId: 'overlay-settings',
+    target: '#tour-overlay-tmp-overview',
+    category: 'Overlay & CarPlay',
+    title: 'TruckersMP UI-Farben & Menühintergründe',
+    description:
+      'Individualisiere dein TruckersMP-Spielerlebnis: Wähle maßgeschneiderte Menühintergründe des Open Pipe Clubs oder eigene LKW-Bilder als Ladebildschirm und passe die Akzentfarben der Ingame-Menüs an. Mit dem „1-Klick Installieren“-Button wird alles automatisch in deinen TruckersMP-Ordner kopiert!',
+    tip: 'Du kannst auch eigene Wallpaper hochladen und deinen persönlichen Truck als TMP-Hauptmenü-Hintergrund festlegen.',
+    preferredPosition: 'top',
   },
   {
     id: 'profile-container',
@@ -449,6 +580,15 @@ export const SpotlightTour: React.FC<SpotlightTourProps> = ({
   // Switch page if needed and update position
   useEffect(() => {
     if (!isActive || !step) return;
+
+    // Dispatch event for sub-tab / sub-menu auto-switching
+    try {
+      window.dispatchEvent(
+        new CustomEvent('opc-tour-step', {
+          detail: { stepId: step.id, pageId: step.pageId, target: step.target }
+        })
+      );
+    } catch (e) {}
 
     if (step.pageId && step.pageId !== currentPage) {
       setIsNavigatingPage(true);

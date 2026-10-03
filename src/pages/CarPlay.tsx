@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
-import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon } from 'lucide-react';
+import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon, ChevronLeft, ChevronRight, Activity, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
@@ -57,6 +57,8 @@ interface Telemetry {
   oilPressureWarning?: boolean;
   waterTemperatureWarning?: boolean;
   batteryVoltageWarning?: boolean;
+  electricEnabled?: boolean;
+  engineEnabled?: boolean;
   routeWaypoints?: [number, number, number][] | [number, number][];
   nearbyVehicles?: any[];
   semaphores?: any[];
@@ -79,6 +81,7 @@ interface OverlaySettings {
   carPlayMapTheme?: 'dark' | 'light' | 'auto';
   carPlayTextScale: 'small' | 'medium' | 'large';
   carPlayShowNavInstructions?: boolean;
+  carPlayIgnitionSleep?: boolean;
   carPlayHotkeys: {
     toggle: string;
     next: string;
@@ -86,6 +89,15 @@ interface OverlaySettings {
     home: string;
     playPause: string;
   };
+  carPlayNotifySpeed?: boolean;
+  carPlayNotifyFuel?: boolean;
+  carPlayNotifyRest?: boolean;
+  carPlayNotifyDamage?: boolean;
+  carPlayNotifyCargo?: boolean;
+  carPlayNotifyMusic?: boolean;
+  carPlayNotifyChat?: boolean;
+  carPlayNotifyNews?: boolean;
+  carPlayNotifyEvent?: boolean;
 }
 
 const DEFAULT_SETTINGS: OverlaySettings = {
@@ -94,6 +106,7 @@ const DEFAULT_SETTINGS: OverlaySettings = {
   carPlayMapTheme: 'auto',
   carPlayTextScale: 'medium',
   carPlayShowNavInstructions: true,
+  carPlayIgnitionSleep: false,
   carPlayHotkeys: {
     toggle: 'F9',
     next: 'Ctrl+Alt+Right',
@@ -213,10 +226,10 @@ function RadioLogoImage({ src, name, size = 'sm', className = '' }: { src: strin
 
   if (size === 'sm') {
     return (
-      <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-zinc-950 via-amber-950/80 to-zinc-900 border border-amber-500/50 flex items-center justify-center shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.3)] relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(245,158,11,0.4),transparent_70%)] pointer-events-none" />
-        <div className="w-2 h-2 rounded-full bg-black border border-amber-400/60 flex items-center justify-center z-10">
-          <Disc size={6} className="text-amber-400" />
+      <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-zinc-950 via-zinc-900 to-black border border-primary/50 flex items-center justify-center shrink-0 shadow-[0_0_8px_var(--primary-glow)] relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,var(--primary-glow),transparent_70%)] pointer-events-none" />
+        <div className="w-2 h-2 rounded-full bg-black border border-primary/60 flex items-center justify-center z-10">
+          <Disc size={6} className="text-primary" />
         </div>
       </div>
     );
@@ -224,8 +237,8 @@ function RadioLogoImage({ src, name, size = 'sm', className = '' }: { src: strin
 
   if (size === 'md') {
     return (
-      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-zinc-950 via-amber-950/80 to-zinc-900 border border-amber-500/50 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.35)] relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(245,158,11,0.4),transparent_70%)] pointer-events-none" />
+      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-zinc-950 via-amber-950/80 to-zinc-900 border border-amber-500/50 flex items-center justify-center shrink-0 shadow-[0_0_15px_var(--primary-glow)] relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,var(--primary-glow),transparent_70%)] pointer-events-none" />
         <div className="w-4 h-4 rounded-full bg-black/95 border border-amber-400/60 flex flex-col items-center justify-center z-10 shadow-inner">
           <Disc size={10} className="text-amber-400 animate-[spin_8s_linear_infinite]" />
         </div>
@@ -234,10 +247,10 @@ function RadioLogoImage({ src, name, size = 'sm', className = '' }: { src: strin
   }
 
   return (
-    <div className="w-full h-full rounded-2xl bg-gradient-to-br from-amber-950/40 via-zinc-950 to-black border border-amber-500/30 text-amber-400 flex flex-col items-center justify-center p-4 text-center shadow-[0_0_35px_rgba(245,158,11,0.2)] relative overflow-hidden">
+    <div className="w-full h-full rounded-2xl bg-gradient-to-br from-amber-950/40 via-zinc-950 to-black border border-amber-500/30 text-amber-400 flex flex-col items-center justify-center p-4 text-center shadow-[0_0_35px_var(--primary-glow-subtle)] relative overflow-hidden">
       {/* Large Spinning CD Disc Placeholder */}
-      <div className="relative w-32 h-32 rounded-full bg-gradient-to-tr from-zinc-950 via-amber-900/40 to-zinc-900 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.35)] mb-3 group">
-        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(245,158,11,0.4),transparent_70%)] pointer-events-none" />
+      <div className="relative w-32 h-32 rounded-full bg-gradient-to-tr from-zinc-950 via-amber-900/40 to-zinc-900 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_30px_var(--primary-glow)] mb-3 group">
+        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,var(--primary-glow),transparent_70%)] pointer-events-none" />
         <div className="w-12 h-12 rounded-full bg-black/95 border-2 border-amber-400/60 flex flex-col items-center justify-center shadow-2xl z-10">
           <Disc size={22} className="text-amber-400 animate-[spin_8s_linear_infinite]" />
           <span className="text-[8px] font-black font-mono text-amber-300 mt-0.5">{initials}</span>
@@ -450,6 +463,43 @@ export default function CarPlayPage() {
   // Responsive sidebar scaling
   const [sidebarScale, setSidebarScale] = useState(1);
 
+  // LKW-Zündungs- & Stromversorgungs-Status (Electric & Engine)
+  const isIgnitionOn = useMemo(() => {
+    if (!telemetry.connected) return true; // Ohne aktive Telemetrie immer bedienbar
+    if (typeof telemetry.electricEnabled === 'boolean') {
+      return telemetry.electricEnabled;
+    }
+    if (typeof telemetry.engineEnabled === 'boolean') {
+      return telemetry.engineEnabled;
+    }
+    return (telemetry.rpm > 50) || (telemetry.speed > 0);
+  }, [telemetry.connected, telemetry.electricEnabled, telemetry.engineEnabled, telemetry.rpm, telemetry.speed]);
+
+  // Manuelles Aufwecken durch Berührung während Zündung aus
+  const [manualWake, setManualWake] = useState<boolean>(false);
+  const prevIgnitionRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    // Sobald die Zündung eingeschaltet wird, den manuellen Wake zurücksetzen und Wake-Animation abspielen
+    if (isIgnitionOn && !prevIgnitionRef.current) {
+      setManualWake(false);
+      setIsLoading(true);
+      const timer = setTimeout(() => setIsLoading(false), 700);
+      return () => clearTimeout(timer);
+    }
+    prevIgnitionRef.current = isIgnitionOn;
+  }, [isIgnitionOn]);
+
+  // CarPlay geht in Standby (Bildschirm aus): entweder per Hotkey-Blackout oder wenn Zündung aus
+  const isCarPlaySleeping = Boolean(
+    isBlackout ||
+    (settings.carPlayIgnitionSleep &&
+    telemetry.connected &&
+    !isIgnitionOn &&
+    !manualWake &&
+    activeTab !== 'settings')
+  );
+
   // Real-time ETA state
   const [liveRemainingSeconds, setLiveRemainingSeconds] = useState<number | null>(null);
 
@@ -463,9 +513,26 @@ export default function CarPlayPage() {
   const [focusZone, setFocusZone] = useState<'sidebar' | 'content'>('sidebar');
   const [sidebarIndex, setSidebarIndex] = useState(0);
   const [contentIndex, setContentIndex] = useState(0);
-  const [maximizedWidget, setMaximizedWidget] = useState<'map' | 'diagnostics' | null>(null);
-  const [mfdMode, setMfdMode] = useState<number>(0);
+  const [maximizedWidget, setMaximizedWidget] = useState<'map' | null>(null);
   const [mapTabFocus, setMapTabFocus] = useState<'map' | 'search' | 'bottom-nav'>('map');
+
+  // Truck Multi-Page state (0: Cockpit & Antrieb, 1: Bordcomputer & Tank, 2: Diagnose & Status)
+  const [truckPage, setTruckPage] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('opc_carplay_truck_page');
+      if (saved) {
+        const p = parseInt(saved, 10);
+        if (p >= 0 && p <= 2) return p;
+      }
+    } catch (e) {}
+    return 0;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('opc_carplay_truck_page', String(truckPage));
+    } catch (e) {}
+  }, [truckPage]);
 
   // Music Mode Sub-Tabs ('menu' | 'windows' | 'local' | 'radio')
   const [musicSubTab, setMusicSubTab] = useState<'menu' | 'windows' | 'local' | 'radio'>(() => {
@@ -976,9 +1043,10 @@ export default function CarPlayPage() {
   };
 
   const getContentElementsCount = () => {
-    if (activeTab === 'home') return 3;
+    if (activeTab === 'home') return 2;
     if (activeTab === 'music') return 3;
-    if (activeTab === 'settings') return 19;
+    if (activeTab === 'truck') return 3;
+    if (activeTab === 'settings') return 20;
     if (activeTab === 'map') return 1;
     return 0;
   };
@@ -990,7 +1058,7 @@ export default function CarPlayPage() {
     col: SettingsNavCol;
     leftRow: number; // 0..2 for theme/mapTheme/textScale
     leftCol: number; // 0..2 within the 3-button row
-    rightRow: number; // 0..8 for toggles
+    rightRow: number; // 0..10 for toggles
   }
 
   const getInitialSettingsNav = (): SettingsNavState => ({
@@ -1038,7 +1106,7 @@ export default function CarPlayPage() {
         return { ...nav, leftRow: 2 };
       }
       if (nav.rightRow > 0) return { ...nav, rightRow: nav.rightRow - 1 };
-      return { ...nav, rightRow: 9 };
+      return { ...nav, rightRow: 10 };
     });
   };
 
@@ -1048,7 +1116,7 @@ export default function CarPlayPage() {
         if (nav.leftRow < 2) return { ...nav, leftRow: nav.leftRow + 1 };
         return { ...nav, leftRow: 0 };
       }
-      if (nav.rightRow < 9) return { ...nav, rightRow: nav.rightRow + 1 };
+      if (nav.rightRow < 10) return { ...nav, rightRow: nav.rightRow + 1 };
       return { ...nav, rightRow: 0 };
     });
   };
@@ -1093,6 +1161,7 @@ export default function CarPlayPage() {
     else if (contentIndex < 9) updateSetting('carPlayTextScale', ['small', 'medium', 'large'][contentIndex - 6] as any);
     else {
       const keys = [
+        'carPlayIgnitionSleep',
         'carPlayShowNavInstructions',
         'carPlayNotifySpeed',
         'carPlayNotifyFuel',
@@ -1105,7 +1174,8 @@ export default function CarPlayPage() {
         'carPlayNotifyEvent'
       ];
       const key = keys[contentIndex - 9];
-      updateSetting(key as any, settings[key as keyof OverlaySettings] === false);
+      const currentVal = key === 'carPlayIgnitionSleep' ? Boolean(settings.carPlayIgnitionSleep) : settings[key as keyof OverlaySettings] !== false;
+      updateSetting(key as any, !currentVal);
     }
   };
 
@@ -1376,12 +1446,6 @@ export default function CarPlayPage() {
       return;
     }
 
-    if (maximizedWidget === 'diagnostics') {
-      if (dir === 'back') { setMaximizedWidget(null); return; }
-      if (dir === 'left' || dir === 'up') { setMfdMode(prev => (prev - 1 + 5) % 5); return; }
-      if (dir === 'right' || dir === 'down' || dir === 'enter') { setMfdMode(prev => (prev + 1) % 5); return; }
-      return;
-    }
 
     if (dir === 'back') {
       if (focusZone === 'content') {
@@ -1413,24 +1477,18 @@ export default function CarPlayPage() {
     if (activeTab === 'home') {
       if (contentIndex === 0) {
         if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 13));
-        else if (dir === 'down') setContentIndex(2);
+        else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
         else if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(0); }
         else if (dir === 'right') { setContentIndex(1); }
-        else if (dir === 'enter') setMaximizedWidget('map');
+        else if (dir === 'enter') { setActiveTab('map'); setSidebarIndex(5); }
       } else if (contentIndex === 1) {
         if (dir === 'left') setContentIndex(0);
-        else if (dir === 'down') setContentIndex(2);
-        else if (dir === 'up') setContentIndex(0);
+        else if (dir === 'up' || dir === 'down') setContentIndex(0);
         else if (dir === 'enter') {
           setActiveTab('music');
           setMusicSubTab('windows');
           setSidebarIndex(1);
         }
-      } else if (contentIndex === 2) {
-        if (dir === 'left') setContentIndex(0);
-        else if (dir === 'up') setContentIndex(1);
-        else if (dir === 'down') setContentIndex(1);
-        else if (dir === 'enter') setMaximizedWidget('diagnostics');
       }
     } else if (activeTab === 'map') {
       if (mapTabFocus === 'search') {
@@ -1622,6 +1680,18 @@ export default function CarPlayPage() {
             }
           }
         }
+      }
+    } else if (activeTab === 'truck') {
+      if (dir === 'left') {
+        if (truckPage > 0) setTruckPage(prev => prev - 1);
+        else { setFocusZone('sidebar'); setSidebarIndex(4); }
+      } else if (dir === 'right') {
+        if (truckPage < 2) setTruckPage(prev => prev + 1);
+      } else if (dir === 'enter') {
+        setTruckPage(prev => (prev + 1) % 3);
+      } else if (dir === 'back') {
+        setFocusZone('sidebar');
+        setSidebarIndex(4);
       }
     } else if (activeTab === 'settings') {
       if (dir === 'up') navigateSettingsUp();
@@ -1999,7 +2069,7 @@ export default function CarPlayPage() {
         type = 'system';
         title = event.title || 'System-Info';
         message = event.content || '';
-        color = 'bg-[#18181b]/95 border-amber-500/40 backdrop-blur-2xl shadow-amber-950/40';
+        color = 'bg-[#18181b]/95 border-amber-500/40 backdrop-blur-2xl shadow-[0_0_15px_var(--primary-glow-subtle)]';
         icon = <Info size={22} className="text-amber-400" />;
       } else if (event.type === 'news') {
         type = 'news';
@@ -2126,6 +2196,7 @@ export default function CarPlayPage() {
   const speed = Math.max(0, data.speed);
   const gear = data.gear;
   const rpm = Math.max(0, data.rpm);
+  const isOverspeed = Boolean(data.speedLimit && data.speedLimit > 0 && speed > data.speedLimit + 2);
 
   useEffect(() => {
     if (isFirstLoad.current) {
@@ -2164,7 +2235,7 @@ export default function CarPlayPage() {
             title: 'Kraftstoff-Reserve!',
             message: `Nächste Tankstelle ansteuern. Reichweite: ca. ${Math.round(data.fuelRange)} km.`,
             icon: <Fuel size={22} className="text-amber-400" />,
-            color: 'bg-[#18181b]/95 border-amber-500/40 backdrop-blur-2xl shadow-amber-950/40'
+            color: 'bg-[#18181b]/95 border-amber-500/40 backdrop-blur-2xl shadow-[0_0_15px_var(--primary-glow-subtle)]'
           });
         }
         hadFuelWarning.current = true;
@@ -2347,7 +2418,7 @@ export default function CarPlayPage() {
           transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
           onClick={(e) => e.stopPropagation()}
            className={`absolute ${isHome ? 'bottom-2.5 left-2.5 max-w-[95%] p-2 gap-2 rounded-xl text-xs' : 'bottom-3 left-3 p-3 gap-3 rounded-2xl text-sm'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all ${
-             focused || (!isHome && maxMapFocus === 'bottom-nav') ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]' : ''
+             focused || (!isHome && maxMapFocus === 'bottom-nav') ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_var(--primary-glow)]' : ''
            }`}
           style={{ background: bgStyle, border: borderStyle }}
         >
@@ -2405,7 +2476,7 @@ export default function CarPlayPage() {
         transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
         onClick={(e) => e.stopPropagation()}
         className={`absolute ${isHome ? 'bottom-2.5 left-2.5 px-3 py-2 gap-2.5 rounded-xl' : 'bottom-3 left-3 px-4 py-3 gap-3 rounded-2xl'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all select-none ${
-          !isHome && maxMapFocus === 'bottom-nav' ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.5)]' : ''
+          !isHome && maxMapFocus === 'bottom-nav' ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_var(--primary-glow)]' : ''
         }`}
         style={{ background: bgStyle, border: borderStyle }}
       >
@@ -2541,7 +2612,7 @@ export default function CarPlayPage() {
         return {
           wrapper: 'bg-[#f1f3f6] text-[#1e293b] border-slate-300 shadow-inner',
           sidebar: 'bg-[#e2e7ec] border-r border-slate-300 text-[#334155]',
-          activeTab: 'bg-amber-500/20 text-amber-600 shadow-md border border-amber-500/40 shadow-amber-500/10 font-bold',
+          activeTab: 'bg-amber-500/20 text-amber-600 shadow-md border border-amber-500/40 shadow-[0_0_10px_var(--primary-glow-subtle)] font-bold',
           inactiveTab: 'text-slate-500 hover:bg-slate-300/40 hover:text-[#1e293b]',
           card: 'bg-white/95 backdrop-blur-2xl border border-slate-300/80 shadow-lg rounded-3xl text-[#1e293b] overflow-hidden',
           innerCard: 'bg-slate-100/90 border border-slate-250 text-slate-800 shadow-sm rounded-2xl overflow-hidden',
@@ -2551,8 +2622,8 @@ export default function CarPlayPage() {
           accentText: 'text-amber-600 font-bold',
           headingText: 'text-slate-900 font-black',
           progressBg: 'bg-black/10 border border-black/5',
-          progressFill: 'bg-amber-500 shadow-sm',
-          glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)] border-amber-500/30'
+          progressFill: 'bg-primary shadow-sm',
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/30'
         };
       case 'blue':
         return {
@@ -2575,7 +2646,7 @@ export default function CarPlayPage() {
         return {
           wrapper: 'bg-gradient-to-br from-[#1e222b] to-[#111318] text-[#eceff1] border-[#374151] relative overflow-hidden',
           sidebar: 'bg-[#151921] border-r border-[#374151] text-[#9ca3af]',
-          activeTab: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.25)]',
+          activeTab: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_10px_var(--primary-glow)]',
           inactiveTab: 'text-[#9ca3af] hover:bg-[#202530] hover:text-white',
           card: 'bg-[#1a1e26]/95 backdrop-blur-2xl border border-[#374151] shadow-xl rounded-3xl text-[#eceff1] overflow-hidden',
           innerCard: 'bg-[#12151b]/90 border border-[#374151]/60 text-[#eceff1] rounded-2xl overflow-hidden',
@@ -2585,26 +2656,26 @@ export default function CarPlayPage() {
           accentText: 'text-amber-400 font-bold',
           headingText: 'text-white font-black',
           progressBg: 'bg-black/40 border border-white/5',
-          progressFill: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-md shadow-amber-500/20',
-          glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)] border-amber-500/20'
+          progressFill: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-md shadow-[0_0_12px_var(--primary-glow)]',
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/20'
         };
       case 'dark':
       default:
         return {
           wrapper: 'bg-black text-slate-100 border-zinc-900',
           sidebar: 'bg-black border-r border-zinc-800/80 text-slate-400',
-          activeTab: 'bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-md shadow-amber-500/10',
+          activeTab: 'bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-md shadow-[0_0_12px_var(--primary-glow)]',
           inactiveTab: 'text-slate-400 hover:bg-zinc-800/50 hover:text-white',
           card: 'bg-[#0d1117]/95 backdrop-blur-2xl border border-white/10 shadow-xl rounded-3xl text-slate-100 overflow-hidden',
           innerCard: 'bg-[#080a0f] border border-white/[0.08] text-white rounded-2xl overflow-hidden',
           subBox: 'bg-black/60 border border-white/10 text-white rounded-xl',
-          badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+          badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
           mutedText: 'text-zinc-400 font-medium',
           accentText: 'text-amber-400 font-bold',
           headingText: 'text-white font-black',
           progressBg: 'bg-black/50 border border-zinc-700/40',
-          progressFill: 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.8)]',
-          glow: 'shadow-[0_0_15px_rgba(245,158,11,0.2)] border-amber-500/30'
+          progressFill: 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 shadow-[0_0_12px_var(--primary-glow)]',
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/30'
         };
     }
   };
@@ -2659,6 +2730,15 @@ export default function CarPlayPage() {
           padding: 0 !important;
           overflow: hidden !important;
         }
+        .carplay-standby-overlay {
+          background-color: #020408 !important;
+          z-index: 9999990 !important;
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          bottom: 0 !important;
+        }
         .carplay-root {
           --cp-scale: ${cpScale};
         }
@@ -2702,9 +2782,9 @@ export default function CarPlayPage() {
       <AnimatePresence>
         {activeNotification && (() => {
           const badgeMap: Record<string, { label: string; accent: string; bgIcon: string; borderGlow: string }> = {
-            music: { label: 'MEDIENWIEDERGABE', accent: 'text-amber-400', bgIcon: 'bg-amber-500/20 text-amber-400 border-amber-500/40', borderGlow: 'border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.25)]' },
+            music: { label: 'MEDIENWIEDERGABE', accent: 'text-primary', bgIcon: 'bg-primary/20 text-primary border-primary/40', borderGlow: 'border-primary/40 shadow-[0_0_30px_var(--primary-glow)]' },
             speed: { label: 'GESCHWINDIGKEITS-WARNUNG', accent: 'text-rose-400', bgIcon: 'bg-rose-500/20 text-rose-400 border-rose-500/40', borderGlow: 'border-rose-500/40 shadow-[0_0_30px_rgba(244,63,94,0.3)]' },
-            fuel: { label: 'KRAFTSTOFF-RESERVE', accent: 'text-amber-400', bgIcon: 'bg-amber-500/20 text-amber-400 border-amber-500/40', borderGlow: 'border-amber-500/40 shadow-[0_0_30px_rgba(251,191,36,0.3)]' },
+            fuel: { label: 'KRAFTSTOFF-RESERVE', accent: 'text-primary', bgIcon: 'bg-primary/20 text-primary border-primary/40', borderGlow: 'border-primary/40 shadow-[0_0_30px_var(--primary-glow)]' },
             rest: { label: 'LENKZEITPAUSE', accent: 'text-yellow-400', bgIcon: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40', borderGlow: 'border-yellow-500/40 shadow-[0_0_30px_rgba(234,179,8,0.3)]' },
             damage: { label: 'SCHADENS-MELDUNG', accent: 'text-rose-400', bgIcon: 'bg-rose-500/20 text-rose-400 border-rose-500/40', borderGlow: 'border-rose-500/40 shadow-[0_0_30px_rgba(244,63,94,0.3)]' },
             cargo: { label: 'AUFTRAGS-UPDATE', accent: 'text-emerald-400', bgIcon: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40', borderGlow: 'border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.3)]' },
@@ -2773,6 +2853,7 @@ export default function CarPlayPage() {
         style={{ 
           width: `${80 * sidebarScale}px`,
           minWidth: `${70 * sidebarScale}px`,
+          ...(isCarPlaySleeping ? { display: 'none' } : {}),
         }}
       >
         <div className="flex flex-col items-center gap-1">
@@ -2836,7 +2917,7 @@ export default function CarPlayPage() {
                 className={`rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                   active ? c.activeTab : c.inactiveTab
                 } ${
-                  isFocused ? 'ring-4 ring-amber-500 scale-105 border-amber-400 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.4)]' : ''
+                  isFocused ? 'ring-4 ring-primary scale-105 border-primary bg-primary/20 shadow-[0_0_15px_var(--primary-glow)]' : ''
                 }`}
                 style={{
                   width: `${48 * sidebarScale}px`,
@@ -2866,7 +2947,7 @@ export default function CarPlayPage() {
       </div>
 
       {/* Main Display Area */}
-      <div className="flex-1 h-full p-2.5 overflow-hidden relative z-10 flex flex-col justify-center">
+      <div className="flex-1 h-full p-2.5 overflow-hidden relative z-10 flex flex-col justify-center" style={isCarPlaySleeping ? { display: 'none' } : undefined}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -2884,7 +2965,7 @@ export default function CarPlayPage() {
                   onClick={() => { setActiveTab('map'); setSidebarIndex(5); }}
                   className={`col-span-7 h-full flex flex-col cursor-pointer transition-all duration-300 ${c.card} overflow-hidden ${
                     focusZone === 'content' && contentIndex === 0
-                      ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.45)] z-20'
+                      ? 'ring-4 ring-primary scale-[1.01] border-primary shadow-[0_0_20px_var(--primary-glow)] z-20'
                       : 'hover:scale-[1.005] hover:border-white/20'
                   } relative`}
                 >
@@ -2936,11 +3017,11 @@ export default function CarPlayPage() {
                             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-2xl backdrop-blur-xl border shadow-2xl transition-all ${
                               speedcamAlert.isSpeeding
                                 ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_25px_rgba(244,63,94,0.65)] animate-pulse'
-                                : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.35)]'
+                                : 'bg-zinc-950/90 border-primary/50 text-white shadow-[0_0_15px_var(--primary-glow)]'
                             }`}
                           >
                             <div className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-md ${
-                              speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'
+                              speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-primary'
                             }`}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
@@ -2986,7 +3067,7 @@ export default function CarPlayPage() {
                     }}
                     className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 ${c.card} p-3.5 group ${
                       focusZone === 'content' && contentIndex === 1
-                        ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] z-20'
+                        ? 'ring-4 ring-primary scale-[1.01] border-primary shadow-[0_0_20px_var(--primary-glow)] z-20'
                         : 'hover:scale-[1.005] hover:border-white/20'
                     }`}
                   >
@@ -3061,7 +3142,7 @@ export default function CarPlayPage() {
                                   </span>
                                   <div className="h-2 flex-1 rounded-full overflow-hidden bg-black/80 border border-white/15 relative shadow-md">
                                     <div
-                                      className="h-full rounded-full transition-all duration-300 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]"
+                                      className="h-full rounded-full transition-all duration-300 bg-primary shadow-[0_0_10px_var(--primary-glow)]"
                                       style={{
                                         width: isLocalPlaying && localDuration > 0
                                           ? `${(localProgress / localDuration) * 100}%`
@@ -3070,7 +3151,7 @@ export default function CarPlayPage() {
                                           : media
                                           ? `${getProgressPercent(media.progress, media.duration)}%`
                                           : '0%',
-                                        backgroundColor: '#fbbf24'
+                                        backgroundColor: 'var(--primary)'
                                       }}
                                     />
                                   </div>
@@ -3111,72 +3192,178 @@ export default function CarPlayPage() {
                     })()}
                   </div>
 
-                  {/* Redesigned Digital Cockpit Widget (Apple CarPlay Ultra-Dark Glass UI) */}
+                  {/* Redesigned Streamlined Digital Cockpit Widget (Speed, Gear & RPM Only - No Popup) */}
                   <div
-                    onClick={() => setMaximizedWidget('diagnostics')}
-                    className={`p-4 flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 ${c.card} overflow-hidden relative group ${
-                      focusZone === 'content' && contentIndex === 2
-                        ? 'ring-4 ring-amber-500 scale-[1.01] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)] z-20'
-                        : 'hover:scale-[1.005] hover:border-white/20'
-                    }`}
+                    className={`p-3.5 flex-1 flex flex-col justify-between transition-all duration-300 ${c.card} overflow-hidden relative select-none`}
                   >
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5 mb-1 z-10">
-                      <span className="text-[9.5px] font-black uppercase tracking-widest text-amber-400 font-mono flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-xl">
-                        <Truck size={14} className="text-amber-400" /> DIGITAL COCKPIT
-                      </span>
-                      <span className="font-mono text-xs font-bold text-white truncate max-w-[180px] bg-white/[0.04] border border-white/[0.08] px-3 py-1 rounded-xl shadow-sm">
-                        {data.brand || 'LKW'} {data.model || ''}
-                      </span>
-                    </div>
-
-                    {/* Main Cockpit Display Grid */}
-                    <div className="grid grid-cols-12 gap-3.5 items-stretch flex-1 z-10 my-1">
-                      {/* Left: Speedometer Arc Gauge */}
-                      <div className="col-span-5 flex flex-col h-full">
-                        <SpeedometerGauge
-                          speed={speed}
-                          speedLimit={data.speedLimit}
-                          cruiseControl={data.cruiseControl}
-                          compact={true}
-                        />
+                    {/* Header: Title, Telemetry Status & Truck Model / Limit */}
+                    <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 mb-2 z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9.5px] font-black uppercase tracking-widest text-amber-400 font-mono flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-lg shadow-sm">
+                          <Gauge size={13} className="text-amber-400" /> DIGITAL COCKPIT
+                        </span>
+                        {telemetry.connected ? (
+                          <span className="flex items-center gap-1.5 text-[8.5px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
+                          </span>
+                        ) : (
+                          <span className="text-[8.5px] font-mono font-bold text-zinc-500 bg-white/[0.03] border border-white/[0.06] px-2 py-0.5 rounded-md">
+                            STANDBY
+                          </span>
+                        )}
                       </div>
 
-                      {/* Right: Gang, Restreichweite, Zustand (Massive Full-Width Cards & Typography) */}
-                      <div className="col-span-7 flex flex-col justify-between gap-2.5 h-full py-0.5">
-                        {/* Gang */}
-                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
-                          <span className={`text-xs font-black uppercase tracking-wider font-mono shrink-0 ${c.mutedText}`}>Gang</span>
-                          <span className="text-lg font-black text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-0.5 rounded-xl font-mono leading-none shrink-0 whitespace-nowrap shadow-sm">
+                      <div className="flex items-center gap-2">
+                        {data.cruiseControl && data.cruiseControl > 0 ? (
+                          <span className="text-[8.5px] font-mono font-extrabold text-sky-400 bg-sky-500/10 border border-sky-500/25 px-2 py-0.5 rounded-md">
+                            CRUISE {Math.round(data.cruiseControl)}
+                          </span>
+                        ) : null}
+                        <span className="font-mono text-[9.5px] font-bold text-zinc-300 truncate max-w-[130px] bg-white/[0.04] border border-white/[0.08] px-2.5 py-0.5 rounded-lg shadow-inner">
+                          {data.brand || 'LKW'} {data.model || ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Main Section: Geschwindigkeit & Ganganzeige Side-by-Side */}
+                    <div className="grid grid-cols-12 gap-2.5 items-stretch flex-1 z-10 min-h-0 mb-2">
+                      {/* Left Column: Geschwindigkeit */}
+                      <div className={`col-span-7 ${c.innerCard} p-3 flex flex-col justify-between relative overflow-hidden group`}>
+                        <div className="flex items-center justify-between z-10">
+                          <span className={`text-[9px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1`}>
+                            TEMPO
+                          </span>
+                          {data.speedLimit && data.speedLimit > 0 ? (
+                            <div
+                              className={`w-6 h-6 rounded-full bg-white border-2 border-red-600 flex items-center justify-center text-zinc-950 font-black font-mono text-[9px] shadow-sm leading-none shrink-0 ${
+                                isOverspeed ? 'animate-bounce shadow-[0_0_10px_rgba(244,63,94,0.6)]' : ''
+                              }`}
+                              title={`Tempolimit: ${Math.round(data.speedLimit)} km/h`}
+                            >
+                              {Math.round(data.speedLimit)}
+                            </div>
+                          ) : (
+                            <span className="text-[8px] font-mono text-zinc-600">FREI</span>
+                          )}
+                        </div>
+
+                        <div className="my-auto flex items-baseline gap-1.5 z-10">
+                          <span
+                            className={`font-black font-mono tracking-tight tabular-nums leading-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
+                              isOverspeed ? 'text-rose-400 animate-pulse' : 'text-white'
+                            }`}
+                            style={{ fontSize: '46px' }}
+                          >
+                            {Math.round(speed)}
+                          </span>
+                          <span className="text-xs font-black uppercase font-mono tracking-wider text-amber-400">
+                            KM/H
+                          </span>
+                        </div>
+
+                        {/* Subtle bottom speed progress bar */}
+                        <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden z-10">
+                          <div
+                            className={`h-full transition-all duration-200 rounded-full ${
+                              isOverspeed
+                                ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+                                : 'bg-primary shadow-[0_0_8px_var(--primary-glow)]'
+                            }`}
+                            style={{ width: `${Math.min(100, (speed / 120) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Right Column: Ganganzeige */}
+                      <div className={`col-span-5 ${c.innerCard} p-3 flex flex-col justify-between items-center text-center relative overflow-hidden group`}>
+                        <div className="w-full flex items-center justify-between z-10">
+                          <span className={`text-[9px] font-mono font-black uppercase tracking-wider ${c.mutedText}`}>
+                            GANG
+                          </span>
+                          <span className={`text-[8px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.2 rounded ${
+                            gear > 0
+                              ? 'text-amber-400 bg-amber-500/10'
+                              : gear < 0
+                              ? 'text-rose-400 bg-rose-500/10'
+                              : 'text-emerald-400 bg-emerald-500/10'
+                          }`}>
+                            {gear > 0 ? 'DRIVE' : gear < 0 ? 'REV' : 'NEUT'}
+                          </span>
+                        </div>
+
+                        <div className="my-auto flex items-center justify-center z-10">
+                          <span
+                            className={`font-black font-mono tracking-tight leading-none px-3.5 py-0.5 rounded-2xl border shadow-lg ${
+                              gear > 0
+                                ? 'text-primary bg-primary/15 border-primary/35 shadow-[0_0_20px_var(--primary-glow)]'
+                                : gear < 0
+                                ? 'text-rose-300 bg-rose-500/20 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.35)]'
+                                : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/35 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
+                            }`}
+                            style={{ fontSize: '38px', minWidth: '72px' }}
+                          >
                             {gear > 0 ? `D${gear}` : gear < 0 ? `R${Math.abs(gear)}` : 'N'}
                           </span>
                         </div>
 
-                        {/* Restreichweite */}
-                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
-                          <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono ${c.mutedText}`}>
-                            <Fuel size={15} className="text-amber-400 shrink-0" /> Tank
-                          </span>
-                          <span className={`text-base font-black font-mono tabular-nums shrink-0 whitespace-nowrap ${c.headingText}`}>
-                            {Math.round(data.fuelRange)} km
-                          </span>
+                        <div className="text-[8px] font-mono font-bold text-zinc-500 uppercase z-10 truncate max-w-full">
+                          {data.parkBrake ? 'PARKBREMSE' : gear > 0 ? 'VORWÄRTS' : gear < 0 ? 'RÜCKWÄRTS' : 'LEERLAUF'}
                         </div>
+                      </div>
+                    </div>
 
-                        {/* Zustand */}
-                        <div className={`flex-1 flex items-center justify-between ${c.innerCard} px-4 py-2`}>
-                          <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 font-mono ${c.mutedText}`}>
-                            <Wrench size={15} className="text-amber-400 shrink-0" /> Zustand
-                          </span>
-                          <span className={`text-xs font-black px-3 py-0.5 rounded-xl font-mono leading-none shrink-0 whitespace-nowrap shadow-sm ${
-                            data.wearTruck >= 20
-                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
-                              : data.wearTruck >= 5
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    {/* Bottom Row: Drehzahl (RPM) with Modern Segmented Rev-Counter Bar */}
+                    <div className={`${c.innerCard} p-2.5 flex flex-col gap-1.5 z-10`}>
+                      <div className="flex items-center justify-between text-[9px] font-mono">
+                        <span className={`font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                          <Zap size={12} className="text-amber-400" /> DREHZAHL
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[8px] font-mono font-extrabold uppercase px-1.5 py-0.2 rounded border ${
+                            rpm > 1800
+                              ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
+                              : rpm >= 900 && rpm <= 1500
+                              ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                              : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
                           }`}>
-                            {Math.round(100 - data.wearTruck)}% OK
+                            {rpm > 1800 ? 'HIGH RPM' : rpm >= 900 && rpm <= 1500 ? 'ECO ZONE' : 'POWER'}
+                          </span>
+                          <span className="font-black text-white tabular-nums">
+                            {Math.round(rpm)} <span className="text-amber-400 text-[8.5px] font-bold">U/MIN</span>
                           </span>
                         </div>
+                      </div>
+
+                      {/* Segmented LED Rev Counter Bar */}
+                      <div className="flex gap-1 h-2.5 w-full bg-black/60 p-0.5 rounded-lg border border-white/[0.08] shadow-inner">
+                        {Array.from({ length: 20 }).map((_, i) => {
+                          const activeBars = Math.round((Math.min(2500, rpm) / 2500) * 20);
+                          const isActive = i < activeBars;
+                          const isRedline = i >= 15; // 1875+ RPM
+                          const isPower = i >= 11 && i < 15; // 1375-1875 RPM
+                          return (
+                            <div
+                              key={i}
+                              className={`flex-1 rounded-xs transition-all duration-150 ${
+                                isActive
+                                  ? isRedline
+                                    ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+                                    : isPower
+                                    ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]'
+                                    : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]'
+                                  : 'bg-white/[0.04]'
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      {/* Scale labels */}
+                      <div className="flex justify-between text-[7.5px] font-mono font-bold text-zinc-500 px-0.5 leading-none">
+                        <span>0</span>
+                        <span className="text-emerald-400/90 font-black">1000 ECO</span>
+                        <span>1800</span>
+                        <span className="text-rose-400/90 font-black">2500 RPM</span>
                       </div>
                     </div>
                   </div>
@@ -3195,7 +3382,7 @@ export default function CarPlayPage() {
                         onClick={() => { setMusicSubTab('windows'); setContentIndex(0); }}
                         className={`group relative border rounded-3xl p-6 flex flex-col justify-between text-left transition-all duration-300 cursor-pointer ${
                           focusZone === 'content' && contentIndex === 0
-                            ? 'ring-4 ring-amber-500 scale-[1.02] border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.5)] z-20 bg-amber-500/20'
+                            ? 'ring-4 ring-primary scale-[1.02] border-primary shadow-[0_0_35px_var(--primary-glow)] z-20 bg-primary/20'
                             : `${c.card} hover:scale-[1.01]`
                         }`}
                       >
@@ -3305,7 +3492,7 @@ export default function CarPlayPage() {
                               title="Quelle wechseln"
                               className={`absolute top-3 left-3 z-40 w-10 h-10 rounded-full bg-black/70 backdrop-blur-md border flex items-center justify-center cursor-pointer transition-all ${
                                 focusZone === 'content' && contentIndex === 0
-                                  ? 'ring-4 ring-amber-500 scale-110 bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.8)]'
+                                  ? 'ring-4 ring-primary scale-110 bg-primary text-[var(--primary-foreground)] border-primary shadow-[0_0_25px_var(--primary-glow)]'
                                   : 'border-white/20 text-white hover:bg-black/90 hover:scale-105 shadow-xl'
                               }`}
                             >
@@ -3330,7 +3517,7 @@ export default function CarPlayPage() {
                             title="Quelle wechseln"
                             className={`absolute top-3 left-3 z-40 w-10 h-10 rounded-full bg-black/70 backdrop-blur-md border flex items-center justify-center cursor-pointer transition-all ${
                               focusZone === 'content' && contentIndex === 0
-                                ? 'ring-4 ring-amber-500 scale-110 bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.8)]'
+                                ? 'ring-4 ring-primary scale-110 bg-primary text-[var(--primary-foreground)] border-primary shadow-[0_0_25px_var(--primary-glow)]'
                                 : 'border-white/20 text-white hover:bg-black/90 hover:scale-105 shadow-xl'
                             }`}
                           >
@@ -3440,7 +3627,7 @@ export default function CarPlayPage() {
                               <div className="relative flex-1 h-3 flex items-center">
                                 <div className="h-2 w-full rounded-full overflow-hidden bg-black/70 border border-white/15 relative shadow-md">
                                   <div
-                                    className="h-full rounded-full transition-all duration-300 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)]"
+                                    className="h-full rounded-full transition-all duration-300 bg-primary shadow-[0_0_12px_var(--primary-glow)]"
                                     style={{
                                       width: isLocalPlaying && localDuration > 0
                                         ? `${(localProgress / localDuration) * 100}%`
@@ -3449,7 +3636,7 @@ export default function CarPlayPage() {
                                         : media
                                         ? `${getProgressPercent(media.progress, media.duration)}%`
                                         : '0%',
-                                      backgroundColor: '#fbbf24'
+                                      backgroundColor: 'var(--primary)'
                                     }}
                                   />
                                 </div>
@@ -3624,8 +3811,8 @@ export default function CarPlayPage() {
                         title="Quelle wechseln"
                         className={`w-10 h-10 rounded-2xl ${c.innerCard} flex items-center justify-center cursor-pointer shrink-0 transition-all ${
                           focusZone === 'content' && contentIndex === 0
-                            ? 'ring-4 ring-amber-500 scale-105 bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/40'
-                            : 'hover:border-amber-500/50 hover:scale-105 shadow-md'
+                            ? 'ring-4 ring-primary scale-105 bg-primary text-[var(--primary-foreground)] border-primary shadow-lg shadow-[0_0_20px_var(--primary-glow)]'
+                            : 'hover:border-primary/50 hover:scale-105 shadow-md'
                         }`}
                       >
                         <ArrowLeft size={18} className="stroke-[2.5]" />
@@ -3634,7 +3821,7 @@ export default function CarPlayPage() {
                         onClick={() => openVirtualKeyboard('radio')}
                         className={`relative flex-1 flex items-center gap-1.5 p-0.5 rounded-2xl cursor-pointer transition-all ${
                           focusZone === 'content' && contentIndex === 1
-                            ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                            ? 'ring-4 ring-primary bg-primary/20 scale-[1.01] shadow-[0_0_20px_var(--primary-glow)]'
                             : ''
                         }`}
                       >
@@ -3661,10 +3848,10 @@ export default function CarPlayPage() {
                               >
                                 <RefreshCw size={13} /> Auto-Scan
                               </button>
-                              <label className={`px-3.5 py-2 rounded-2xl text-slate-950 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg transition-all shrink-0 border ${
+                              <label className={`px-3.5 py-2 rounded-2xl text-[var(--primary-foreground)] text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg transition-all shrink-0 border ${
                                 focusZone === 'content' && contentIndex === 3
-                                  ? 'ring-4 ring-amber-400 bg-amber-400 border-amber-300 scale-105 shadow-[0_0_20px_rgba(245,158,11,0.6)]'
-                                  : 'bg-amber-500 hover:bg-amber-400 border-amber-400/50'
+                                  ? 'ring-4 ring-primary bg-primary border-primary scale-105 shadow-[0_0_20px_var(--primary-glow)]'
+                                  : 'bg-primary hover:bg-primary/90 border-primary/50'
                               }`}>
                                 <Upload size={14} /> Importieren
                                 <input ref={siiFileInputRef} type="file" accept=".sii,.txt" onChange={handleSiiFileUpload} className="hidden" />
@@ -3683,10 +3870,10 @@ export default function CarPlayPage() {
                                     data-item-focused={isItemFocused ? "true" : undefined}
                                     className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all duration-300 cursor-pointer shadow-md ${
                                       isItemFocused
-                                        ? 'ring-4 ring-amber-500 scale-[1.02] border-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.6)] z-20 bg-amber-500/25 text-white font-bold'
+                                        ? 'ring-4 ring-primary scale-[1.02] border-primary shadow-[0_0_25px_var(--primary-glow)] z-20 bg-primary/25 text-white font-bold'
                                         : isCurrent && isRadioPlaying
-                                        ? 'bg-amber-500/15 border-amber-500/70 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
-                                        : `${c.subBox} hover:border-amber-500/40`
+                                        ? 'bg-primary/15 border-primary/70 text-primary shadow-[0_0_20px_var(--primary-glow)]'
+                                        : `${c.subBox} hover:border-primary/40`
                                     }`}
                                   >
                                     <div className="flex items-center justify-between gap-1 min-w-0">
@@ -3763,7 +3950,7 @@ export default function CarPlayPage() {
                                     onClick={() => togglePlayRadio()}
                                     className={`w-10 h-10 rounded-xl flex items-center justify-center font-black transition-all cursor-pointer shadow-lg ${
                                       isRadioPlaying
-                                        ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-amber-500/30'
+                                        ? 'bg-primary text-[var(--primary-foreground)] hover:bg-primary/90 shadow-[0_0_15px_var(--primary-glow)]'
                                         : 'bg-white/10 text-white hover:bg-white/20 border border-white/15'
                                     }`}
                                   >
@@ -3781,7 +3968,7 @@ export default function CarPlayPage() {
               <div className="h-full flex flex-col overflow-hidden">
                 <div className={`flex-1 flex flex-col p-5 ${c.card} overflow-hidden justify-between relative`}>
                   {/* Subtle Background Aura Glow */}
-                  <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute top-0 right-0 w-80 h-80 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
                   {/* Header */}
@@ -3911,38 +4098,91 @@ export default function CarPlayPage() {
               </div>
             )}
 
-            {/* --- TRUCK DIAGNOSTICS TAB (REAL SDK TELEMETRY ONLY) --- */}
+            {/* --- TRUCK DIAGNOSTICS & MULTI-PAGE COCKPIT TAB --- */}
             {activeTab === 'truck' && (
               <div className="h-full flex flex-col overflow-hidden">
-                <div className={`flex-1 flex flex-col p-4 ${c.card} overflow-hidden justify-between relative`}>
+                <div className={`flex-1 flex flex-col p-4 ${c.card} overflow-hidden justify-between relative select-none`}>
                   {/* Background Aura Glows */}
                   <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="absolute bottom-0 left-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
 
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-2 border-b border-white/[0.08] pb-2 shrink-0 relative z-10">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-amber-400 shadow-md">
-                        <Truck size={18} className="stroke-[2.2]" />
+                  {/* Header: Title, Page Switcher and LKW Status */}
+                  <div className="flex items-center justify-between mb-3 border-b border-white/[0.08] pb-2.5 shrink-0 relative z-20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-primary border border-primary/40 flex items-center justify-center text-[var(--primary-foreground)] shadow-lg shadow-[0_0_15px_var(--primary-glow)] shrink-0">
+                        <Truck size={20} className="stroke-[2.2]" />
                       </div>
                       <div>
-                        <h2 className="text-sm font-black text-white tracking-tight font-mono">FAHRZEUG-COCKPIT & DIAGNOSE</h2>
-                        <p className="text-[9.5px] text-amber-400/90 font-extrabold uppercase tracking-widest font-mono">
-                          {telemetry.connected ? `${data.brand || 'LKW'} ${data.model || ''}` : 'NICHT VERBUNDEN'}
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-sm font-black text-white tracking-tight font-mono">
+                            {telemetry.connected ? `${data.brand || 'LKW'} ${data.model || ''}` : 'FAHRZEUG-TELEMETRIE'}
+                          </h2>
+                          {telemetry.connected ? (
+                            <span className="flex items-center gap-1 text-[8.5px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
+                            </span>
+                          ) : (
+                            <span className="text-[8.5px] font-mono font-bold text-zinc-500 bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 rounded-md">
+                              STANDBY
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest font-mono">
+                          {telemetry.connected
+                            ? `${data.odometer ? `${Math.round(data.odometer).toLocaleString('de-DE')} KM` : 'LKW BEREIT'} • TANK: ${Math.round(data.fuel || 0)}L • ZUSTAND: ${(100 - (data.wearTruck || 0)).toFixed(0)}%`
+                            : 'FAHRZEUG IM STANDBY'}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[11px] font-mono font-black px-3 py-1 rounded-xl border shadow-md ${
-                        !telemetry.connected
-                          ? 'text-amber-300 bg-amber-500/15 border-amber-500/30'
-                          : (data.wearTruck || 0) > 10
-                          ? 'text-rose-300 bg-rose-500/15 border-rose-500/40 animate-pulse'
-                          : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
-                      }`}>
-                        {!telemetry.connected ? '⚡ STANDBY (TELEMETRIE INAKTIV)' : (data.wearTruck || 0) > 10 ? '⚠️ SERVICE ERFORDERLICH' : '✅ ZUSTAND OK'}
-                      </span>
+                    {/* Integrated Automotive Cluster Dock Page Switcher */}
+                    <div className="flex items-center gap-1.5 bg-[#090d14]/90 backdrop-blur-2xl border border-white/10 p-1.5 rounded-2xl shadow-2xl">
+                      {/* Prev Arrow */}
+                      <button
+                        onClick={() => setTruckPage(prev => (prev - 1 + 3) % 3)}
+                        className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group"
+                        title="Vorherige Seite (←)"
+                      >
+                        <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+                      </button>
+
+                      {/* 3 Segmented Page Pills */}
+                      <div className="flex items-center gap-1">
+                        {[
+                          { id: 0, label: 'Cockpit', num: '01', icon: Gauge },
+                          { id: 1, label: 'Bordcomputer', num: '02', icon: Fuel },
+                          { id: 2, label: 'Diagnose', num: '03', icon: Wrench },
+                        ].map(tab => {
+                          const Icon = tab.icon;
+                          const isActive = truckPage === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setTruckPage(tab.id)}
+                              className={`px-3.5 py-1.5 rounded-xl font-mono text-xs transition-all duration-200 cursor-pointer flex items-center gap-2 select-none ${
+                                isActive
+                                  ? 'bg-primary text-[var(--primary-foreground)] font-black shadow-[0_0_18px_var(--primary-glow)] scale-[1.02]'
+                                  : 'text-zinc-400 hover:text-white hover:bg-white/[0.08] border border-transparent'
+                              }`}
+                            >
+                              <Icon size={14} className={isActive ? 'text-[var(--primary-foreground)] stroke-[2.4]' : 'text-zinc-400'} />
+                              <span className="font-black tracking-tight">{tab.label}</span>
+                              <span className={`text-[8.5px] px-1 py-0.2 rounded font-mono font-bold ${isActive ? 'bg-black/25 text-[var(--primary-foreground)]' : 'bg-white/10 text-zinc-400'}`}>
+                                {tab.num}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Next Arrow */}
+                      <button
+                        onClick={() => setTruckPage(prev => (prev + 1) % 3)}
+                        className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group"
+                        title="Nächste Seite (→)"
+                      >
+                        <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+                      </button>
                     </div>
                   </div>
 
@@ -3957,208 +4197,522 @@ export default function CarPlayPage() {
                       </p>
                     </div>
                   ) : (
-                    /* 100% Space-Optimized 2-Row Layout */
-                    <div className="flex-1 flex flex-col gap-2.5 min-h-0 relative z-10">
-                      {/* TOP ROW: Live Cockpit Instrument Gauges */}
-                      <div className="grid grid-cols-12 gap-2.5 flex-1 min-h-0">
-                        {/* Speedometer & Speed Limit Card */}
-                        <div className="col-span-5 flex flex-col min-h-0">
-                          <SpeedometerGauge
-                            speed={data.speed || 0}
-                            speedLimit={data.speedLimit}
-                            cruiseControl={data.cruiseControl}
-                          />
-                        </div>
-
-                        {/* Gear & RPM Tachometer Card */}
-                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
-                          <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-mono font-black text-zinc-400">
-                            <span className="text-amber-400 uppercase tracking-wider">ANTRIEB & GANG</span>
-                            <span className="text-zinc-400 font-mono">{Math.round(data.rpm || 0)} U/MIN</span>
-                          </div>
-
-                          <div className="my-auto text-center flex flex-col items-center justify-center py-1">
-                            <span className="text-2xl font-black text-amber-300 bg-amber-500/15 border border-amber-500/40 px-4 py-1 rounded-xl font-mono leading-none shadow-md inline-block">
-                              {(data.gear || 0) > 0 ? `D${data.gear}` : (data.gear || 0) < 0 ? `R${Math.abs(data.gear || 0)}` : 'N'}
-                            </span>
-                            <span className="text-[8.5px] font-black text-zinc-400 font-mono uppercase tracking-widest mt-1.5">AKTUELLE FAHRSTUFE</span>
-                          </div>
-
-                          {/* RPM Bar */}
-                          <div className="space-y-0.5">
-                            <div className="flex justify-between text-[8px] font-mono font-black text-zinc-400">
-                              <span>MOTORDREHZAHL</span>
-                              <span className="text-white font-mono">{Math.round(data.rpm || 0)} RPM</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-black/80 rounded-full overflow-hidden border border-white/10 p-0.5">
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${(data.rpm || 0) > 2000 ? 'bg-rose-500' : (data.rpm || 0) > 1500 ? 'bg-amber-400' : 'bg-sky-400'}`}
-                                style={{ width: `${Math.min(100, Math.max(4, ((data.rpm || 0) / 2500) * 100))}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Tank & Wear Summary Card */}
-                        <div className={`col-span-3 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
-                          <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-mono font-black text-amber-400">
-                            <span className="uppercase tracking-wider">ÜBERSICHT</span>
-                            <span className="text-emerald-400 font-mono">{(100 - (data.wearTruck || 0)).toFixed(0)}% OK</span>
-                          </div>
-
-                          <div className="space-y-1.5 my-auto">
-                            <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 px-2 flex items-center justify-between text-[11px] font-mono">
-                              <span className="text-zinc-400 text-[9px]">REICHWEITE</span>
-                              <span className="font-black text-amber-300">{Math.round(data.fuelRange || 0)} KM</span>
-                            </div>
-                            <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 px-2 flex items-center justify-between text-[11px] font-mono">
-                              <span className="text-zinc-400 text-[9px]">TANK</span>
-                              <span className="font-black text-white">{Math.round(data.fuel || 0)} L</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-black/60 border border-white/10 rounded-xl p-1 text-center text-[8.5px] font-mono">
-                            <span className={`font-bold ${data.parkBrake ? 'text-amber-400' : 'text-emerald-400'}`}>
-                              {data.parkBrake ? 'PARKBREMSE AKTIV' : 'FAHRBEREIT'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* BOTTOM ROW: Detailed Diagnostics Columns */}
-                      <div className="grid grid-cols-12 gap-2.5 flex-1 min-h-0">
-                        {/* Schadensanalyse */}
-                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
-                          <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
-                            <span className="flex items-center gap-1"><Wrench size={11} /> SCHADENSANALYSE</span>
-                            <span className="text-white font-mono font-black">{(100 - (data.wearTruck || 0)).toFixed(0)}% OK</span>
-                          </div>
-
-                          <div className="space-y-2 my-auto">
-                            <div>
-                              <div className="flex justify-between text-[8.5px] font-mono font-black text-zinc-300 mb-0.5">
-                                <span>LKW-ABNUTZUNG</span>
-                                <span className={(data.wearTruck || 0) > 15 ? 'text-rose-400 font-mono' : 'text-zinc-400 font-mono'}>
-                                  {typeof data.wearTruck === 'number' ? data.wearTruck.toFixed(1) : '0.0'}%
+                    /* Multi-Page Content Area */
+                    <div className="flex-1 flex flex-col min-h-0 relative z-10">
+                      <AnimatePresence mode="wait">
+                        {/* ============================================================ */}
+                        {/* SEITE 1: COCKPIT & ANTRIEB (Große Instrumente & Fahrdynamik) */}
+                        {/* ============================================================ */}
+                        {truckPage === 0 && (
+                          <motion.div
+                            key="page-cockpit"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.18 }}
+                            className="flex-1 grid grid-cols-12 gap-3.5 min-h-0 items-stretch"
+                          >
+                            {/* Left Side: Massive Speedometer Hero Card */}
+                            <div className={`col-span-6 ${c.innerCard} p-5 flex flex-col justify-between relative overflow-hidden group shadow-xl`}>
+                              {/* Top Bar: Limit Badge & Tempomat */}
+                              <div className="flex items-center justify-between z-10 border-b border-white/[0.08] pb-2">
+                                <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                  <Gauge size={13} className="text-amber-400" /> GESCHWINDIGKEIT & LIMIT
                                 </span>
+                                {data.speedLimit && data.speedLimit > 0 ? (
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className={`w-7 h-7 rounded-full bg-white border-2 border-red-600 flex items-center justify-center text-zinc-950 font-black font-mono text-xs shadow-md leading-none shrink-0 ${
+                                        isOverspeed ? 'animate-bounce shadow-[0_0_12px_rgba(244,63,94,0.7)]' : ''
+                                      }`}
+                                      title={`Tempolimit: ${Math.round(data.speedLimit)} km/h`}
+                                    >
+                                      {Math.round(data.speedLimit)}
+                                    </div>
+                                    <span className="text-[9px] font-mono font-bold text-zinc-400">LIMIT</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[9px] font-mono text-zinc-500 font-bold">FREIE FAHRT</span>
+                                )}
                               </div>
-                              <div className="h-1.5 w-full bg-black/80 rounded-full overflow-hidden border border-white/10 p-0.5">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${(data.wearTruck || 0) > 15 ? 'bg-rose-500' : 'bg-emerald-400'}`}
-                                  style={{ width: `${Math.max(4, data.wearTruck || 0)}%` }}
-                                />
-                              </div>
-                            </div>
 
-                            {data.cargo && data.cargo.toLowerCase() !== 'none' && (
-                              <div>
-                                <div className="flex justify-between text-[8.5px] font-mono font-black text-zinc-300 mb-0.5">
-                                  <span>FRACHTSCHADEN</span>
-                                  <span className={data.wearCargo && data.wearCargo > 0 ? 'text-rose-400 font-mono' : 'text-emerald-400 font-mono'}>
-                                    {typeof data.wearCargo === 'number' ? data.wearCargo.toFixed(1) : '0.0'}%
+                              {/* Center Hero: Giant Digital Speedometer Readout */}
+                              <div className="my-auto flex flex-col items-center justify-center py-2 z-10 text-center">
+                                <div className="flex items-baseline justify-center gap-2">
+                                  <span
+                                    className={`font-black font-mono tracking-tighter tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] ${
+                                      isOverspeed ? 'text-rose-400 animate-pulse' : 'text-white'
+                                    }`}
+                                    style={{ fontSize: '84px', lineHeight: '1' }}
+                                  >
+                                    {Math.round(data.speed || 0)}
+                                  </span>
+                                  <span className="text-xl font-black uppercase font-mono tracking-widest text-amber-400">
+                                    KM/H
                                   </span>
                                 </div>
-                                <div className="h-1.5 w-full bg-black/80 rounded-full overflow-hidden border border-white/10 p-0.5">
+                                <span className="text-[10px] font-mono font-bold text-zinc-400 mt-1 uppercase tracking-wider">
+                                  {isOverspeed ? '⚠️ TEMPOLIMIT ÜBERSCHRITTEN' : 'AKTUELLES FAHRTEMPO'}
+                                </span>
+                              </div>
+
+                              {/* Bottom: Speed Bar & Status Badges */}
+                              <div className="space-y-2 z-10">
+                                <div className="w-full h-2 bg-black/80 rounded-full overflow-hidden border border-white/10 p-0.5 shadow-inner">
                                   <div
-                                    className={`h-full rounded-full transition-all duration-500 ${data.wearCargo && data.wearCargo > 0 ? 'bg-rose-500' : 'bg-emerald-400'}`}
-                                    style={{ width: `${Math.max(4, data.wearCargo || 0)}%` }}
+                                    className={`h-full transition-all duration-200 rounded-full ${
+                                      isOverspeed
+                                        ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.9)]'
+                                        : 'bg-primary shadow-[0_0_10px_var(--primary-glow)]'
+                                    }`}
+                                    style={{ width: `${Math.min(100, ((data.speed || 0) / 130) * 100)}%` }}
                                   />
                                 </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 flex justify-between items-center text-[8.5px] font-mono">
-                            <span className="font-bold text-zinc-400">REST-ZUSTAND:</span>
-                            <span className="font-mono font-black text-emerald-400">{(100 - (data.wearTruck || 0)).toFixed(0)}%</span>
-                          </div>
-                        </div>
-
-                        {/* Kraftstoff & Verbrauch */}
-                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
-                          <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
-                            <span className="flex items-center gap-1"><Fuel size={11} /> KRAFTSTOFF</span>
-                            <span className={`px-1.5 py-0.5 rounded border ${
-                              data.fuelWarning
-                                ? 'text-rose-300 bg-rose-500/15 border-rose-500/40'
-                                : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
-                            }`}>
-                              {data.fuelWarning ? 'RESERVE' : 'OK'}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5 my-auto">
-                            <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 px-2 flex justify-between items-center text-[11px] font-mono">
-                              <div className="flex items-center gap-1.5">
-                                <Fuel size={12} className={data.fuelWarning ? 'text-rose-400 animate-pulse' : 'text-amber-400'} />
-                                <span className="text-[8.5px] font-black text-zinc-200">TANKSTAND</span>
-                              </div>
-                              <span className="font-black text-white">{typeof data.fuel === 'number' ? Math.round(data.fuel) : 0} L</span>
-                            </div>
-
-                            <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 px-2 flex justify-between items-center text-[11px] font-mono">
-                              <div className="flex items-center gap-1.5">
-                                <Gauge size={12} className="text-sky-400" />
-                                <span className="text-[8.5px] font-black text-zinc-200">Ø VERBRAUCH</span>
-                              </div>
-                              <div className="text-right">
-                                <span className="font-black text-white">
-                                  {typeof data.avgConsumption === 'number' && data.avgConsumption > 0
-                                    ? (data.avgConsumption * 100).toFixed(1)
-                                    : '—'}
-                                </span>
-                                <span className="text-[7.5px] text-sky-400 block font-mono leading-none">L/100 KM</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 flex justify-between items-center text-[8.5px] font-mono">
-                            <span className="font-bold text-zinc-400">REICHWEITE:</span>
-                            <span className="font-mono font-black text-amber-400">{typeof data.fuelRange === 'number' ? Math.round(data.fuelRange) : 0} KM</span>
-                          </div>
-                        </div>
-
-                        {/* Systemstatus Warning Indicators */}
-                        <div className={`col-span-4 ${c.innerCard} p-2.5 flex flex-col justify-between shadow-lg`}>
-                          <div className="flex items-center justify-between border-b border-white/[0.08] pb-1 text-[8.5px] font-black font-mono text-amber-400 uppercase tracking-widest">
-                            <span className="flex items-center gap-1"><Info size={11} /> SYSTEMSTATUS</span>
-                            <span className="text-emerald-400 font-bold">SDK LIVE</span>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-1 my-auto">
-                            {[
-                              { label: 'KRAFTSTOFF', warn: !!data.fuelWarning, icon: Fuel },
-                              { label: 'ÖLDRUCK', warn: !!data.oilPressureWarning, icon: AlertTriangle },
-                              { label: 'KÜHLWASSER', warn: !!data.waterTemperatureWarning, icon: Thermometer },
-                              { label: 'BATTERIE', warn: !!data.batteryVoltageWarning, icon: Zap },
-                              { label: 'BREMSLUFT', warn: !!data.airPressureWarning, icon: Gauge },
-                            ].map((item, idx) => {
-                              const IconComp = item.icon;
-                              return (
-                                <div key={idx} className="bg-black/60 border border-white/10 rounded-lg py-0.5 px-2 flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <IconComp size={11} className={item.warn ? 'text-rose-400 animate-pulse' : 'text-zinc-400'} />
-                                    <span className="text-[8px] font-black font-mono text-zinc-300">{item.label}</span>
-                                  </div>
-                                  <span className={`text-[7.5px] font-mono font-black px-1.5 py-0.2 rounded ${
-                                    item.warn
-                                      ? 'text-rose-400 bg-rose-500/20 border border-rose-500/40 animate-pulse'
-                                      : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/30'
+                                <div className="flex items-center justify-between text-[9.5px] font-mono pt-1">
+                                  <span className={`px-2 py-0.5 rounded-lg border font-bold ${
+                                    data.cruiseControl && data.cruiseControl > 0
+                                      ? 'text-sky-300 bg-sky-500/15 border-sky-500/30'
+                                      : 'text-zinc-500 bg-white/[0.03] border-white/[0.06]'
                                   }`}>
-                                    {item.warn ? 'WARNUNG' : 'OK'}
+                                    {data.cruiseControl && data.cruiseControl > 0 ? `TEMPOMAT: ${Math.round(data.cruiseControl)} KM/H` : 'TEMPOMAT: AUS'}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-lg border font-bold ${
+                                    data.parkBrake
+                                      ? 'text-rose-400 bg-rose-500/15 border-rose-500/30'
+                                      : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                                  }`}>
+                                    {data.parkBrake ? 'PARKBREMSE AKTIV' : 'FAHRBEREIT'}
                                   </span>
                                 </div>
-                              );
-                            })}
-                          </div>
+                              </div>
+                            </div>
 
-                          <div className="bg-black/60 border border-white/10 rounded-xl p-1.5 flex justify-between items-center text-[8.5px] font-mono">
-                            <span className="font-bold text-zinc-400">PARKBREMSE:</span>
-                            <span className={`font-mono font-black ${data.parkBrake ? 'text-amber-400' : 'text-emerald-400'}`}>
-                              {data.parkBrake ? 'AKTIV' : 'GELÖST'}
-                            </span>
-                          </div>
-                        </div>
+                            {/* Right Side: Massive Gear Indicator & Rev-Counter Cluster */}
+                            <div className={`col-span-6 ${c.innerCard} p-5 flex flex-col justify-between relative overflow-hidden group shadow-xl`}>
+                              {/* Top Half: Huge Gear Readout */}
+                              <div className="flex flex-col justify-between border-b border-white/[0.08] pb-3 z-10">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                    <Settings size={13} className="text-amber-400" /> GETRIEBE & FAHRSTUFE
+                                  </span>
+                                  <span className={`text-[9px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
+                                    (data.gear || 0) > 0
+                                      ? 'text-amber-300 bg-amber-500/15 border-amber-500/35'
+                                      : (data.gear || 0) < 0
+                                      ? 'text-rose-300 bg-rose-500/20 border-rose-500/40'
+                                      : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/35'
+                                  }`}>
+                                    {(data.gear || 0) > 0 ? 'VORWÄRTSGANG' : (data.gear || 0) < 0 ? 'RÜCKWÄRTS' : 'LEERLAUF'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-4 my-2">
+                                  <span
+                                    className={`font-black font-mono tracking-tight leading-none px-6 py-1.5 rounded-2xl border-2 shadow-2xl ${
+                                      (data.gear || 0) > 0
+                                        ? 'text-primary bg-primary/20 border-primary/50 shadow-[0_0_30px_var(--primary-glow)]'
+                                        : (data.gear || 0) < 0
+                                        ? 'text-rose-300 bg-rose-500/25 border-rose-500/50 shadow-[0_0_30px_rgba(244,63,94,0.45)]'
+                                        : 'text-emerald-300 bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_25px_rgba(16,185,129,0.35)]'
+                                    }`}
+                                    style={{ fontSize: '56px', minWidth: '100px', textAlign: 'center' }}
+                                  >
+                                    {(data.gear || 0) > 0 ? `D${data.gear}` : (data.gear || 0) < 0 ? `R${Math.abs(data.gear || 0)}` : 'N'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Bottom Half: Full-Width RPM Gauge */}
+                              <div className="flex flex-col gap-2 pt-2 z-10">
+                                <div className="flex items-center justify-between">
+                                  <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                    <Zap size={13} className="text-amber-400" /> MOTORDREHZAHL
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[8.5px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md border ${
+                                      (data.rpm || 0) > 1800
+                                        ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
+                                        : (data.rpm || 0) >= 900 && (data.rpm || 0) <= 1500
+                                        ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                    }`}>
+                                      {(data.rpm || 0) > 1800 ? 'HIGH RPM' : (data.rpm || 0) >= 900 && (data.rpm || 0) <= 1500 ? 'ECO ZONE' : 'POWER'}
+                                    </span>
+                                    <span className="text-2xl font-black font-mono text-white tabular-nums">
+                                      {Math.round(data.rpm || 0)} <span className="text-xs text-amber-400">U/MIN</span>
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* 24-Segment LED Rev Counter Bar */}
+                                <div className="flex gap-1 h-3.5 w-full bg-black/80 p-0.5 rounded-xl border border-white/10 shadow-inner">
+                                  {Array.from({ length: 24 }).map((_, i) => {
+                                    const activeBars = Math.round((Math.min(2500, data.rpm || 0) / 2500) * 24);
+                                    const isActive = i < activeBars;
+                                    const isRedline = i >= 18; // 1875+ RPM
+                                    const isPower = i >= 14 && i < 18; // 1450-1875 RPM
+                                    return (
+                                      <div
+                                        key={i}
+                                        className={`flex-1 rounded-xs transition-all duration-150 ${
+                                          isActive
+                                            ? isRedline
+                                              ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+                                              : isPower
+                                              ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]'
+                                              : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]'
+                                            : 'bg-white/[0.04]'
+                                        }`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="flex justify-between text-[8px] font-mono font-bold text-zinc-500 px-0.5">
+                                  <span>0</span>
+                                  <span className="text-emerald-400">1000 ECO</span>
+                                  <span>1600</span>
+                                  <span className="text-rose-400">2500 RPM</span>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* ============================================================ */}
+                        {/* SEITE 2: BORDCOMPUTER & TANK (Große 2x2 Kacheln)              */}
+                        {/* ============================================================ */}
+                        {truckPage === 1 && (
+                          <motion.div
+                            key="page-trip"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.18 }}
+                            className="flex-1 grid grid-cols-2 gap-3.5 min-h-0 items-stretch"
+                          >
+                            {/* Card 1: Tankstand */}
+                            <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                  <Fuel size={14} className="text-amber-400" /> KRAFTSTOFFTANK
+                                </span>
+                                <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
+                                  data.fuelWarning
+                                    ? 'text-rose-300 bg-rose-500/20 border-rose-500/40 animate-pulse'
+                                    : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
+                                }`}>
+                                  {data.fuelWarning ? '⚠️ RESERVE' : '✅ TANKSTAND OK'}
+                                </span>
+                              </div>
+
+                              <div className="my-auto flex items-baseline gap-2 z-10">
+                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                  {Math.round(data.fuel || 0)}
+                                </span>
+                                <span className="text-lg font-black font-mono text-amber-400">
+                                  LITER
+                                </span>
+                              </div>
+
+                              {/* 10-Segment Fuel Gauge Bar */}
+                              <div className="space-y-1.5 z-10">
+                                <div className="flex gap-1 h-2.5 w-full bg-black/80 rounded-lg p-0.5 border border-white/10 shadow-inner">
+                                  {Array.from({ length: 10 }).map((_, i) => {
+                                    const activeBars = Math.round((Math.min(400, data.fuel || 0) / 400) * 10);
+                                    const isActive = i < activeBars;
+                                    return (
+                                      <div
+                                        key={i}
+                                        className={`flex-1 rounded-xs transition-all ${
+                                          isActive
+                                            ? i < 2
+                                              ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]'
+                                              : 'bg-primary shadow-[0_0_6px_var(--primary-glow)]'
+                                            : 'bg-white/[0.04]'
+                                        }`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                                <div className="text-[9px] font-mono text-zinc-400 truncate">
+                                  {data.fuelWarning ? 'Nächste Tankstelle ansteuern' : 'Fahrzeug ausreichend betankt'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card 2: Restreichweite */}
+                            <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                  <Navigation size={14} className="text-sky-400" /> RESTREICHWEITE
+                                </span>
+                                <span className="text-[8.5px] font-mono font-black text-sky-300 bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 rounded-lg">
+                                  {(data.fuelRange || 0) > 400 ? 'LANGSTRECKE' : 'NACHTANKEN'}
+                                </span>
+                              </div>
+
+                              <div className="my-auto flex items-baseline gap-2 z-10">
+                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                  {Math.round(data.fuelRange || 0)}
+                                </span>
+                                <span className="text-lg font-black font-mono text-sky-400">
+                                  KM
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5 z-10">
+                                <div className="w-full h-2.5 bg-black/80 rounded-lg overflow-hidden border border-white/10 p-0.5 shadow-inner">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-sky-500 to-sky-300 rounded-md shadow-[0_0_8px_rgba(56,189,248,0.7)] transition-all duration-300"
+                                    style={{ width: `${Math.min(100, Math.max(5, ((data.fuelRange || 0) / 1000) * 100))}%` }}
+                                  />
+                                </div>
+                                <div className="text-[9px] font-mono text-zinc-400 truncate">
+                                  Berechnete Reichweite basierend auf aktuellem Fahrstil
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card 3: Ø Kraftstoffverbrauch */}
+                            <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                  <Activity size={14} className="text-emerald-400" /> Ø VERBRAUCH
+                                </span>
+                                <span className="text-[8.5px] font-mono font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
+                                  DIESEL-EFFIZIENZ
+                                </span>
+                              </div>
+
+                              <div className="my-auto flex items-baseline gap-2 z-10">
+                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                  {data.avgConsumption && data.avgConsumption > 0 ? (data.avgConsumption * 100).toFixed(1) : '—'}
+                                </span>
+                                <span className="text-lg font-black font-mono text-emerald-400">
+                                  L / 100 KM
+                                </span>
+                              </div>
+
+                              <div className="text-[9px] font-mono text-zinc-400 truncate z-10">
+                                Echtzeit-Durchschnittsverbrauch des LKW-Motors
+                              </div>
+                            </div>
+
+                            {/* Card 4: Rest-Lenkzeit & Pause */}
+                            <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                              <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                  <Clock size={14} className="text-purple-400" /> LENKZEIT & PAUSE
+                                </span>
+                                <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
+                                  (data.nextRest || 0) > 60
+                                    ? 'text-purple-300 bg-purple-500/15 border-purple-500/30'
+                                    : 'text-amber-300 bg-amber-500/20 border-amber-500/40 animate-pulse'
+                                }`}>
+                                  {(data.nextRest || 0) > 60 ? 'LENKZEIT OK' : 'PAUSE ERFORDERLICH'}
+                                </span>
+                              </div>
+
+                              <div className="my-auto flex items-baseline gap-2 z-10">
+                                <span style={{ fontSize: '38px' }} className="font-mono font-black text-white leading-none tracking-tight">
+                                  {data.nextRest && data.nextRest > 0 ? formatRemainingTime(data.nextRest * 60) : 'KEINE PAUSE'}
+                                </span>
+                              </div>
+
+                              <div className="text-[9px] font-mono text-zinc-400 truncate z-10">
+                                Verbleibende Fahrzeit bis zur nächsten gesetzlichen Ruhepause
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* ============================================================ */}
+                        {/* SEITE 3: DIAGNOSE & ZUSTAND (Große Schadens- & Sensor-Kacheln)*/}
+                        {/* ============================================================ */}
+                        {truckPage === 2 && (
+                          <motion.div
+                            key="page-diagnostics"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            transition={{ duration: 0.18 }}
+                            className="flex-1 flex flex-col justify-between gap-3.5 min-h-0"
+                          >
+                            {/* Top Row: 2 Big Damage / Health Cards */}
+                            <div className="grid grid-cols-2 gap-3.5 flex-1 min-h-0">
+                              {/* Card 1: LKW-Zustand */}
+                              <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                  <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                    <Wrench size={14} className="text-amber-400" /> LKW-VERSCHLEISS & CHASSIS
+                                  </span>
+                                  <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
+                                    (data.wearTruck || 0) > 15
+                                      ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
+                                      : (data.wearTruck || 0) > 5
+                                      ? 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+                                      : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                                  }`}>
+                                    {(data.wearTruck || 0) > 15 ? '⚠️ REPARATUR NÖTIG' : (data.wearTruck || 0) > 5 ? '🟡 LEICHTER VERSCHLEISS' : '🟢 TOP-ZUSTAND'}
+                                  </span>
+                                </div>
+
+                                <div className="my-auto flex items-baseline gap-2 z-10">
+                                  <span style={{ fontSize: '48px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                    {(100 - (data.wearTruck || 0)).toFixed(1)}%
+                                  </span>
+                                  <span className="text-lg font-black font-mono text-emerald-400">
+                                    OK
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1.5 z-10">
+                                  <div className="w-full h-2.5 bg-black/80 rounded-lg overflow-hidden border border-white/10 p-0.5 shadow-inner">
+                                    <div
+                                      className={`h-full rounded-md transition-all duration-500 ${
+                                        (data.wearTruck || 0) > 15
+                                          ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+                                          : (data.wearTruck || 0) > 5
+                                          ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]'
+                                          : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                                      }`}
+                                      style={{ width: `${Math.max(5, 100 - (data.wearTruck || 0))}%` }}
+                                    />
+                                  </div>
+                                  <div className="text-[9px] font-mono text-zinc-400 truncate">
+                                    Motor-, Getriebe-, Reifen- & Kabinenabnutzung: {(data.wearTruck || 0).toFixed(1)}%
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Card 2: Frachtschaden */}
+                              <div className={`${c.innerCard} p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
+                                <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
+                                  <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
+                                    <Briefcase size={14} className="text-purple-400" /> FRACHTSICHERHEIT & LADUNG
+                                  </span>
+                                  <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
+                                    (data.wearCargo || 0) > 0
+                                      ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
+                                      : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                                  }`}>
+                                    {(data.wearCargo || 0) > 0 ? '⚠️ FRACHTBEEINTRÄCHTIGUNG' : '✅ 100% UNBESCHÄDIGT'}
+                                  </span>
+                                </div>
+
+                                <div className="my-auto flex flex-col justify-center z-10">
+                                  <div className="flex items-baseline gap-2">
+                                    <span style={{ fontSize: '48px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                      {(data.wearCargo || 0).toFixed(1)}%
+                                    </span>
+                                    <span className="text-lg font-black font-mono text-rose-400">
+                                      SCHADEN
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono font-bold text-zinc-300 mt-1 truncate">
+                                    Ladung: <strong className="text-white">{data.cargo && data.cargo.toLowerCase() !== 'none' ? data.cargo : 'Keine Ladung aktiv'}</strong>
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1.5 z-10">
+                                  <div className="w-full h-2.5 bg-black/80 rounded-lg overflow-hidden border border-white/10 p-0.5 shadow-inner">
+                                    <div
+                                      className={`h-full rounded-md transition-all duration-500 ${
+                                        (data.wearCargo || 0) > 0
+                                          ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+                                          : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                                      }`}
+                                      style={{ width: `${Math.max(5, (data.wearCargo || 0))}%` }}
+                                    />
+                                  </div>
+                                  <div className="text-[9px] font-mono text-zinc-400 truncate">
+                                    {(data.wearCargo || 0) > 0 ? 'Schadensabzug bei Frachtablieferung droht' : 'Frachtgut befindet sich in sicherem Zustand'}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Section: 5 Spacious System Warning Sensor Tiles */}
+                            <div className="grid grid-cols-5 gap-2.5 z-10 shrink-0">
+                              {[
+                                { label: 'ÖLDRUCK', status: data.oilPressureWarning ? 'KRITISCH' : 'OPTIMAL', warn: !!data.oilPressureWarning, icon: AlertTriangle, desc: 'Motoröldruck' },
+                                { label: 'KÜHLWASSER', status: data.waterTemperatureWarning ? 'ÜBERHITZT' : 'NORMAL', warn: !!data.waterTemperatureWarning, icon: Thermometer, desc: 'Kühlkreislauf' },
+                                { label: 'BREMSLUFT', status: data.airPressureWarning ? 'DRUCKVERLUST' : 'VOLLE KRAFT', warn: !!data.airPressureWarning, icon: Gauge, desc: 'Druckluftkreis' },
+                                { label: 'BORDELEKTRIK', status: data.batteryVoltageWarning ? 'UNTERSPANNUNG' : '24V BEREIT', warn: !!data.batteryVoltageWarning, icon: Zap, desc: 'Batteriesystem' },
+                                { label: 'HANDBREMSE', status: data.parkBrake ? 'FESTGESTELLT' : 'GELÖST', warn: false, isPark: !!data.parkBrake, icon: ShieldCheck, desc: 'Feststellbremse' },
+                              ].map((sensor, idx) => {
+                                const IconComp = sensor.icon;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`p-3 rounded-2xl border transition-all flex flex-col justify-between ${
+                                      sensor.warn
+                                        ? 'bg-rose-950/40 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.3)] animate-pulse'
+                                        : 'bg-black/60 border-white/10 hover:border-white/20 shadow-md'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <IconComp size={16} className={sensor.warn ? 'text-rose-400' : sensor.isPark ? 'text-amber-400' : 'text-emerald-400'} />
+                                      <span className={`text-[8px] font-mono font-black px-1.5 py-0.5 rounded-md ${
+                                        sensor.warn
+                                          ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40'
+                                          : sensor.isPark
+                                          ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                      }`}>
+                                        {sensor.status}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="text-[10px] font-black font-mono text-white tracking-tight">{sensor.label}</div>
+                                      <div className="text-[8px] font-mono text-zinc-400 mt-0.5">{sensor.desc}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Floating Side Edge Page Navigators */}
+                      <button
+                        onClick={() => setTruckPage(prev => (prev - 1 + 3) % 3)}
+                        className="absolute -left-2 top-1/2 -translate-y-1/2 z-30 w-8 h-16 rounded-r-2xl bg-black/70 hover:bg-primary/25 active:scale-95 backdrop-blur-xl border border-white/10 hover:border-primary/50 flex items-center justify-center text-zinc-400 hover:text-primary transition-all opacity-40 hover:opacity-100 shadow-2xl cursor-pointer group"
+                        title="Vorherige Seite (←)"
+                      >
+                        <ChevronLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
+                      </button>
+
+                      <button
+                        onClick={() => setTruckPage(prev => (prev + 1) % 3)}
+                        className="absolute -right-2 top-1/2 -translate-y-1/2 z-30 w-8 h-16 rounded-l-2xl bg-black/70 hover:bg-primary/25 active:scale-95 backdrop-blur-xl border border-white/10 hover:border-primary/50 flex items-center justify-center text-zinc-400 hover:text-primary transition-all opacity-40 hover:opacity-100 shadow-2xl cursor-pointer group"
+                        title="Nächste Seite (→)"
+                      >
+                        <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                      {/* Bottom Interactive Pagination Bar */}
+                      <div className="flex items-center justify-center gap-2 pt-2 shrink-0 z-20">
+                        {[
+                          { id: 0, label: 'Cockpit & Antrieb' },
+                          { id: 1, label: 'Bordcomputer & Tank' },
+                          { id: 2, label: 'Diagnose & Zustand' }
+                        ].map((item) => {
+                          const isActive = truckPage === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => setTruckPage(item.id)}
+                              className={`h-2 transition-all duration-300 rounded-full cursor-pointer flex items-center ${
+                                isActive
+                                  ? 'w-10 bg-primary shadow-[0_0_12px_var(--primary-glow)]'
+                                  : 'w-2.5 bg-white/20 hover:bg-white/40'
+                              }`}
+                              title={`Seite ${item.id + 1}: ${item.label}`}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -4171,13 +4725,13 @@ export default function CarPlayPage() {
               <div className="h-full flex flex-col overflow-hidden">
                 <div className={`flex-1 flex flex-col p-4 ${c.card} overflow-hidden justify-between relative`}>
                   {/* Subtle Background Aura Glow */}
-                  <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute top-0 right-0 w-80 h-80 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
                   {/* Settings Header */}
                   <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-3 shrink-0 relative z-10">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 border border-amber-400/40 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/25">
+                      <div className="w-10 h-10 rounded-2xl bg-primary border border-primary/40 flex items-center justify-center text-[var(--primary-foreground)] shadow-lg shadow-[0_0_15px_var(--primary-glow)]">
                         <Settings size={20} className="fill-current" />
                       </div>
                       <div>
@@ -4208,9 +4762,9 @@ export default function CarPlayPage() {
                                  onClick={() => updateSetting('carPlayTheme', theme.id as any)}
                                  className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
                                    isActive
-                                     ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                                     ? 'border-primary bg-primary/20 shadow-[0_0_12px_var(--primary-glow)]'
                                      : `${theme.accent} border-transparent hover:border-white/20`
-                                 } ${isFocused ? 'ring-2 ring-amber-500 scale-[1.02] z-10' : ''}`}
+                                 } ${isFocused ? 'ring-2 ring-primary scale-[1.02] z-10' : ''}`}
                                >
                                  <span className={`text-[9.5px] font-black uppercase tracking-wider block ${isActive ? 'text-amber-400' : 'text-white'}`}>
                                    {theme.label}
@@ -4242,9 +4796,9 @@ export default function CarPlayPage() {
                                  onClick={() => updateSetting('carPlayMapTheme', mapTheme.id as any)}
                                  className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
                                    isActive
-                                     ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                                     ? 'border-primary bg-primary/20 shadow-[0_0_12px_var(--primary-glow)]'
                                      : `${mapTheme.accent} border-transparent hover:border-white/20`
-                                 } ${isFocused ? 'ring-2 ring-amber-500 scale-[1.02] z-10' : ''}`}
+                                 } ${isFocused ? 'ring-2 ring-primary scale-[1.02] z-10' : ''}`}
                                >
                                  <span className={`text-[9.5px] font-black uppercase tracking-wider block ${isActive ? 'text-amber-400' : 'text-white'}`}>
                                    {mapTheme.label}
@@ -4276,9 +4830,9 @@ export default function CarPlayPage() {
                                  onClick={() => updateSetting('carPlayTextScale', scale.id as any)}
                                  className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
                                    isActive
-                                     ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                                     ? 'border-primary bg-primary/20 shadow-[0_0_12px_var(--primary-glow)]'
                                      : 'bg-black/40 border-white/10 hover:bg-white/[0.06]'
-                                 } ${isFocused ? 'ring-2 ring-amber-500 scale-[1.02] z-10' : ''}`}
+                                 } ${isFocused ? 'ring-2 ring-primary scale-[1.02] z-10' : ''}`}
                                >
                                  <span className={`font-black uppercase tracking-wider block ${isActive ? 'text-amber-400' : 'text-zinc-300'} ${scale.size}`}>
                                    {scale.label}
@@ -4311,6 +4865,7 @@ export default function CarPlayPage() {
                       
                       <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin">
                          {[
+                           { key: 'carPlayIgnitionSleep', label: 'Zündungs-Automatik (Standby)', icon: '⚡' },
                            { key: 'carPlayShowNavInstructions', label: 'Navigations-Anweisungen', icon: '🧭' },
                            { key: 'carPlayNotifySpeed', label: 'Geschwindigkeitswarnung', icon: '⚠️' },
                            { key: 'carPlayNotifyFuel', label: 'Kraftstoffwarnung', icon: '⛽' },
@@ -4323,7 +4878,9 @@ export default function CarPlayPage() {
                            { key: 'carPlayNotifyEvent', label: 'Speditionsevents', icon: '📅' }
                          ].map((item, index) => {
                            const isFocused = isSettingsFocused('right', index);
-                           const isChecked = settings[item.key as keyof OverlaySettings] !== false;
+                           const isChecked = item.key === 'carPlayIgnitionSleep'
+                             ? Boolean(settings.carPlayIgnitionSleep)
+                             : settings[item.key as keyof OverlaySettings] !== false;
                            return (
                              <div
                                key={item.key}
@@ -4335,7 +4892,7 @@ export default function CarPlayPage() {
                                onClick={() => updateSetting(item.key as any, !isChecked)}
                                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all cursor-pointer shrink-0 ${
                                  isFocused
-                                   ? 'ring-2 ring-amber-500 bg-amber-500/20 border-amber-400 shadow-md z-10 scale-[1.01]'
+                                   ? 'ring-2 ring-primary bg-primary/20 border-primary shadow-md z-10 scale-[1.01]'
                                    : 'bg-black/40 border-white/10 hover:bg-white/[0.06]'
                                }`}
                              >
@@ -4347,7 +4904,7 @@ export default function CarPlayPage() {
                                </div>
                                
                                <div className="relative shrink-0 flex items-center ml-2">
-                                 <div className={`w-8 h-4.5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]' : 'bg-zinc-800 border border-white/10'}`}>
+                                 <div className={`w-8 h-4.5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]' : 'bg-zinc-800 border border-white/10'}`}>
                                    <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm ${isChecked ? 'left-[15px]' : 'left-0.5'}`} />
                                  </div>
                                </div>
@@ -4379,7 +4936,7 @@ export default function CarPlayPage() {
                           onClick={() => setMapTabFocus('search')}
                           className={`relative flex-1 rounded-2xl transition-all ${
                             mapTabFocus === 'search'
-                              ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                              ? 'ring-4 ring-primary bg-primary/20 scale-[1.01] shadow-[0_0_20px_var(--primary-glow)]'
                               : ''
                           }`}
                         >
@@ -4509,8 +5066,8 @@ export default function CarPlayPage() {
                       transition={{ duration: 0.25 }}
                       className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
                     >
-                      <div className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${speedcamAlert.isSpeeding ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse' : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.4)]'}`}>
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'}`}>
+                      <div className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${speedcamAlert.isSpeeding ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse' : 'bg-zinc-950/90 border-primary/50 text-white shadow-[0_0_25px_var(--primary-glow)]'}`}>
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-primary'}`}>
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
                           </svg>
@@ -4592,7 +5149,7 @@ export default function CarPlayPage() {
                     onClick={() => setMaxMapFocus('search')}
                     className={`relative flex-1 rounded-2xl transition-all ${
                       maxMapFocus === 'search'
-                        ? 'ring-4 ring-amber-400 bg-amber-500/20 scale-[1.01] shadow-[0_0_20px_rgba(245,158,11,0.6)]'
+                        ? 'ring-4 ring-primary bg-primary/20 scale-[1.01] shadow-[0_0_20px_var(--primary-glow)]'
                         : ''
                     }`}
                   >
@@ -4794,11 +5351,11 @@ export default function CarPlayPage() {
                       className={`flex items-center gap-3.5 px-4 py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl transition-all ${
                         speedcamAlert.isSpeeding
                           ? 'bg-rose-950/90 border-rose-500/90 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.7)] animate-pulse'
-                          : 'bg-zinc-950/90 border-amber-500/50 text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+                          : 'bg-zinc-950/90 border-primary/50 text-white shadow-[0_0_25px_var(--primary-glow)]'
                       }`}
                     >
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-lg ${
-                        speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-amber-500'
+                        speedcamAlert.isSpeeding ? 'bg-rose-600' : 'bg-primary'
                       }`}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
@@ -4921,521 +5478,6 @@ export default function CarPlayPage() {
           </motion.div>
         )}
 
-        {/* --- FULLSCREEN MINIMALIST PURE-BLACK TRUCK DIGITAL INSTRUMENT CLUSTER (TACHO HUD) --- */}
-        {maximizedWidget === 'diagnostics' && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ type: 'spring', duration: 0.3, bounce: 0.05 }}
-            className="fixed inset-0 z-[99999] bg-black p-4 flex flex-col justify-between overflow-hidden shadow-2xl font-outfit select-none"
-          >
-            {/* TOP STATUS STRIP: CENTERED REAL SVG VEHICLE TELL-TALE INDICATORS ON PURE BLACK */}
-            <div className="flex justify-center items-center border-b border-zinc-900 pb-2 shrink-0 w-full">
-              <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-900 px-4 py-1.5 rounded-xl shadow-inner">
-                {[
-                  {
-                    id: 'left',
-                    active: data.blinkerLeftOn,
-                    color: 'text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'beamLow',
-                    active: data.lightsBeamLow,
-                    color: 'text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 5A7 7 0 0 1 12 19V5z" fill="currentColor" fillOpacity="0.2"/>
-                        <line x1="5" y1="9" x2="8" y2="10" />
-                        <line x1="4" y1="12" x2="8" y2="12" />
-                        <line x1="5" y1="15" x2="8" y2="14" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'beamHigh',
-                    active: data.lightsBeamHigh,
-                    color: 'text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.9)]',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M13 5A7 7 0 0 1 13 19V5z" fill="currentColor" fillOpacity="0.3"/>
-                        <line x1="4" y1="8" x2="9" y2="8" />
-                        <line x1="3" y1="12" x2="9" y2="12" />
-                        <line x1="4" y1="16" x2="9" y2="16" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'beacon',
-                    active: data.lightsBeacon,
-                    color: 'text-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)]',
-                    icon: <AlertTriangle size={17} />,
-                  },
-                  {
-                    id: 'brake',
-                    active: data.parkBrake,
-                    color: 'text-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.9)]',
-                    icon: (
-                      <div className="font-mono font-black text-[11px] border-2 border-current rounded-full w-5 h-5 flex items-center justify-center leading-none">
-                        P
-                      </div>
-                    ),
-                  },
-                  {
-                    id: 'fuel',
-                    active: data.fuelWarning,
-                    color: 'text-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.9)]',
-                    icon: <Fuel size={17} />,
-                  },
-                  {
-                    id: 'oil',
-                    active: data.oilPressureWarning,
-                    color: 'text-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.9)]',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6 16c0 2.21 1.79 4 4 4s4-1.79 4-4c0-2.5-4-7.1-4-7.1S6 13.5 6 16z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: 'right',
-                    active: data.blinkerRightOn,
-                    color: 'text-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]',
-                    icon: (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z" />
-                      </svg>
-                    ),
-                  },
-                ].map((ind) => (
-                  <div
-                    key={ind.id}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all border ${
-                      ind.active
-                        ? `${ind.color} bg-black border-zinc-700 scale-105`
-                        : 'text-zinc-800 bg-transparent border-transparent opacity-20'
-                    }`}
-                  >
-                    {ind.icon}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* MAIN 3-COLUMN PURE-BLACK INSTRUMENT CLUSTER */}
-            <div className="flex-1 grid grid-cols-12 gap-4 min-h-0 py-2">
-              {/* === LEFT WING: MINIMALIST SPEEDOMETER DIAL === */}
-              <div className="col-span-4 bg-black border border-zinc-900 rounded-2xl p-4 flex flex-col justify-between shadow-2xl relative overflow-hidden">
-                <div className="flex items-center justify-between border-b border-zinc-900 pb-2 z-10">
-                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-widest flex items-center gap-1.5 font-mono">
-                    <Gauge size={14} /> GESCHWINDIGKEIT
-                  </span>
-                  {data.speedLimit > 0 && (
-                    <div className="w-8 h-8 rounded-full bg-white border-2 border-red-600 flex items-center justify-center text-black font-black text-xs shadow-md">
-                      {Math.round(data.speedLimit)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Minimalist Circular Speedometer Core */}
-                <div className="flex-1 flex flex-col items-center justify-center py-2 z-10">
-                  <div className="relative w-52 h-52 rounded-full border-2 border-zinc-800 bg-black flex flex-col items-center justify-center shadow-[0_0_40px_rgba(0,0,0,1)]">
-                    <span
-                      className="font-black text-white leading-none tracking-tighter font-mono tabular-nums no-cp-scale drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]"
-                      style={{ fontSize: '80px', lineHeight: '1' }}
-                    >
-                      {Math.round(speed)}
-                    </span>
-                    <span className="text-xs font-black uppercase tracking-widest text-amber-400 mt-2 font-mono">KM / H</span>
-                  </div>
-
-                  {/* Minimalist Speed Bar */}
-                  <div className="w-full mt-4 space-y-1">
-                    <div className="flex gap-1 h-3 w-full bg-zinc-950 p-0.5 rounded border border-zinc-900">
-                      {Array.from({ length: 16 }).map((_, i) => {
-                        const activeBars = Math.round((Math.min(140, speed) / 140) * 16);
-                        const isActive = i < activeBars;
-                        const isHighSpeed = i >= 10;
-                        return (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-xs transition-all duration-150 ${
-                              isActive
-                                ? isHighSpeed
-                                  ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
-                                  : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                                : 'bg-zinc-900/60'
-                            }`}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="flex justify-between text-[8.5px] font-mono text-zinc-600 font-black px-0.5">
-                      <span>0</span>
-                      <span>40</span>
-                      <span>80</span>
-                      <span>120</span>
-                      <span>140 KM/H</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-2.5 flex items-center justify-between z-10">
-                  <span className="text-[9.5px] font-black text-zinc-400 uppercase tracking-wider font-mono">TEMPOMAT</span>
-                  <span className={`text-xs font-mono font-black ${data.cruiseControl && data.cruiseControl > 0 ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                    {data.cruiseControl && data.cruiseControl > 0 ? `${Math.round(data.cruiseControl)} KM/H [AKTIV]` : 'OFF'}
-                  </span>
-                </div>
-              </div>
-
-              {/* === CENTER WING: MULTI-FUNCTION DISPLAY (MFD) === */}
-              <div className="col-span-4 bg-black border border-zinc-900 rounded-2xl p-2.5 flex flex-col justify-between shadow-2xl relative overflow-hidden">
-                {/* MFD Content Area */}
-                <div className="flex-1 flex flex-col min-h-0 relative z-10">
-                  {/* Mode 0: Live GPS Navigation Map */}
-                  {mfdMode === 0 && (
-                    <div className="w-full h-full flex-1 flex flex-col rounded-xl overflow-hidden border border-zinc-900 relative bg-black">
-                      <GameMapWidget
-                        ref={maxMapWidgetRef}
-                        gameX={(telemetry as any).posX ?? (telemetry as any).gameX}
-                        gameY={(telemetry as any).posZ ?? (telemetry as any).gameY}
-                        heading={telemetry.connected ? telemetry.heading : undefined}
-                        currentSpeed={telemetry.connected ? telemetry.speed : 0}
-                        speedLimit={telemetry.connected ? telemetry.speedLimit : 0}
-                        routeWaypoints={effectiveRouteWaypoints}
-                        source={effectiveSource}
-                        dest={effectiveDest}
-                        destCompany={effectiveDestCompany}
-                        navDistance={telemetry.connected ? telemetry.navDistance : undefined}
-                        connected={telemetry.connected}
-                        themeMode={activeMapTheme}
-                        accentColor="#6d28d9"
-                        width="100%"
-                        height="100%"
-                        mapId="tacho-mfd-map"
-                        zoom={carPlayMapZoom}
-                        onZoomChange={setCarPlayMapZoom}
-                        showInstructions={false}
-                        onRouteCalculated={setCustomRouteInfo}
-                        nearbyVehicles={telemetry.connected ? (telemetry as any).nearbyVehicles : undefined}
-                        nearbyVehicleColor="#007aff"
-                        semaphores={telemetry.connected ? (telemetry as any).semaphores : undefined}
-                      />
-                    </div>
-                  )}
-
-                  {/* Mode 1: Musikwiedergabe */}
-                  {mfdMode === 1 && (
-                    <div className="w-full h-full flex flex-col justify-between p-4 rounded-xl border border-zinc-900 bg-black relative overflow-hidden">
-                      {albumArtSrc && (
-                        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-30">
-                          <img src={albumArtSrc} alt="" className="w-full h-full object-cover blur-2xl scale-125" />
-                        </div>
-                      )}
-                      <div className="relative z-10 flex items-center justify-between border-b border-zinc-900 pb-2">
-                        <span className="text-[9.5px] font-black uppercase text-amber-400 tracking-widest flex items-center gap-1.5 font-mono">
-                          <Music size={14} /> MEDIENWIEDERGABE
-                        </span>
-                        <span className="text-[8.5px] font-black uppercase text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded font-mono">
-                          {media?.source || 'SPOTIFY'}
-                        </span>
-                      </div>
-
-                      {media ? (
-                        <div className="relative z-10 my-auto text-center space-y-2">
-                          <h3 className="text-lg font-black text-white truncate drop-shadow">{media.title}</h3>
-                          <p className="text-xs font-bold text-amber-400 truncate">{media.artist}</p>
-
-                          {/* Timeline Progress */}
-                          {media.duration > 0 && (
-                            <div className="space-y-1 pt-2">
-                              <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800 p-0.5">
-                                <div
-                                  className="h-full bg-amber-400 rounded-full"
-                                  style={{ width: `${getProgressPercent(media.progress, media.duration)}%` }}
-                                />
-                              </div>
-                              <div className="flex justify-between text-[9px] font-mono font-black text-zinc-400">
-                                <span>{formatMediaTime(media.progress, media.duration)}</span>
-                                <span>{formatMediaTime(media.duration)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="relative z-10 my-auto text-center text-zinc-600 text-xs font-black uppercase font-mono">
-                          Keine aktive Musikwiedergabe
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Mode 2: Fahrdaten & Trip Computer */}
-                  {mfdMode === 2 && (
-                    <div className="w-full h-full flex flex-col justify-between p-3.5 rounded-xl border border-zinc-900 bg-black space-y-2">
-                      <span className="text-[9.5px] font-black uppercase text-amber-400 tracking-widest block border-b border-zinc-900 pb-1.5 font-mono">
-                        ⚡ FAHRDATEN & TRIP BORDCOMPUTER
-                      </span>
-                      <div className="grid grid-cols-2 gap-2 my-auto">
-                        <div className="bg-zinc-950 border border-zinc-900 p-2.5 rounded-xl text-center">
-                          <span className="text-[8.5px] font-black text-zinc-400 uppercase block mb-0.5">Ø VERBRAUCH</span>
-                          <span className="text-lg font-black text-white font-mono block">
-                            {data.avgConsumption ? `${(data.avgConsumption * 100).toFixed(1)}` : '—'}
-                          </span>
-                          <span className="text-[8px] font-black text-amber-400 font-mono">L / 100 KM</span>
-                        </div>
-
-                        <div className="bg-zinc-950 border border-zinc-900 p-2.5 rounded-xl text-center">
-                          <span className="text-[8.5px] font-black text-zinc-400 uppercase block mb-0.5">REST-LENKZEIT</span>
-                          <span className="text-lg font-black text-amber-400 font-mono block">
-                            {data.nextRest && data.nextRest > 0 ? formatRemainingTime(data.nextRest * 60) : '—'}
-                          </span>
-                          <span className="text-[8px] font-black text-zinc-500 font-mono">BIS PAUSE</span>
-                        </div>
-
-                        <div className="bg-zinc-950 border border-zinc-900 p-2.5 rounded-xl text-center">
-                          <span className="text-[8.5px] font-black text-zinc-400 uppercase block mb-0.5">REICHWEITE</span>
-                          <span className="text-lg font-black text-white font-mono block">
-                            {Math.round(data.fuelRange)} km
-                          </span>
-                          <span className="text-[8px] font-black text-emerald-400 font-mono">TANK OK</span>
-                        </div>
-
-                        <div className="bg-zinc-950 border border-zinc-900 p-2.5 rounded-xl text-center">
-                          <span className="text-[8.5px] font-black text-zinc-400 uppercase block mb-0.5">Ø TEMPO</span>
-                          <span className="text-lg font-black text-zinc-600 font-mono block">—</span>
-                          <span className="text-[8px] font-black text-zinc-600 font-mono">KM / H</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mode 3: Getriebe & Telemetrie */}
-                  {mfdMode === 3 && (
-                    <div className="w-full h-full flex flex-col justify-between p-3.5 rounded-xl border border-zinc-900 bg-black space-y-2">
-                      <span className="text-[9.5px] font-black uppercase text-amber-400 tracking-widest block border-b border-zinc-900 pb-1.5 font-mono">
-                        ⚙️ GETRIEBE & SYSTEM-DRUCK
-                      </span>
-                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl text-center my-auto">
-                        <span className="text-[8.5px] font-mono font-black text-zinc-500 uppercase block mb-0.5">FAHRSTUFE</span>
-                        <span className="text-5xl font-black text-amber-400 font-mono block tracking-wider drop-shadow">
-                          {gear > 0 ? `D${gear}` : gear < 0 ? `R${Math.abs(gear)}` : 'N'}
-                        </span>
-                        <span className="text-[8px] font-mono text-zinc-500 uppercase block mt-1">AUTOMATIC SHIFTING</span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-1.5 text-center text-[8.5px]">
-                        <div className="bg-zinc-950 p-1.5 rounded-lg border border-zinc-900">
-                          <span className="text-zinc-500 block font-mono">KÜHLWASSER</span>
-                          <span className={`text-xs font-black font-mono ${data.waterTemperatureWarning ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {data.waterTemperatureWarning ? 'WARN' : 'OK'}
-                          </span>
-                        </div>
-                        <div className="bg-zinc-950 p-1.5 rounded-lg border border-zinc-900">
-                          <span className="text-zinc-500 block font-mono">ÖLDRUCK</span>
-                          <span className={`text-xs font-black font-mono ${data.oilPressureWarning ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {data.oilPressureWarning ? 'WARN' : 'OK'}
-                          </span>
-                        </div>
-                        <div className="bg-zinc-950 p-1.5 rounded-lg border border-zinc-900">
-                          <span className="text-zinc-500 block font-mono">BREMSLUFT</span>
-                          <span className={`text-xs font-black font-mono ${data.airPressureWarning ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {data.airPressureWarning ? 'WARN' : 'OK'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mode 4: Truck Fahrzeug-Info & Zustand */}
-                  {mfdMode === 4 && (
-                    <div className="w-full h-full flex flex-col justify-between p-3.5 rounded-xl border border-zinc-900 bg-black space-y-2">
-                      <span className="text-[9.5px] font-black uppercase text-amber-400 tracking-widest block border-b border-zinc-900 pb-1.5 font-mono">
-                        🚛 FAHRZEUG-STATUS & ZUSTAND
-                      </span>
-                      <div className="space-y-2 my-auto">
-                        <div className="bg-zinc-950 border border-zinc-900 p-2 rounded-xl flex justify-between items-center">
-                          <span className="text-xs font-black text-zinc-300 font-mono">MOTOR & GETRIEBE</span>
-                          <span className="text-xs font-mono font-black text-emerald-400">
-                            {(100 - data.wearTruck).toFixed(0)}% OK
-                          </span>
-                        </div>
-
-                        <div className="bg-zinc-950 border border-zinc-900 p-2 rounded-xl flex justify-between items-center">
-                          <span className="text-xs font-black text-zinc-300 font-mono">FRACHTSCHADEN</span>
-                          <span className={`text-xs font-mono font-black ${data.wearCargo && data.wearCargo > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {data.wearCargo ? `${data.wearCargo.toFixed(0)}%` : '0%'}
-                          </span>
-                        </div>
-
-                        <div className="bg-zinc-950 border border-zinc-900 p-2 rounded-xl flex justify-between items-center">
-                          <span className="text-xs font-black text-zinc-300 font-mono">FRACHT-STATUS</span>
-                          <span className="text-xs font-mono font-black text-amber-400 truncate max-w-[140px]">
-                            {data.cargo || 'KEINE LADUNG'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* MFD Mode Selector Tabs */}
-                <div className="grid grid-cols-5 gap-1 pt-2 shrink-0 border-t border-zinc-900 z-10">
-                  {[
-                    { id: 0, label: 'Karte', icon: MapPin },
-                    { id: 1, label: 'Musik', icon: Music },
-                    { id: 2, label: 'Trip', icon: Zap },
-                    { id: 3, label: 'Getriebe', icon: Settings },
-                    { id: 4, label: 'LKW', icon: Truck },
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = mfdMode === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setMfdMode(tab.id)}
-                        className={`py-1 px-1 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer border ${
-                          isActive
-                            ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
-                            : 'bg-zinc-950 border-zinc-900 text-zinc-600 hover:text-zinc-300'
-                        }`}
-                      >
-                        <Icon size={12} className={isActive ? 'text-amber-400' : 'text-zinc-600'} />
-                        <span className="text-[7.5px] font-black uppercase tracking-wider mt-0.5 font-mono">{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* === RIGHT WING: MINIMALIST TACHOMETER DIAL & GANG === */}
-              <div className="col-span-4 bg-black border border-zinc-900 rounded-2xl p-4 flex flex-col justify-between shadow-2xl relative overflow-hidden">
-                <div className="flex items-center justify-between border-b border-zinc-900 pb-2 z-10">
-                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-widest flex items-center gap-1.5 font-mono">
-                    <Zap size={14} /> DREHZAHL RPM
-                  </span>
-                  <span className={`text-[8.5px] font-mono font-black px-2 py-0.5 rounded border ${
-                    rpm > 1800
-                      ? 'text-rose-400 bg-rose-500/20 border-rose-500/50 animate-pulse'
-                      : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-                  }`}>
-                    {rpm > 1800 ? 'HIGH RPM' : 'ECO DRIVE'}
-                  </span>
-                </div>
-
-                {/* Minimalist Circular Tachometer Core */}
-                <div className="flex-1 flex flex-col items-center justify-center py-2 z-10">
-                  <div className="relative w-52 h-52 rounded-full border-2 border-zinc-800 bg-black flex flex-col items-center justify-center shadow-[0_0_40px_rgba(0,0,0,1)]">
-                    <span
-                      className="font-black text-white leading-none tracking-tighter font-mono tabular-nums no-cp-scale drop-shadow-[0_0_30px_rgba(255,255,255,0.4)]"
-                      style={{ fontSize: '72px', lineHeight: '1' }}
-                    >
-                      {Math.round(rpm)}
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mt-1 font-mono">RPM</span>
-
-                    {/* Integrated Digital Gear Badge */}
-                    <div className="mt-2 bg-amber-500/20 border border-amber-500/40 px-3.5 py-0.5 rounded-lg">
-                      <span className="text-base font-black text-amber-400 font-mono">
-                        {gear > 0 ? `D${gear}` : gear < 0 ? `R${Math.abs(gear)}` : 'N'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Minimalist RPM Bar */}
-                  <div className="w-full mt-4 space-y-1">
-                    <div className="flex gap-1 h-3 w-full bg-zinc-950 p-0.5 rounded border border-zinc-900">
-                      {Array.from({ length: 16 }).map((_, i) => {
-                        const activeBars = Math.round((Math.min(2500, rpm) / 2500) * 16);
-                        const isActive = i < activeBars;
-                        const isWarning = i >= 11;
-                        const isEco = i < 9;
-                        return (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-xs transition-all duration-150 ${
-                              isActive
-                                ? isWarning
-                                  ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
-                                  : isEco
-                                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                                  : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                                : 'bg-zinc-900/60'
-                            }`}
-                          />
-                        );
-                      })}
-                    </div>
-                    <div className="flex justify-between text-[8.5px] font-mono text-zinc-600 font-black px-0.5">
-                      <span>0</span>
-                      <span className="text-emerald-400">1000 ECO</span>
-                      <span>1800</span>
-                      <span className="text-rose-400">2500 RPM</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Minimalist Tank & Zustand Strip */}
-                <div className="space-y-2 bg-zinc-950 border border-zinc-900 rounded-xl p-2.5 z-10">
-                  <div>
-                    <div className="flex justify-between text-[8.5px] font-mono font-black text-zinc-300 mb-0.5">
-                      <span>TANK: {Math.round(data.fuel)}L</span>
-                      <span className="text-amber-400">{Math.round(data.fuelRange)} KM</span>
-                    </div>
-                    <div className="flex gap-0.5 h-2 w-full bg-black rounded-sm overflow-hidden p-0.5 border border-zinc-900">
-                      {Array.from({ length: 10 }).map((_, i) => {
-                        const activeBars = Math.round((Math.min(400, data.fuel) / 400) * 10);
-                        return (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-xs transition-all ${
-                              i < activeBars
-                                ? data.fuelWarning
-                                  ? 'bg-rose-500'
-                                  : 'bg-amber-400'
-                                : 'bg-zinc-900/40'
-                            }`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-[8.5px] font-mono font-black text-zinc-300 mb-0.5">
-                      <span>ZUSTAND</span>
-                      <span className={data.wearTruck > 10 ? 'text-rose-400' : 'text-emerald-400'}>
-                        {(100 - data.wearTruck).toFixed(0)}% OK
-                      </span>
-                    </div>
-                    <div className="flex gap-0.5 h-2 w-full bg-black rounded-sm overflow-hidden p-0.5 border border-zinc-900">
-                      {Array.from({ length: 10 }).map((_, i) => {
-                        const activeBars = Math.round((Math.max(0, 100 - data.wearTruck) / 100) * 10);
-                        return (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-xs transition-all ${
-                              i < activeBars
-                                ? data.wearTruck > 10
-                                  ? 'bg-rose-500'
-                                  : 'bg-emerald-400'
-                                : 'bg-zinc-900/40'
-                            }`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
       </AnimatePresence>
       </div>
 
@@ -5522,7 +5564,7 @@ export default function CarPlayPage() {
                         }}
                         className={`${flexClass} rounded-2xl border flex items-center justify-center transition-all cursor-pointer shadow-lg ${
                           isFocused
-                            ? 'ring-4 ring-amber-400 bg-amber-400 text-slate-950 font-black scale-[1.03] z-20 border-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.9)]'
+                            ? 'ring-4 ring-primary bg-primary text-[var(--primary-foreground)] font-black scale-[1.03] z-20 border-primary shadow-[0_0_25px_var(--primary-glow)]'
                             : 'bg-white/10 hover:bg-white/20 border-white/10 text-white'
                         }`}
                       >
@@ -5570,10 +5612,103 @@ export default function CarPlayPage() {
         )}
       </AnimatePresence>
 
-      {/* INSTANT CARPLAY BLACKOUT OVERLAY */}
-      {isBlackout && (
-        <div className="fixed inset-0 bg-black z-[9999999] pointer-events-auto cursor-none flex items-center justify-center select-none" />
+      {/* VEHICLE IGNITION STANDBY / SLEEP SCREEN */}
+      <AnimatePresence>
+        {isCarPlaySleeping && (
+          <motion.div
+            key="ignition-standby-screen"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            onClick={() => {
+              if (isBlackout) {
+                setIsBlackout(false);
+                setIsLoading(true);
+                setTimeout(() => setIsLoading(false), 700);
+              } else {
+                setManualWake(true);
+              }
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#020408',
+              zIndex: 9999990,
+            }}
+            className="flex flex-col items-center justify-between p-8 select-none cursor-pointer overflow-hidden font-['Outfit',sans-serif]"
+          >
+
+            {/* Ambient Background Aura */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-primary/[0.04] rounded-full blur-3xl pointer-events-none" style={{ zIndex: 1 }} />
+
+            {/* Top Bar: Vehicle Info & Status - hidden */}
+            <div className="w-full flex items-center justify-between z-10 max-w-4xl" style={{ display: 'none' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-primary">
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <div className="text-sm font-mono font-black text-white tracking-tight">
+                    {telemetry.brand ? `${data.brand} ${data.model || ''}` : 'FAHRZEUG-COCKPIT'}
+                  </div>
+                  <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                    Zündung ausgeschaltet • Standby-Modus
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 text-[9.5px] font-mono font-bold text-primary bg-primary/10 border border-primary/25 px-3 py-1 rounded-xl">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  ZÜNDUNG-STANDBY
+                </span>
+              </div>
+            </div>
+
+            {/* Center: Large Ambient Digital Clock */}
+            <div className="flex flex-col items-center justify-center text-center my-auto z-10">
+              <div className="text-7xl sm:text-8xl md:text-9xl font-black font-mono text-white/90 tracking-tight drop-shadow-[0_0_40px_rgba(255,255,255,0.12)]">
+                {timeString}
+              </div>
+              <div className="mt-3 text-xs sm:text-sm font-mono uppercase tracking-[0.25em] text-zinc-500 font-bold">
+                {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              </div>
+
+              {media && media.title && (
+                <div className="mt-7 flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/[0.04] border border-white/10 max-w-md shadow-xl backdrop-blur-md">
+                  <Music size={16} className="text-primary shrink-0" />
+                  <span className="text-xs font-mono text-zinc-300 truncate">
+                    {media.title} <span className="text-zinc-500">— {media.artist}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Footer: Wake Hint - hidden */}
+            <div className="flex items-center gap-2.5 text-[11px] font-mono text-zinc-400 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 px-5 py-2.5 rounded-2xl transition-all z-10 shadow-xl" style={{ display: 'none' }}>
+              <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+              <span>Bildschirm antippen zum temporären Aufwecken • Reaktiviert sich automatisch bei Zündung</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MANUAL WAKE PILL (When ignition is off but user manually woke the screen) */}
+      {manualWake && !isIgnitionOn && settings.carPlayIgnitionSleep && telemetry.connected && (
+        <button
+          onClick={() => setManualWake(false)}
+          className="fixed top-3 right-5 z-[99999] flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary text-xs font-mono font-bold shadow-2xl backdrop-blur-xl cursor-pointer transition-all active:scale-95"
+          title="CarPlay wieder in Standby versetzen"
+        >
+          <Zap size={13} className="text-primary" />
+          <span>Zündung aus • In Standby versetzen</span>
+        </button>
       )}
+
       </div>
 
     </>

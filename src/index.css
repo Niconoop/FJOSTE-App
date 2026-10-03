@@ -7,6 +7,14 @@ html, body, #root, .carplay-root {
   background-color: #000000 !important;
 }
 
+/* CarPlay Ignition-Standby sleep overlay – must be fully opaque to hide content behind clock */
+.carplay-standby-overlay {
+  background-color: #020408 !important;
+  z-index: 9999990 !important;
+  position: fixed !important;
+  inset: 0 !important;
+}
+
 @keyframes carplay-slide {
   0% { left: -50%; }
   100% { left: 100%; }
@@ -78,6 +86,7 @@ html, body, #root, .carplay-root {
   --card: rgba(10, 10, 10, 0.95);
   --border: rgba(255, 255, 255, 0.08);
   --primary: #f59e0b;
+  --primary-foreground: #020617;
   --app-glow-rgb: 245, 158, 11;
   --app-accent-rgb: 245, 158, 11;
   --primary-glow: rgba(245, 158, 11, 0.35);
@@ -106,6 +115,7 @@ body.is-overlay-body {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   --color-amber-50: color-mix(in srgb, var(--primary) 10%, #ffffff);
   --color-amber-100: color-mix(in srgb, var(--primary) 20%, #ffffff);
   --color-amber-200: color-mix(in srgb, var(--primary) 40%, #ffffff);
@@ -289,6 +299,52 @@ span[class*="bg-amber-"] {
 [class*="ring-amber-"],
 [class*="ring-[#f59e0b]"] {
   --tw-ring-color: var(--primary) !important;
+}
+
+/* All static & dynamic amber box-shadows, glows and halos across CarPlay & entire app */
+[class*="shadow-amber-"],
+[class*="shadow-[#f59e0b]"],
+[class*="shadow-[#F59E0B]"],
+[class*="shadow-["][class*="245,158,11"],
+[class*="shadow-["][class*="251,191,36"],
+[class*="shadow-["][class*="245, 158, 11"],
+[class*="shadow-["][class*="251, 191, 36"],
+[class*="shadow-["][class*="rgba(245"],
+[class*="shadow-["][class*="rgba(251"] {
+  --tw-shadow-color: var(--primary-glow) !important;
+  box-shadow: 0 0 20px var(--primary-glow) !important;
+}
+
+/* Drop-shadows */
+[class*="drop-shadow-["][class*="245,158,11"],
+[class*="drop-shadow-["][class*="251,191,36"],
+[class*="drop-shadow-["][class*="245, 158, 11"],
+[class*="drop-shadow-["][class*="251, 191, 36"],
+[class*="drop-shadow-["][class*="rgba(245"],
+[class*="drop-shadow-["][class*="rgba(251"] {
+  filter: drop-shadow(0 0 12px var(--primary-glow)) !important;
+}
+
+/* Background amber opacity variants (including 25, 35, arbitrary) */
+[class*="bg-amber-"][class*="/25"],
+[class*="bg-[#f59e0b]/25"] {
+  background-color: color-mix(in srgb, var(--primary) 25%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/35"],
+[class*="bg-[#f59e0b]/35"] {
+  background-color: color-mix(in srgb, var(--primary) 35%, transparent) !important;
+}
+[class*="bg-amber-"][class*="/[0."],
+[class*="bg-[#f59e0b]/[0."] {
+  background-color: color-mix(in srgb, var(--primary) 8%, transparent) !important;
+}
+
+/* Radial gradient glows */
+[class*="bg-[radial-gradient"][class*="245,158,11"],
+[class*="bg-[radial-gradient"][class*="251,191,36"],
+[class*="bg-[radial-gradient"][class*="245, 158, 11"],
+[class*="bg-[radial-gradient"][class*="251, 191, 36"] {
+  background-image: radial-gradient(circle at 30% 30%, var(--primary-glow), transparent 70%) !important;
 }
 
 /* Glow effects & arbitrary hover shadows — ALWAYS trigger BOTH luminous border AND glow across entire app */

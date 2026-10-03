@@ -2,6 +2,110 @@
  
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
  
+## [1.7.76] - 2026-10-01
+ 
+### 👁️ Kontrast-Korrektur (Dynamisches Primary-Foreground) & Pfeil-Hover im LKW-Dock
+  - **Dynamische Kontrast-Textfarbe (`--primary-foreground`) ([ThemeContext.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/context/ThemeContext.tsx), [index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Problem**: Bei dunklen Custom-Akzentfarben (z. B. Lila / Violett, Dunkelblau) war der Text auf aktiven Segment-Pills (`Diagnose 03`) und Buttons durch statisches `text-slate-950` (Tiefschwarz) nahezu unleserlich.
+    - **Luminanz-Berechnung in Echtzeit**: Anhand der wahrgenommenen Helligkeit (Luminance) der gewählten Akzentfarbe wird `--primary-foreground` automatisch ermittelt:
+      - Bei dunklen und mittleren Akzenten (Lila, Blau, Rot, Grün, etc.) schaltet die Schrift auf strahlendes Reinweiß (`#ffffff`).
+      - Bei sehr hellen Akzenten (z. B. leuchtendes Gelb / Standard-Amber) bleibt die Schrift kontrastreich tiefschwarz (`#020617`).
+    - **Aktive Kacheln & Buttons aktualisiert**: Der Segment-Umschalter im LKW-Tab (`Cockpit`, `Bordcomputer`, `Diagnose`), das LKW-Header-Icon, das Einstellungs-Icon, Sendersuche- und Steuer-Buttons nutzen nun durchgängig `text-[var(--primary-foreground)]`.
+  - **Letzter Amber-Hover am Weiter-Pfeil behoben ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Weiter-Pfeil (`›`) am rechten Rand des Automotive Cluster Docks hatte noch `hover:bg-amber-500/20` und `hover:text-amber-300` hinterlegt. Dieser nutzt nun konsistent `hover:bg-primary/20` und `hover:text-primary`.
+ 
+## [1.7.75] - 2026-10-01
+ 
+### 🎨 CarPlay Custom Theme & Glow Synchronisation
+  - **Dynamischer Custom Farbwert & Glow in allen CarPlay-Komponenten ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css))**:
+    - **Vollständige Umstellung auf `var(--primary)` & `var(--primary-glow)`**: Sämtliche hartcodierten Amber-/Bernstein-Glows (`rgba(245,158,11,...)`, `rgba(251,191,36,...)`, `shadow-amber-*`, `shadow-lg shadow-amber-500/25`) wurden durch dynamische CSS-Variablen ersetzt.
+    - **Mediaplayer & Timeline**: Fortschrittsbalken und Leuchteffekte im Windows SMTC-, Lokal- und Radio-Player richten sich nun nach der gewählten Akzentfarbe.
+    - **Digital Cockpit & Tacho**: Der Geschwindigkeitsbalken, die Ganganzeige (`D1`–`D18`) sowie das Drehzahlband leuchten im Custom Theme Glow statt im statischen Bernstein.
+    - **LKW-Tab & Automotive Cluster-Dock**: Aktive Segment-Pills (`Cockpit`, `Bordcomputer`, `Diagnose`), Navigationspfeile, Füllstandsbalken (Tank & LKW-Zustand) und Paginierungspunkte nutzen nun das konfigurierte Custom Theme samt Glow.
+    - **Radio-Sender & Sendersuche**: Fokusringe, aktive Sendermarkierungen und die Import-Schaltflächen adaptieren automatisch den Wunschfarbwert.
+    - **CarPlay Einstellungen, Virtuelle Tastatur & Zündungs-Standby**: Aktive Einstellungskacheln, Alert-Toggles, Tastaturtasten-Fokus sowie der schwebende Zündungs-Reaktivierungs-Pill und Ambient-Hintergrund-Auras strahlen in der personalisierten Akzentfarbe.
+  - **Fensterübergreifende Theme-Synchronisation ([main.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/main.tsx), [ThemeContext.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/context/ThemeContext.tsx))**:
+    - **ThemeProvider-Integration**: `CarPlayPage` ist nun in `main.tsx` fest im `<ThemeProvider>` eingebunden, sodass Farb-, Glow- und Modus-Änderungen aus den Haupteinstellungen sofort im CarPlay-Fenster ankommen.
+    - **Cross-Window Storage Listener**: Ein Event-Listener auf `openpipeclub_app_appearance` synchronisiert Theme- und Glow-Anpassungen in Echtzeit zwischen Hauptfenster, separatem CarPlay-Browser-Fenster und Overlay.
+ 
+## [1.7.74] - 2026-10-01
+ 
+### ⚡ Zündungs-Automatik (Auto-Sleep) & Überarbeiteter Seitenwechsel im LKW-Tab
+  - **CarPlay Zündungs-Koppelung & Automatischer Standby ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx), [telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs))**:
+    - **Echtzeit-Zündungserkennung**: Auslesen der SCS-Telemetrie-Kanäle `electricEnabled` (Offset 1575) und `engineEnabled` (Offset 1576) in der C#-Bridge sowie im Telemetrie-Stream. Zuverlässiger Fallback auf Motordrehzahl/Geschwindigkeit.
+    - **Einstellungs-Option**: Neuer Schalter *"Zündungs-Automatik (Standby)"* in den CarPlay-Einstellungen (`activeTab === 'settings'`) sowie in den App-Overlay-Einstellungen (`OverlaySettings.tsx`).
+    - **Authentischer Standby-Ruhezustand**:
+      - Schaltet sich die LKW-Zündung aus, wechselt CarPlay nach Wunsch in einen tiefschwarzen, augenschonenden Standby-Modus mit großer Digitaluhr, Datum, Fahrzeug-Info und dezentem Ambient-Glow.
+      - Sobald die Zündung im Spiel wieder eingeschaltet wird (`electricEnabled: true`), wacht CarPlay vollautomatisch mit flüssiger Startanimation auf.
+      - **Touch-to-Wake**: Ein Fingertipp auf den Standby-Bildschirm weckt das Dashboard auch bei ausgeschalteter Zündung temporär auf; ein schwebender Status-Pill erlaubt jederzeit das manuelle Zurückversetzen in den Standby.
+      - In den Einstellungen bleibt der Ruhezustand deaktiviert, damit Konfigurationen jederzeit ungestört vorgenommen werden können.
+  - **Neugestaltung des Seitenwechslers auf dem LKW-Tab ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Integriertes Automotive Cluster-Dock**: Die bisherigen getrennten kleinen Boxen wurden durch eine elegante, zusammenhängende Kapsel im High-End-Sportwagen-Look ersetzt.
+    - **3 Haptische Segment-Pills**:
+      - `01 • Cockpit` (Tacho, Drehzahl, Gang & Fahrdynamik)
+      - `02 • Bordcomputer` (Tank, Reichweite, Ø Verbrauch & Lenkzeit)
+      - `03 • Diagnose` (LKW- & Frachtzustand, Bremsdruck, Öldruck, Kühlwasser, Elektrik)
+      - Aktive Seite mit leuchtendem Bernstein-Gold-Farbverlauf (`from-amber-400 via-amber-500 to-amber-600`), tiefem Glanzschatten und hohem Kontrast.
+    - **Schwebende Seiten-Navigatoren**: Links und rechts am Bildschirmrand sitzen nun dezente Pfeil-Tasten (`‹` und `›`), über die man mit einem Klick oder Fingertipp überall im Cockpit bequem durchblättern kann.
+    - **Interaktive untere Paginierungsleiste**: Dreigeteilte Leiste am unteren Kartenrand mit animierten Leuchtstreifen zur schnellen Direktwahl der Seiten.
+ 
+## [1.7.73] - 2026-10-01
+ 
+### 🏎️ CarPlay Digital Cockpit Neugestaltung & Entfernung des Tacho-Popups
+  - **Fokussiertes Digital Cockpit Widget auf dem Home Tab ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Reines 3-Elemente-Layout**: Vollständig entschlackt auf die drei fahrrelevanten Kernwerte:
+      1. **Geschwindigkeit**: Große digitale Geschwindigkeitsanzeige (`KM/H`), interaktive Tempolimit-Plakette mit visueller Warnung (`isOverspeed`) und linearer Beschleunigungsleiste.
+      2. **Ganganzeige**: Prominente Gangkennzeichnung (`D1`–`D18`, `R`, `N`) mit intelligenter Farbcodierung (Amber für Drive, Rot für Reverse, Grün für Neutral) sowie Fahrstufen-Status (`VORWÄRTS`, `RÜCKWÄRTS`, `LEERLAUF`, `PARKBREMSE`).
+      3. **Drehzahl (RPM)**: Präzise numerische Live-Drehzahlanzeige (`U/MIN`), dynamische Zonen-Badges (`ECO ZONE`, `POWER`, `HIGH RPM`) und ein 20-Segment-LED-Drehzahlband mit Farbverlauf von Eco-Grün über Power-Gelb bis zum roten Drehzahlbegrenzer.
+    - Überflüssige Anzeigen (Zustand/Verschleiß, Restreichweite/Tank) wurden wie gewünscht aus dem Widget entfernt.
+  - **Entfernung des Tacho-Popups / Instrumentencluster-Modals ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Klick-Trigger (`onClick={() => setMaximizedWidget('diagnostics')}`) auf dem Widget wurde entfernt; das Widget agiert nun als reines, nicht-störendes Informationsinstrument.
+    - Das bisherige Vollbild-Tacho-Modal (`maximizedWidget === 'diagnostics'`) und dessen Tastaturnavigation wurden vollständig entfernt.
+  - **Multi-Page LKW-Tab mit maximal vergrößerter Typografie ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **3 spezialisierte Unterseiten statt überfülltem 6-Karten-Raster**:
+      1. **Seite 1: Cockpit & Antrieb**: Riesiger digitaler Tacho (84px Ziffern) mit Tempolimit-Schild, Tempomat-Pille und Beschleunigungsbalken links, riesige Ganganzeige (56px) sowie breites 24-Segment-LED-Drehzahlband mit Zonen-Labels rechts.
+      2. **Seite 2: Bordcomputer & Tank**: Großzügiges 2x2-Raster mit 52px-Zahlen für Tankstand (Liter mit 10-Stufen-Füllstandsbalken), Restreichweite (KM), Durchschnittsverbrauch (L/100km) und verbleibender Lenkzeit bis zur nächsten Pause.
+      3. **Seite 3: Diagnose & Zustand**: Große Schadens-Hero-Kacheln für LKW-Gesamtzustand (%) und Frachtsicherheit (Frachtgut-Name & Schaden %), plus 5 eigenständige Sensorkacheln für Öldruck, Kühlwasser, Bremsluftdruck, Bordelektrik und Handbremse.
+    - **Apple CarPlay Sub-Navigation**: Schnellumschalter mit Touch-Pills, Tastatur-/Rotary-Navigation sowie Vor-/Zurück-Pfeiltasten mit weichen Framer-Motion Slide-Übergängen. Zustands-Persistenz im `localStorage`.
+ 
+## [1.7.72] - 2026-10-01
+ 
+### 🧭 Detaillierte Onboarding-Tour für Karte, Galerie, Statistiken, AFK Bot & Overlay-Einstellungen
+  - **Präzise Spotlight-Fokussierung & Funktionserklärungen ([SpotlightTour.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/SpotlightTour.tsx))**:
+    - **Karte**: 4 separate Tour-Schritte für Live-Fahrerzähler & Refresh, Ebenen & Filter (Staus, Blitzer, 3D-Gelände/Kamera), Server-Wahl & Stau-Hotspots sowie die Fahrerliste mit TruckersMP-ID Ortung.
+    - **Galerie**: Erklärung des Upload-Bereichs mit Bildunterschrift und Mehrfachauswahl sowie der Community-Fotowand mit Uploader-Badges, Editieren, Löschen und Vollbild-Lightbox.
+    - **Statistiken**: Aufteilung in Flotten-Kennzahlen (Fahrer, Jobs, KM, Umsatz, Frachtgewicht, Level), Fahrer-Vergleichsdiagramme (KM & Umsatz) und Top-10-Fahrer-Rangliste mit Umsatzanteilen.
+    - **AFK Bot**: 3 Schritte für Status & Schutz vor Server-Kicks (Prüfung auf aktives Spielfenster), globale Hotkey- und Intervall-Konfiguration sowie getrennte Nachrichten-Pools für Fahrt vs. Rastplatzpause.
+    - **Overlay-Einstellungen**: 5 spezialisierte Schritte für die 4-Bereiche-Navigation (Tabs), Live-HUD-Vorschau mit Desktop-Modus und Drag & Drop, HUD-Stile & Widget-Auswahl, CarPlay-Display mit QR-Code/Netzwerkadresse für Tablets und TruckersMP UI-Customizer mit 1-Klick-Installation.
+  - **Reaktives Submenü- & Tab-Switching ([Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Per `opc-tour-step` klappen Kartenebenen und Seitenleiste automatisch auf, sobald der jeweilige Schritt aktiv ist, und in den Overlay-Einstellungen wechseln die Tabs (Overlay, CarPlay, TMP UI) passend zum Tour-Schritt.
+
+### 🗺️ Standalone Routenplaner & 4K-Bild-Export für das Event-Team
+  - **Routenplaner-Button für das Event-Team ([Events.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Events.tsx))**:
+    - Auf der Terminkalender-Seite steht berechtigten Rollen (`canManageEvents`) neben dem Button "Event planen" ab sofort der Schnellzugriff **"Routenplaner & Export"** zur Verfügung.
+  - **Metadaten-Formular für Veranstalter, Startzeit & Branding ([RoutePlannerExportModal.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlannerExportModal.tsx))**:
+    - Im neuen Routenplaner-Modal können Strecken geplant werden, ohne vorab ein Event in der Datenbank speichern zu müssen.
+    - Vollständiges Eingabeformular für Veranstalter/Organisator, Konvoititel, Startzeit & Datum (UTC-fähig mit Schnellwahltasten), Server, Spiel sowie Start-/Ziel-Städte und Firmen.
+    - Alle Eingaben werden reaktiv an den Routenplaner übergeben und live in das generierte 4K-Poster eingebunden.
+  - **Behebung von Wegpunkt-Verschiebungen & High-DPI-Skalierung ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Problem behoben**: `map.project` lieferte Pixelkoordinaten im logischen CSS-Raum des Containers. Die bisherige Division durch die Pufferbreite des Canvas (`mapCanvas.width`) ignorierte die Windows-Skalierung (`devicePixelRatio` 1.25 / 1.5). Dadurch waren Wegpunkte, Stadtpunkte und Badges auf dem gerenderten Bild um 25–50 % nach links oben verschoben.
+    - **DPI-unabhängige Projektion**: Division erfolgt nun strikt durch die CSS-Dimensionen des Containers (`cWidth`, `cHeight`). Alle Start-, End- und Zwischenwegpunkte sitzen nun absolut deckungsgleich auf den realen Straßenkreuzungen und Städten.
+  - **Keine Abdunklung der Route mehr & harmonischer Alpha-Fade-Out ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Maske um die Route besitzt nun einen breiten, zu 100 % deckenden Kern (`160 * S`, 320px in 4K), sodass die Routenlinie und direkte Nachbarstraßen niemals durch die Vignette abgedunkelt werden.
+    - Nach außen blendet die Karte über einen mehrstufigen Gaußschen Verlauf (`280 * S`, `450 * S`, `680 * S`) butterweich in den dunklen Scania-Truck-Hintergrund aus.
+    - Zusätzlich wird die Route auf dem 4K-Canvas mit einem hochbrillanten, neon-violetten Vektor-Glow (`shadowColor: #c084fc`, `shadowBlur: 24 * S`) überzeichnet, was maximale Helligkeit und Leuchtkraft garantiert.
+  - **Gestochene 4K-Städtenamen im TruckersMP-Look auf dem Endbild ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Problemursache**: Die MapLibre-Vektorebene (`ets2-cities`) verwendet Standard-Schriftarten (`Open Sans`), die auf dem hochskalierten 4K-Export unscharf wirkten und nicht der markanten Club- und TruckersMP-Typografie (`Unbounded`, weiße Netzknoten, tiefe Halos) entsprachen.
+    - **Intelligente Umschaltung beim Export**: Für den 4K-Export-Schnappschuss werden die WebGL-Stadtebenen kurzzeitig ausgeblendet (`visibility: 'none'`) und unmittelbar danach für die interaktive Routenplanung wieder eingeblendet.
+    - **Natives 4K Canvas 2D City Rendering (Step 4)**:
+      - Entlang des beleuchteten Korridors (`dist <= 480 * S`) werden alle relevanten Städte in nativer 3840×2160-Auflösung mit kreideweißem Netzknoten (`arc(px, py, 5.0 * S)`), schwarzer Kontur und 8px Drop Shadow gezeichnet.
+      - Die Städtenamen werden im exakten `800 "Unbounded"`-Schriftsatz mit 3.5px Kontur-Halo rechts neben dem Punkt (`x + 8.5 * S`) gerendert.
+      - Integrierte Bounding-Box-Kollisionsprüfung gegen Textüberlappungen; Duplikate direkt an `START`- und `END`-Pins werden unterdrückt, während Zwischenwegpunkte (z. B. #1 in Danzig) wie im Referenzbild mit Knoten und Namen erscheinen.
+      - **Bugfix (Variable Scope `projected`)**: `projected` auf Funktionsebene verschoben, wodurch der Laufzeitfehler `ReferenceError: projected is not defined` beim Berechnen der Routennähe behoben ist.
+  - **Direkter 4K-Routenbild Download & Export ([RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Der Vorschaudialog bietet nun einen direkten **"Bild herunterladen"**-Button zum lokalen Speichern des 4K-Routenposters (3840×2160 UHD) als JPEG.
+    - Eine Bildvorschau mit Download-Button wird nach der Generierung zudem direkt in der Metadaten-Leiste des Modals angezeigt.
+ 
 ## [1.7.71] - 2026-09-27
  
 ### 📷 Frühere Blitzer-Warnung, Overlay-HUD & Korrekter Verbrauch bei Tankstopps

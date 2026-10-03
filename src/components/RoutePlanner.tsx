@@ -7,7 +7,7 @@ import {
   X, MapPin, Trash2, ChevronUp, ChevronDown, Check, 
   Search, Camera, Loader2, Maximize2, Minimize2, 
   ArrowRight, Sparkles, Navigation, Plus, Flag,
-  RotateCcw, CheckCircle2, Image as ImageIcon
+  RotateCcw, CheckCircle2, Image as ImageIcon, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,6 +24,7 @@ import {
   findCity, 
   findClosestCity,
   COMMON_CITIES,
+  loadAllCities,
 } from '../data/ets2Cities';
 import type { DestinationSearchResult } from '../data/ets2Cities';
 
@@ -59,7 +60,7 @@ export interface RoutePlannerProps {
   onToggleFullscreen: (fullscreen: boolean) => void;
   initialWaypoints?: RouteWaypoint[];
   onWaypointsChange?: (waypoints: RouteWaypoint[]) => void;
-  onRouteGenerated: (file: File, meta: {
+  onRouteGenerated?: (file: File, meta: {
     distanceKm: number;
     durationMinutes: number;
     startCity: string;
@@ -76,6 +77,9 @@ export interface RoutePlannerProps {
     startCompany?: string;
     endCompany?: string;
   } | null;
+  onExportImage?: (file: File, meta: any) => void;
+  captureButtonText?: string;
+  hideCloseButton?: boolean;
 }
 
 const getElectronAPI = () => {
@@ -230,6 +234,55 @@ function createRoutePlannerStyle(): maplibregl.StyleSpecification {
           'line-opacity': 0.6,
         },
       },
+      {
+        id: 'ets2-cities-points',
+        type: 'circle',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'city']],
+        paint: {
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            3, 2,
+            5, 3,
+            8, 4.5,
+            11, 6
+          ],
+          'circle-color': '#ffffff',
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#090d16',
+        },
+      },
+      {
+        id: 'ets2-cities',
+        type: 'symbol',
+        source: 'ets2',
+        'source-layer': 'ets2',
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'city']],
+        layout: {
+          'text-field': ['coalesce', ['get', 'name:de'], ['get', 'name']],
+          'text-font': ['Open Sans Bold'],
+          'text-size': [
+            'interpolate', ['linear'], ['zoom'],
+            3, 8.5,
+            5, 11,
+            8, 13.5,
+            11, 16
+          ],
+          'text-anchor': 'left',
+          'text-offset': [0.65, 0],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'text-padding': 6,
+          'text-transform': 'uppercase',
+          'text-letter-spacing': 0.06,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#06080e',
+          'text-halo-width': 2.2,
+        },
+      },
     ],
   };
 }
@@ -250,6 +303,9 @@ export const RoutePlanner = ({
   onWaypointsChange,
   onRouteGenerated,
   generatedRouteMeta,
+  onExportImage,
+  captureButtonText,
+  hideCloseButton = false,
 }: RoutePlannerProps) => {
   const { appearance, effectiveGlowColor } = useTheme();
   const accentColor = appearance?.accentColor || '#f59e0b';
@@ -1172,10 +1228,23 @@ export const RoutePlanner = ({
         { padding: { top: 160, bottom: 200, left: 160, right: 420 }, duration: 0 }
       );
 
-      // Preload background truck image & club logo in parallel
-      const [bgImg, logoImg] = await Promise.all([
+      // Temporarily hide MapLibre vector city layers during export snapshot
+      // so they don't produce low-res Open Sans raster glyphs or double text under our 4K Unbounded typography
+      const hadCityLayer = !!map.getLayer('ets2-cities');
+      const hadCityPointLayer = !!map.getLayer('ets2-cities-points');
+      if (hadCityLayer) {
+        map.setLayoutProperty('ets2-cities', 'visibility', 'none');
+      }
+      if (hadCityPointLayer) {
+        map.setLayoutProperty('ets2-cities-points', 'visibility', 'none');
+      }
+      map.triggerRepaint();
+
+      // Preload background truck image, club logo, and all cities in parallel
+      const [bgImg, logoImg, allLoadedCities] = await Promise.all([
         loadCanvasImage('/images/home.webp'),
         loadCanvasImage('/logo.png'),
+        loadAllCities().catch(() => COMMON_CITIES),
       ]);
 
       // Wait for map render idle
@@ -1185,6 +1254,15 @@ export const RoutePlanner = ({
       });
 
       const mapCanvas = map.getCanvas();
+
+      // Restore MapLibre vector city layers for the live interactive map
+      if (hadCityLayer) {
+        map.setLayoutProperty('ets2-cities', 'visibility', 'visible');
+      }
+      if (hadCityPointLayer) {
+        map.setLayoutProperty('ets2-cities-points', 'visibility', 'visible');
+      }
+      map.triggerRepaint();
       const exportWidth = 3840;  // 4K
       const exportHeight = 2160; // 4K
 
@@ -1247,13 +1325,19 @@ export const RoutePlanner = ({
       const offsetX = (exportWidth - scaledW) / 2;
       const offsetY = (exportHeight - scaledH) / 2;
 
-      // Project function from map coordinates to 4K canvas pixels
+      // Container CSS dimensions matching MapLibre's CSS pixel projection space (vital for High-DPI screens)
+      const cWidth = container?.clientWidth || map.getContainer().clientWidth || (mapCanvas.width / (window.devicePixelRatio || 1));
+      const cHeight = container?.clientHeight || map.getContainer().clientHeight || (mapCanvas.height / (window.devicePixelRatio || 1));
+
+      // Project function from map coordinates to 4K canvas pixels with exact DPI-independent accuracy
       const project = (lng: number, lat: number): [number, number] => {
         const p = map.project([lng, lat]);
-        const px = (p.x / mapCanvas.width)  * scaledW + offsetX;
-        const py = (p.y / mapCanvas.height) * scaledH + offsetY;
+        const px = (p.x / cWidth)  * scaledW + offsetX;
+        const py = (p.y / cHeight) * scaledH + offsetY;
         return [px, py];
       };
+
+      const projected = routeLngLatCoords.map(([lng, lat]) => project(lng, lat));
 
       if (routeLngLatCoords.length >= 2) {
         // 1. Offscreen canvas for map at full opacity
@@ -1275,8 +1359,6 @@ export const RoutePlanner = ({
         mctx.lineJoin = 'round';
         mctx.strokeStyle = '#ffffff';
 
-        const projected = routeLngLatCoords.map(([lng, lat]) => project(lng, lat));
-
         const strokeRoute = () => {
           mctx.beginPath();
           projected.forEach(([px, py], i) => {
@@ -1286,25 +1368,59 @@ export const RoutePlanner = ({
           mctx.stroke();
         };
 
-        // Smooth continuous Gaussian-blurred corridor (no stepped rings, no color banding)
-        mctx.filter = `blur(${36 * S}px)`;
-        mctx.lineWidth = 140 * S;
-        strokeRoute();
-
-        mctx.filter = `blur(${14 * S}px)`;
-        mctx.lineWidth = 70 * S;
-        strokeRoute();
-
+        // Layer 1: Solid core (100% opaque, ZERO blur)
+        // Generous width of 160 * S (320px in 4K) ensures that the entire route line,
+        // highway curves, junctions and all road details stay 100% crystal-clear and NEVER get dimmed!
         mctx.filter = 'none';
-        mctx.lineWidth = 32 * S;
+        mctx.lineWidth = 160 * S;
         strokeRoute();
 
-        // Keep map pixels only where mask exists, fading down to 0% (garnicht mehr sichtbar)
+        // Layer 2: Inner soft blend corridor
+        mctx.filter = `blur(${24 * S}px)`;
+        mctx.lineWidth = 280 * S;
+        strokeRoute();
+
+        // Layer 3: Medium smooth scenic corridor revealing surrounding towns & roads
+        mctx.filter = `blur(${60 * S}px)`;
+        mctx.lineWidth = 450 * S;
+        strokeRoute();
+
+        // Layer 4: Wide atmospheric gradual fade out into deep black/scania backdrop
+        mctx.filter = `blur(${110 * S}px)`;
+        mctx.lineWidth = 680 * S;
+        strokeRoute();
+
+        // Apply alpha mask to map
         mapCtx.globalCompositeOperation = 'destination-in';
         mapCtx.drawImage(maskCanvas, 0, 0);
 
         // Draw masked map onto main canvas
         ctx.drawImage(maskedMapCanvas, 0, 0);
+
+        // Layer 5: High-intensity neon route glow rendered in native 4K vector format
+        // This completely eliminates any possibility of the route looking dim or washed out
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Outer ambient purple glow
+        ctx.shadowColor = '#c084fc';
+        ctx.shadowBlur = 24 * S;
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.85)';
+        ctx.lineWidth = 9 * S;
+        ctx.beginPath();
+        projected.forEach(([px, py], i) => {
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+
+        // Core bright neon purple line
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#f3e8ff';
+        ctx.lineWidth = 3.5 * S;
+        ctx.stroke();
+        ctx.restore();
       } else {
         ctx.drawImage(mapCanvas, offsetX, offsetY, scaledW, scaledH);
       }
@@ -1321,86 +1437,173 @@ export const RoutePlanner = ({
       const [startPx, startPy] = project(actualStartCoord[0], actualStartCoord[1]);
       const [endPx, endPy] = project(actualEndCoord[0], actualEndCoord[1]);
 
-      // City label resolver helper: falls back to closest real city if depot code (e.g. 'ai', 'euroacres')
+      // City label resolver helper: resolves city name based on actual geographic coordinate and waypoint info
       const resolveCityLabel = (inputCity: string | undefined, coord: [number, number], wp?: { name?: string }) => {
-        const raw = (inputCity || wp?.name || '').trim();
-        const isDepotOrCompany = /^(ai|posped|euroacres|transinet|itcc|bcp|sanbuilders|fcp|nbfc|tree-et|tradeaux|sellplan|kaarnso|waypoint|wegpunkt)$/i.test(raw);
-        if (raw && !isDepotOrCompany && raw.length > 2) {
-          return raw.toUpperCase().replace(/\s*AM\s+.*$/, '');
-        }
-        let closest = '';
+        const wpName = (wp?.name || '').trim();
+        const isGenericWp = /^wegpunkt\s*\d*$/i.test(wpName);
+        const isDepot = /^(ai|posped|euroacres|transinet|itcc|bcp|sanbuilders|fcp|nbfc|tree-et|tradeaux|sellplan|kaarnso)$/i.test(wpName);
+
+        // Find nearest city in ETS2 data to actual coordinate
+        let nearestCity = '';
         let minD = Infinity;
         for (const c of COMMON_CITIES) {
           const d = Math.hypot(c.lng - coord[0], c.lat - coord[1]);
           if (d < minD) {
             minD = d;
-            closest = c.realName;
+            nearestCity = c.realName;
           }
         }
-        if (closest && minD < 1.4) {
-          return closest.toUpperCase().replace(/\s*AM\s+.*$/, '');
+
+        // If the waypoint has a legitimate real city name, prioritize that
+        if (wpName && !isGenericWp && !isDepot && wpName.length > 2) {
+          return wpName.toUpperCase().replace(/\s*AM\s+.*$/, '');
         }
-        return raw.toUpperCase().replace(/\s*AM\s+.*$/, '');
+
+        // If inputCity is provided and reasonably close (< 2.0 degrees ~ 150km) to this pin, use inputCity
+        if (inputCity && inputCity.trim()) {
+          const cleanInput = inputCity.trim();
+          if (nearestCity && cleanInput.toLowerCase() === nearestCity.toLowerCase()) {
+            return cleanInput.toUpperCase().replace(/\s*AM\s+.*$/, '');
+          }
+          if (minD < 1.5) {
+            return cleanInput.toUpperCase().replace(/\s*AM\s+.*$/, '');
+          }
+        }
+
+        // Otherwise use nearest city from coordinates
+        if (nearestCity && minD < 2.5) {
+          return nearestCity.toUpperCase().replace(/\s*AM\s+.*$/, '');
+        }
+
+        return (inputCity || wpName || '').toUpperCase().replace(/\s*AM\s+.*$/, '');
       };
 
       const sCity = resolveCityLabel(startCity, actualStartCoord, waypoints[0]);
       const eCity = resolveCityLabel(endCity, actualEndCoord, waypoints[waypoints.length - 1]);
 
-      // ── Step 4: Draw Schematic Cities along the Route (TruckersMP Style) ──
-      const citiesPool = COMMON_CITIES;
-      // Only keep cities that fall within the visible corridor so distant cities don't float where map is 0% invisible
-      const visibleCities = citiesPool.filter(c => {
-        if (c.lng < minLng - 1.4 || c.lng > maxLng + 1.4 || c.lat < minLat - 0.9 || c.lat > maxLat + 0.9) {
-          return false;
+      // ── Step 4: Stylized Schematic City Nodes & Typography (Exact TruckersMP 4K Style) ──
+      const citiesToRender: { name: string; px: number; py: number; dist: number; isCommon: boolean }[] = [];
+      const cityPool = (allLoadedCities && allLoadedCities.length > 0) ? allLoadedCities : COMMON_CITIES;
+
+      // 1. Gather all candidate cities that fall inside the export poster boundaries and near the illuminated corridor
+      const margin = 40 * S;
+      for (const c of cityPool) {
+        const [cpx, cpy] = project(c.lng, c.lat);
+        if (cpx < margin || cpx > exportWidth - margin || cpy < margin || cpy > exportHeight - margin) {
+          continue;
         }
+
+        // Calculate minimum distance to route line (or to start/end if route is short)
         let minD = Infinity;
-        for (const [rLng, rLat] of routeLngLatCoords) {
-          const d = Math.hypot(c.lng - rLng, c.lat - rLat);
-          if (d < minD) minD = d;
+        if (projected.length > 0) {
+          for (let i = 0; i < projected.length; i += 3) {
+            const d = Math.hypot(projected[i][0] - cpx, projected[i][1] - cpy);
+            if (d < minD) minD = d;
+          }
+        } else {
+          minD = Math.min(
+            Math.hypot(cpx - startPx, cpy - startPy),
+            Math.hypot(cpx - endPx, cpy - endPy)
+          );
         }
-        return minD <= 1.25; // within ~130km corridor of route
+
+        // Only show cities within the illuminated scenic corridor (~480 * S)
+        if (minD > 480 * S) continue;
+
+        // Skip cities directly beneath START or END pins if they correspond to the start/end city
+        const distToStart = Math.hypot(cpx - startPx, cpy - startPy);
+        const distToEnd = Math.hypot(cpx - endPx, cpy - endPy);
+        const normName = c.realName.toLowerCase();
+        if (distToStart < 65 * S || (distToStart < 120 * S && sCity && normName === sCity.toLowerCase())) {
+          continue;
+        }
+        if (distToEnd < 65 * S || (distToEnd < 120 * S && eCity && normName === eCity.toLowerCase())) {
+          continue;
+        }
+
+        const isCommon = COMMON_CITIES.some(cc => cc.gameName === c.gameName || cc.realName.toLowerCase() === normName);
+        citiesToRender.push({
+          name: c.realName.toUpperCase().replace(/\s*AM\s+.*$/, ''),
+          px: cpx,
+          py: cpy,
+          dist: minD,
+          isCommon,
+        });
+      }
+
+      // Sort candidate cities: Common/major cities first, then closest to route
+      citiesToRender.sort((a, b) => {
+        if (a.isCommon !== b.isCommon) return a.isCommon ? -1 : 1;
+        return a.dist - b.dist;
       });
 
-      visibleCities.forEach(city => {
-        const [cpx, cpy] = project(city.lng, city.lat);
-        if (cpx < 80 * S || cpx > exportWidth - 80 * S || cpy < 80 * S || cpy > exportHeight - 160 * S) return;
+      // 2. Collision avoidance and drawing
+      interface BoundingBox {
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+      }
+      const placedBoxes: BoundingBox[] = [];
 
-        // Skip city if it is directly at Start or End (the START/END badges already display the city)
-        if (Math.hypot(cpx - startPx, cpy - startPy) < 90 * S) return;
-        if (Math.hypot(cpx - endPx, cpy - endPy) < 90 * S) return;
+      ctx.save();
+      ctx.font = `800 ${12.5 * S}px "Unbounded", system-ui, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
 
-        // Smoothly fade city near outer corridor edge
-        let minD = Infinity;
-        for (const [rLng, rLat] of routeLngLatCoords) {
-          const d = Math.hypot(city.lng - rLng, city.lat - rLat);
-          if (d < minD) minD = d;
-        }
-        const cityAlpha = minD <= 0.8 ? 1.0 : Math.max(0.15, 1.0 - (minD - 0.8) / 0.45);
+      for (const city of citiesToRender) {
+        const textW = ctx.measureText(city.name).width;
+        const boxX = city.px - 6 * S;
+        const boxY = city.py - 12 * S;
+        const boxW = 6 * S + 8.5 * S + textW + 12 * S;
+        const boxH = 24 * S;
 
+        // Check collision against already placed city labels
+        const collides = placedBoxes.some(
+          b => boxX < b.x + b.w && boxX + boxW > b.x && boxY < b.y + b.h && boxY + boxH > b.y
+        );
+        if (collides) continue;
+
+        placedBoxes.push({ x: boxX, y: boxY, w: boxW, h: boxH });
+
+        // Draw white circular node dot with dark border and shadow (exact TruckersMP design)
         ctx.save();
-        ctx.globalAlpha = cityAlpha;
-
-        // Solid white node with dark border
-        ctx.shadowColor = 'rgba(0,0,0,0.85)';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
         ctx.shadowBlur = 8 * S;
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(cpx, cpy, 5.5 * S, 0, Math.PI * 2);
+        ctx.arc(city.px, city.py, 5.0 * S, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#0f172a';
+
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#090d16';
         ctx.lineWidth = 1.8 * S;
         ctx.stroke();
-
-        // City uppercase clean label (e.g. FRANKFURT AM MAIN -> FRANKFURT)
-        const cityName = city.realName.toUpperCase().replace(/\s*AM\s+.*$/, '');
-        ctx.font = `800 ${13 * S}px "Unbounded", system-ui, sans-serif`;
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#000000';
-        ctx.shadowBlur = 10 * S;
-        ctx.shadowOffsetY = 2 * S;
-        ctx.fillText(cityName, cpx + 10 * S, cpy - 6 * S);
         ctx.restore();
-      });
+
+        // Draw city name in bold uppercase Unbounded font with crisp dark halo
+        ctx.save();
+        ctx.font = `800 ${12.5 * S}px "Unbounded", system-ui, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+
+        const textX = city.px + 8.5 * S;
+        const textY = city.py;
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 8 * S;
+        ctx.shadowOffsetY = 1 * S;
+        ctx.strokeStyle = '#06080e';
+        ctx.lineWidth = 3.5 * S;
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+        ctx.strokeText(city.name, textX, textY);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(city.name, textX, textY);
+        ctx.restore();
+      }
+      ctx.restore();
 
       // ── Step 5: Unified Premium Navigation Pin Markers (START & END) ──
       const drawPinMarker = (
@@ -1774,6 +1977,13 @@ export const RoutePlanner = ({
       }
 
       if (mapRef.current) {
+        if (mapRef.current.getLayer('ets2-cities')) {
+          mapRef.current.setLayoutProperty('ets2-cities', 'visibility', 'visible');
+        }
+        if (mapRef.current.getLayer('ets2-cities-points')) {
+          mapRef.current.setLayoutProperty('ets2-cities-points', 'visibility', 'visible');
+        }
+
         const c = mapRef.current.getCenter();
         savedCenterRef.current = [c.lng, c.lat];
         savedZoomRef.current = mapRef.current.getZoom();
@@ -1785,12 +1995,43 @@ export const RoutePlanner = ({
     }
   };
 
+  const handleDownloadImage = (file: File, meta: any) => {
+    try {
+      const sCity = meta.startCity || startCity || 'Start';
+      const eCity = meta.endCity || endCity || 'Ziel';
+      const rawTitle = (eventTitle || `${sCity}_nach_${eCity}`).trim();
+      const safeTitle = rawTitle.replace(/[^a-zA-Z0-9_\-\u00C0-\u017F]/g, '_');
+      const filename = `OPC_${safeTitle}_4K_Route.jpg`;
+
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+      onExportImage?.(file, meta);
+      toast.success('4K-Routenbild wird heruntergeladen!', {
+        description: filename,
+      });
+    } catch (err: any) {
+      toast.error(`Download fehlgeschlagen: ${err.message || 'Unbekannter Fehler'}`);
+    }
+  };
+
   const confirmPreview = () => {
     if (!previewPending) return;
-    onRouteGenerated(previewPending.file, previewPending.meta);
+    if (onRouteGenerated) {
+      onRouteGenerated(previewPending.file, previewPending.meta);
+    }
+    if (onExportImage) {
+      onExportImage(previewPending.file, previewPending.meta);
+    }
     URL.revokeObjectURL(previewPending.previewUrl);
     setPreviewPending(null);
-    if (isFullscreen) onToggleFullscreen(false);
+    if (isFullscreen && !hideCloseButton) onToggleFullscreen(false);
     toast.success('Routengrafik übernommen!');
   };
 
@@ -1873,23 +2114,34 @@ export const RoutePlanner = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <button
                   type="button"
                   onClick={discardPreview}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
                 >
                   <RotateCcw size={13} />
                   Nochmal
                 </button>
                 <button
                   type="button"
-                  onClick={confirmPreview}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
+                  onClick={() => handleDownloadImage(previewPending.file, previewPending.meta)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
+                  title="Hochauflösendes 4K-Bild (3840x2160) herunterladen"
                 >
-                  <CheckCircle2 size={13} />
-                  Übernehmen
+                  <Download size={13} />
+                  Bild herunterladen
                 </button>
+                {onRouteGenerated && (
+                  <button
+                    type="button"
+                    onClick={confirmPreview}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
+                  >
+                    <CheckCircle2 size={13} />
+                    Übernehmen
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1957,20 +2209,22 @@ export const RoutePlanner = ({
               ) : (
                 <>
                   <Camera size={15} />
-                  Route als Bild übernehmen
+                  {captureButtonText || 'Route als Bild übernehmen'}
                 </>
               )}
             </button>
 
-            <button
-              type="button"
-              onClick={() => onToggleFullscreen(false)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/15 border border-white/15 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer ml-1"
-              title="Modal schließen (Esc)"
-            >
-              <X size={15} />
-              <span className="hidden sm:inline">Schließen</span>
-            </button>
+            {!hideCloseButton && (
+              <button
+                type="button"
+                onClick={() => onToggleFullscreen(false)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/15 border border-white/15 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer ml-1"
+                title="Modal schließen (Esc)"
+              >
+                <X size={15} />
+                <span className="hidden sm:inline">Schließen</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -2329,7 +2583,7 @@ export const RoutePlanner = ({
           ) : (
             <>
               <Camera size={14} />
-              Route als Bild übernehmen
+              {captureButtonText || 'Route als Bild übernehmen'}
             </>
           )}
         </button>

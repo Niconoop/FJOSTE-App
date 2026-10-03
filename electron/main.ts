@@ -2345,6 +2345,7 @@ let activeJobCargoMass = 0;
 
 async function handleTrackingLogic(current: any, prev: any) {
   if (!current.connected) return;
+  if (!userToken) return;
 
   // Periodically poll TruckersMP session for Discord RPC
   pollTruckersMPSession();
@@ -2926,6 +2927,22 @@ ipcMain.on('set-auth-token', (_, token) => {
   userToken = token;
   if (token) {
     processOfflineJobQueue().catch(() => {});
+    if (overlaySettings && overlaySettings.showCarPlay) {
+      createCarPlayWindow();
+    }
+    if (isOverlayActive) {
+      syncOverlayWindows();
+    }
+    registerCarPlayHotkeys();
+    startCarPlayHttpServer(8383);
+  } else {
+    closeCarPlayWindow();
+    unregisterCarPlayHotkeys();
+    stopCarPlayHttpServer();
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      overlayWin.hide();
+    }
+    updateOverlayStatus();
   }
 });
 
@@ -2957,8 +2974,8 @@ function updateOverlayStatus() {
 function updateOverlayWindowVisibility(data: any) {
   if (!overlayWin || overlayWin.isDestroyed()) return;
 
-  // If overlay is disabled globally, keep it hidden
-  if (!isOverlayActive) {
+  // If overlay is disabled globally or user is not logged in, keep it hidden
+  if (!userToken || !isOverlayActive) {
     if (overlayWin.isVisible()) {
       overlayWin.hide();
     }
@@ -2999,6 +3016,7 @@ function updateOverlayWindowVisibility(data: any) {
 }
 
 function createSingleOverlayWindow() {
+  if (!userToken) return;
   if (overlayWin && !overlayWin.isDestroyed()) {
     updateOverlayWindowVisibility(telemetryData);
     return;
@@ -3078,7 +3096,7 @@ function createSingleOverlayWindow() {
 }
 
 function syncOverlayWindows() {
-  if (!isOverlayActive) {
+  if (!userToken || !isOverlayActive) {
     if (overlayWin && !overlayWin.isDestroyed()) {
       overlayWin.hide();
     }
@@ -3160,7 +3178,7 @@ try {
 
 let lastCarPlayHotkeys: Record<string, string> = {};
 
-function registerCarPlayHotkeys() {
+function unregisterCarPlayHotkeys() {
   Object.values(lastCarPlayHotkeys).forEach(hk => {
     if (hk) {
       try {
@@ -3171,8 +3189,12 @@ function registerCarPlayHotkeys() {
     }
   });
   lastCarPlayHotkeys = {};
+}
 
-  if (!overlaySettings.showCarPlay) return;
+function registerCarPlayHotkeys() {
+  unregisterCarPlayHotkeys();
+
+  if (!userToken || !overlaySettings.showCarPlay) return;
 
   const keys = overlaySettings.carPlayHotkeys || {
     toggle: 'F9',
@@ -3287,6 +3309,7 @@ function registerCarPlayHotkeys() {
 }
 
 function toggleCarPlayWindow() {
+  if (!userToken) return;
   if (!carplayWin || carplayWin.isDestroyed()) {
     overlaySettings.showCarPlay = true;
     saveSettings();
@@ -3301,10 +3324,12 @@ function toggleCarPlayWindow() {
 
 // RAM optimization: create window in-process instead of spawning a duplicate electron.exe
 function spawnCarPlayProcess() {
+  if (!userToken) return;
   createCarPlayWindow();
 }
 
 function createCarPlayWindow() {
+  if (!userToken) return;
   if (carplayWin && !carplayWin.isDestroyed()) {
     if (!carplayWin.isVisible()) {
       carplayWin.showInactive();
@@ -3719,6 +3744,7 @@ let captureInterval: NodeJS.Timeout | null = null;
 let isCapturing = false;
 
 function startCaptureLoop() {
+  if (!userToken) return;
   if (captureInterval) return;
 
   if (!carplayWin || carplayWin.isDestroyed()) {
@@ -4314,8 +4340,34 @@ function handleCarPlayHttpRequest(req: http.IncomingMessage, res: http.ServerRes
   serveDistFile(rawUrl, res);
 }
 
+function stopCarPlayHttpServer() {
+  for (const client of carplaySseClients) {
+    try { client.end(); } catch {}
+  }
+  carplaySseClients.clear();
+
+  for (const client of mjpegClients) {
+    try { client.end(); } catch {}
+  }
+  mjpegClients.clear();
+
+  if (captureInterval) {
+    clearInterval(captureInterval);
+    captureInterval = null;
+  }
+
+  if (carplayServer) {
+    try {
+      carplayServer.close();
+      writeToLog('CarPlay Server stopped');
+    } catch {}
+    carplayServer = null;
+  }
+}
+
 function startCarPlayHttpServer(port = 8383) {
   if (isCarPlayMode) return;
+  if (!userToken) return;
   if (carplayServer) return;
 
   const server = http.createServer((req, res) => {
@@ -5072,7 +5124,7 @@ ipcMain.handle('check-app-update', async () => {
 });
 
 function downloadAndApplyUpdate(url: string, event: any) {
-  const tempUpdatePath = path.join(app.getPath('temp'), 'Open Pipe Club-Tracker-Update.exe');
+  const tempUpdatePath = path.join(app.getPath('temp'), 'Open Pipe Club App Setup.exe');
 
   if (fs.existsSync(tempUpdatePath)) {
     try {
@@ -5146,52 +5198,22 @@ function downloadAndApplyUpdate(url: string, event: any) {
     }
 
     try {
-      const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
-      const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
-      const exeName = path.basename(targetExe);
-      const updateBatPath = path.join(app.getPath('temp'), 'openpipeclub_update.bat');
-
-      let batContent = '';
-      if (isPortable) {
-        batContent = `@echo off
-timeout /t 2 /nobreak > NUL
-taskkill /f /im "${exeName}" > NUL 2>&1
-:loop
-copy /Y "${tempUpdatePath}" "${targetExe}" > NUL
-if %errorlevel% neq 0 (
-  timeout /t 1 /nobreak > NUL
-  goto loop
-)
-start "" "${targetExe}"
-del "%~f0"
-`;
-      } else {
-        batContent = `@echo off
-timeout /t 2 /nobreak > NUL
-taskkill /f /im "${exeName}" > NUL 2>&1
-timeout /t 1 /nobreak > NUL
-start "" "${tempUpdatePath}"
-del "%~f0"
-`;
-      }
-
-      fs.writeFileSync(updateBatPath, batContent, 'utf8');
-
-      const child = spawn('cmd.exe', ['/c', updateBatPath], {
+      // Direktes Starten des NSIS-Installationsassistenten ohne cmd.exe oder .bat
+      // Verhindert zu 100% das unschöne, kurz aufploppende schwarze CMD-Konsolenfenster!
+      const child = spawn(tempUpdatePath, [], {
         detached: true,
-        windowsHide: true,
         stdio: 'ignore'
       });
       child.unref();
 
-      event.sender.send('install-update-progress', { progress: 100, status: 'Update wird installiert. Starte neu...', success: true });
+      event.sender.send('install-update-progress', { progress: 100, status: 'Installationsassistent wird gestartet...', success: true });
 
       setTimeout(() => {
         app.quit();
       }, 1000);
     } catch (err: any) {
-      console.error('Failed to run update script:', err);
-      event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Neustart: ${err.message}`, error: true });
+      console.error('Failed to run update installer:', err);
+      event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Starten des Installers: ${err.message}`, error: true });
     }
   });
 
@@ -5219,13 +5241,13 @@ ipcMain.on('install-app-update', async (event) => {
     res.on('end', () => {
       try {
         const manifest = JSON.parse(data);
-        const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
-        let downloadUrl = isPortable ? manifest.portableUrl : manifest.downloadUrl;
+        // Für Updates wird immer der saubere NSIS Setup-Installer verwendet,
+        // sodass auch in der Portable-Version das vollwertige Installationsfenster
+        // ohne jegliche CMD-Fenster-Pops erscheint.
+        let downloadUrl = manifest.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
 
-        if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download')) {
-          downloadUrl = isPortable
-            ? 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/portable.exe'
-            : 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/setup.exe';
+        if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download') || downloadUrl.endsWith('portable.exe') || downloadUrl.endsWith('setup.exe')) {
+          downloadUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
         }
 
         event.sender.send('install-update-progress', { progress: 20, status: 'Starte Download von Cloudflare R2...' });
@@ -5264,16 +5286,8 @@ app.whenReady().then(async () => {
 
   createSplashScreen();
   createWindow();
-  if (isOverlayActive) {
-    syncOverlayWindows();
-  }
-  if (overlaySettings && overlaySettings.showCarPlay) {
-    spawnCarPlayProcess();
-  }
-  if (!isCarPlayMode) {
-    registerCarPlayHotkeys();
-    startCarPlayHttpServer(8383);
-  }
+  // CarPlay, Overlay, HTTP Server, and Hotkeys are strictly initialized
+  // once the user logs in via 'set-auth-token'.
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

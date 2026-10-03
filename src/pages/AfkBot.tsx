@@ -106,7 +106,7 @@ const AfkBot = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
         {/* Left sidebar: Status + Hinweis */}
-        <div id="tour-afkbot-card" className="lg:col-span-4 space-y-6 lg:sticky lg:top-28">
+        <div id="tour-afkbot-status" className="lg:col-span-4 space-y-6 lg:sticky lg:top-28">
           <div className="frosted-card flex flex-col items-center text-center p-8 border border-white/5 bg-[#000000] border-2 border-primary/20 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] ${running ? 'bg-primary/20 text-primary shadow-primary/30 animate-pulse' : 'bg-white/5 text-slate-500'}`}>
               <Bot size={48} />
@@ -138,7 +138,7 @@ const AfkBot = () => {
 
         {/* Right main: Configuration + Nachrichten-Pools */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="frosted-card space-y-8 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
+          <div id="tour-afkbot-config" className="frosted-card space-y-8 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-2 border-b border-white/5 pb-4">
               <Settings size={18} className="text-primary" />
               <h2 className="font-unbounded font-bold text-sm text-white uppercase italic tracking-widest">
@@ -221,7 +221,7 @@ const AfkBot = () => {
             </div>
           </div>
 
-          <div className="frosted-card space-y-4 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
+          <div id="tour-afkbot-messages" className="frosted-card space-y-4 border border-white/5 bg-[#000000] border-2 border-primary/20 p-6 md:p-8 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-2 pb-2">
               <MessageSquare size={16} className="text-primary" />
               <h3 className="font-unbounded font-bold text-xs text-white uppercase italic tracking-widest">

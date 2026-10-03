@@ -87,19 +87,25 @@ try {
     npx wrangler r2 object put "open-pipe-club-storage/releases/latest.json" --file="dist-app/latest.json" --remote
 
     if (Test-Path "dist-app/Open Pipe Club App Setup.exe") {
-        write-host "Lade releases/latest/setup.exe zu R2..."
+        write-host "Lade Open Pipe Club App Setup.exe zu R2..."
+        npx wrangler r2 object put "open-pipe-club-storage/Open Pipe Club App Setup.exe" --file="dist-app/Open Pipe Club App Setup.exe" --remote
+        npx wrangler r2 object put "open-pipe-club-storage/releases/latest/Open Pipe Club App Setup.exe" --file="dist-app/Open Pipe Club App Setup.exe" --remote
         npx wrangler r2 object put "open-pipe-club-storage/releases/latest/setup.exe" --file="dist-app/Open Pipe Club App Setup.exe" --remote
+        npx wrangler r2 object put "open-pipe-club-storage/releases/v$version/Open Pipe Club App Setup.exe" --file="dist-app/Open Pipe Club App Setup.exe" --remote
         npx wrangler r2 object put "open-pipe-club-storage/releases/v$version/setup.exe" --file="dist-app/Open Pipe Club App Setup.exe" --remote
-        write-host "[OK] Setup.exe hochgeladen."
+        write-host "[OK] Setup.exe / Open Pipe Club App Setup.exe hochgeladen."
     } else {
         write-warning "Setup.exe nicht in dist-app/ gefunden."
     }
 
     if (Test-Path "dist-app/Open Pipe Club App.exe") {
-        write-host "Lade releases/latest/portable.exe zu R2..."
+        write-host "Lade Open Pipe Club App.exe zu R2..."
+        npx wrangler r2 object put "open-pipe-club-storage/Open Pipe Club App.exe" --file="dist-app/Open Pipe Club App.exe" --remote
+        npx wrangler r2 object put "open-pipe-club-storage/releases/latest/Open Pipe Club App.exe" --file="dist-app/Open Pipe Club App.exe" --remote
         npx wrangler r2 object put "open-pipe-club-storage/releases/latest/portable.exe" --file="dist-app/Open Pipe Club App.exe" --remote
+        npx wrangler r2 object put "open-pipe-club-storage/releases/v$version/Open Pipe Club App.exe" --file="dist-app/Open Pipe Club App.exe" --remote
         npx wrangler r2 object put "open-pipe-club-storage/releases/v$version/portable.exe" --file="dist-app/Open Pipe Club App.exe" --remote
-        write-host "[OK] Portable.exe hochgeladen."
+        write-host "[OK] Portable.exe / Open Pipe Club App.exe hochgeladen."
     } else {
         write-warning "Portable.exe nicht in dist-app/ gefunden."
     }

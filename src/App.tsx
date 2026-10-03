@@ -645,12 +645,6 @@ function App() {
 
   const getAvatarUrlLocal = (url?: string) => getAvatarUrl(url);
 
-  const isOverlay = window.location.hash.startsWith('#overlay');
-
-  if (isOverlay) {
-    return <OverlayPage telemetry={telemetry} />;
-  }
-
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center">
       <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6" />
@@ -661,6 +655,12 @@ function App() {
   if (!user) {
     if (showRegister) return <Register onSwitchToLogin={() => setShowRegister(false)} />;
     return <Login onSwitchToRegister={() => setShowRegister(true)} />;
+  }
+
+  const isOverlay = window.location.hash.startsWith('#overlay');
+
+  if (isOverlay) {
+    return <OverlayPage telemetry={telemetry} />;
   }
 
   const isAdmin = (user as any)?.is_admin || user?.role?.isAdmin || user?.role === 'admin';

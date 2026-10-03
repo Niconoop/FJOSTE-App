@@ -18,7 +18,8 @@ const Login = ({ onSwitchToRegister }: { onSwitchToRegister: () => void }) => {
       await login(username, password);
       toast.success("Erfolgreich angemeldet!");
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Login fehlgeschlagen. Prüfe deine Zugangsdaten.");
+      const msg = err.response?.data?.error || err.response?.data?.detail || (typeof err.response?.data === 'string' && err.response.data.length < 150 ? err.response.data : null) || "Login fehlgeschlagen. Prüfe deine Zugangsdaten.";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }

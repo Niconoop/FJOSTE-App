@@ -99,9 +99,11 @@ function MainApp() {
 
   if (route === 'carplay') {
     return (
-      <ErrorBoundary>
-        <CarPlayPage />
-      </ErrorBoundary>
+      <ThemeProvider>
+        <ErrorBoundary>
+          <CarPlayPage />
+        </ErrorBoundary>
+      </ThemeProvider>
     );
   }
 

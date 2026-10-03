@@ -309,6 +309,10 @@ namespace OpenPipeClub {
                                     _sb.Append(',');
                                     AppendJsonProp(_sb, "lightsBeacon", _rawBuffer[1585] > 0);
                                     _sb.Append(',');
+                                    AppendJsonProp(_sb, "electricEnabled", _rawBuffer[1575] > 0);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "engineEnabled", _rawBuffer[1576] > 0);
+                                    _sb.Append(',');
                                     AppendJsonProp(_sb, "fuelWarning", _rawBuffer[1570] > 0);
                                     _sb.Append(',');
                                     AppendJsonProp(_sb, "airPressureWarning", _rawBuffer[1568] > 0);

@@ -57,15 +57,22 @@ export const applyThemeCssVariables = (settings: AppAppearanceSettings) => {
   const effectiveGlow = settings.syncGlowWithAccent ? settings.accentColor : settings.glowColor;
   const glowRgb = hexToRgbValues(effectiveGlow);
 
+  // Compute optimal contrast foreground color (white on dark accents like purple/blue, black on bright accents like yellow/amber)
+  const luminance = (0.299 * accentRgb.r + 0.587 * accentRgb.g + 0.114 * accentRgb.b) / 255;
+  const primaryForeground = luminance > 0.55 ? '#020617' : '#ffffff';
+
   root.style.setProperty('--primary', settings.accentColor);
+  root.style.setProperty('--primary-foreground', primaryForeground);
   root.style.setProperty('--color-primary', settings.accentColor);
   root.style.setProperty('--color-amber-300', settings.accentColor);
   root.style.setProperty('--color-amber-400', settings.accentColor);
   root.style.setProperty('--color-amber-500', settings.accentColor);
   root.style.setProperty('--color-amber-600', settings.accentColor);
   root.style.setProperty('--app-accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
-  root.style.setProperty('--app-glow-rgb', `${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}`);
-  root.style.setProperty('--primary-glow', `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.35)`);
+  const glowAlpha = (settings.glowIntensity || 90) / 100;
+  root.style.setProperty('--primary-glow', `rgba(${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}, ${(0.45 * glowAlpha).toFixed(2)})`);
+  root.style.setProperty('--primary-glow-strong', `rgba(${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}, ${(0.85 * glowAlpha).toFixed(2)})`);
+  root.style.setProperty('--primary-glow-subtle', `rgba(${glowRgb.r}, ${glowRgb.g}, ${glowRgb.b}, ${(0.2 * glowAlpha).toFixed(2)})`);
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -96,6 +103,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.warn('Failed to persist appearance settings:', e);
     }
   }, [appearance]);
+
+  // Synchronize appearance changes across multiple windows (CarPlay, Overlay, Main)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setAppearance(prev => ({ ...prev, ...parsed }));
+          applyThemeCssVariables({ ...DEFAULT_APPEARANCE, ...parsed });
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   const updateAppearance = (updates: Partial<AppAppearanceSettings>) => {
     setAppearance(prev => {

@@ -53,6 +53,7 @@ interface OverlaySettingsType {
   carPlayTheme: 'dark' | 'light' | 'auto';
   carPlayTextScale: 'small' | 'medium' | 'large';
   carPlayShowNavInstructions?: boolean;
+  carPlayIgnitionSleep?: boolean;
   carPlayHotkeys: {
     toggle: string;
     next: string;
@@ -312,6 +313,7 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   carPlayTheme: 'dark',
   carPlayTextScale: 'medium',
   carPlayShowNavInstructions: true,
+  carPlayIgnitionSleep: false,
   carPlayHotkeys: {
     toggle: 'F9',
     next: 'Ctrl+Alt+Right',
@@ -730,6 +732,22 @@ const OverlaySettings = () => {
       loadTmpInfo();
     }
   }, [activeTab]);
+
+  // Sync activeTab with onboarding spotlight tour steps
+  useEffect(() => {
+    const handleTourStep = (e: any) => {
+      const id = e.detail?.stepId;
+      if (id === 'overlay-carplay') {
+        setActiveTab('carplay');
+      } else if (id === 'overlay-tmp') {
+        setActiveTab('tmp-ui');
+      } else if (id === 'overlay-tabs' || id === 'overlay-preview' || id === 'overlay-controls') {
+        setActiveTab('overlay');
+      }
+    };
+    window.addEventListener('opc-tour-step', handleTourStep);
+    return () => window.removeEventListener('opc-tour-step', handleTourStep);
+  }, []);
 
   const recolorTmpSkin = (baseImageSrc: string, hexColor: string): Promise<string> => {
     return new Promise((resolve) => {
@@ -2241,7 +2259,7 @@ const OverlaySettings = () => {
       </div>
 
       {/* 4-Tab Navigation Bar */}
-      <div id="tour-overlay-container" className="flex items-center justify-center w-fit mx-auto max-w-full gap-1.5 backdrop-blur-xl bg-zinc-900/60 rounded-2xl p-1.5 border-2 border-primary/20 overflow-x-auto no-scrollbar sticky top-0 z-30 mb-8 shadow-2xl transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
+      <div id="tour-overlay-tabs" className="flex items-center justify-center w-fit mx-auto max-w-full gap-1.5 backdrop-blur-xl bg-zinc-900/60 rounded-2xl p-1.5 border-2 border-primary/20 overflow-x-auto no-scrollbar sticky top-0 z-30 mb-8 shadow-2xl transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
         {[
           { key: 'overlay', label: 'In-Game Overlay', icon: Monitor },
           { key: 'carplay', label: 'CarPlay Cockpit', icon: LayoutGrid },
@@ -2277,7 +2295,7 @@ const OverlaySettings = () => {
             className="grid grid-cols-1 xl:grid-cols-5 gap-4"
           >
             {/* Left Column: Settings and Controls */}
-            <div className="xl:col-span-2 space-y-4">
+            <div id="tour-overlay-controls" className="xl:col-span-2 space-y-4">
               {/* System Services Toggles */}
           <div className="frosted-card bg-[#000000] border-2 border-primary/20 shadow-xl !p-4 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-3 mb-3">
@@ -2737,7 +2755,7 @@ const OverlaySettings = () => {
         </div>
 
         {/* Right Column: Status & Interactive Simulator */}
-        <div className="xl:col-span-3 space-y-4">
+        <div id="tour-overlay-preview" className="xl:col-span-3 space-y-4">
           {/* Status and Action Buttons */}
           <div className="frosted-card bg-[#000000] border-2 border-primary/20 shadow-xl !p-4 transition-all duration-300 hover:border-primary hover:shadow-[0_0_25px_var(--primary-glow)] hover-glow">
             <div className="flex items-center gap-3 mb-3">
@@ -3081,12 +3099,13 @@ const OverlaySettings = () => {
           {activeTab === 'carplay' && (
             <motion.div
               key="carplay"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.25 }}
-                className="grid grid-cols-1 xl:grid-cols-5 gap-4"
-              >
+              id="tour-overlay-carplay-overview"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.25 }}
+              className="grid grid-cols-1 xl:grid-cols-5 gap-4"
+            >
                 {/* Left Column: CarPlay Config */}
                 <div className="xl:col-span-2 space-y-4">
                   {/* CarPlay Window Activation and Theme */}
@@ -3182,6 +3201,25 @@ const OverlaySettings = () => {
                                 type="checkbox"
                                 checked={settings.carPlayShowNavInstructions !== false}
                                 onChange={() => updateSetting('carPlayShowNavInstructions', settings.carPlayShowNavInstructions === false)}
+                                className="sr-only peer"
+                              />
+                              <div className="switch-toggle" />
+                            </div>
+                          </label>
+
+                          {/* Auto Ignition Sleep Toggle */}
+                          <label className="flex items-center justify-between cursor-pointer group py-1 border-t border-white/5 pt-3">
+                            <div>
+                              <span className="text-xs text-slate-300 group-hover:text-white transition-colors block font-bold flex items-center gap-1.5">
+                                <Zap size={13} className="text-amber-400" /> Mit Zündung ein-/ausschalten
+                              </span>
+                              <span className="text-[9px] text-slate-500 block">CarPlay geht automatisch in Standby (Bildschirm aus), wenn der LKW abgestellt wird</span>
+                            </div>
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                checked={settings.carPlayIgnitionSleep === true}
+                                onChange={() => updateSetting('carPlayIgnitionSleep', !settings.carPlayIgnitionSleep)}
                                 className="sr-only peer"
                               />
                               <div className="switch-toggle" />
@@ -4324,6 +4362,7 @@ const OverlaySettings = () => {
             {activeTab === 'tmp-ui' && (
               <motion.div
                 key="tmp-ui"
+                id="tour-overlay-tmp-overview"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
