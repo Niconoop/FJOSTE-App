@@ -592,6 +592,7 @@ function loadGraph(mapDataDir: string, map: 'europe' | 'usa' = 'europe'): {
           const token = String(pf.token);
           const pfPath = prefabDescriptionsMap.get(token) || token;
           const nodeUidsNorm = pf.nodeUids.map(normalizeUid);
+          const type = classifyPrefabPath(pfPath);
           const metadata: PrefabMetadata = {
             type,
             token,

@@ -2,6 +2,23 @@
  
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
  
+## [1.7.77] - 2026-10-04
+ 
+### 🛣️ Spurtreue Routendarstellung (Lane-Keeping) & Gegenfahrbahn-Filterung bei Blitzern (ETS2LA-Architektur)
+  - **Permanente Spurlagen-Routenführung (ETS2LA-Standard) ([routeSmoother.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/routeSmoother.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Analyse der ETS2LA-Architektur**: In `ETS2LA` (`RoadUtils.CalculateRoadLaneCenters`, `ParsedRoad.InterpolateLane` und `VisionRoadUtils.CreatePathVertices`) ermittelt das System die Fahrspurpositionen ausgehend von der SCS-Standardspurbreite $4.5\,\text{m}$ (`halfLaneWidth = 2.25m`). Auf zweispurigen Straßen liegt die rechte Spurmitte exakt bei $+2.25\,\text{m}$, die Gegen- bzw. Linksspur bei $-2.25\,\text{m}$.
+    - **Smartes Lane-Keeping Offset (+2.25m / -2.25m)**: [smoothRouteCoords](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/utils/routeSmoother.ts) nutzt exakt dieses mathematische Modell: Anhand von 20m-Tangentenfenstern wird der 2D-Normalenvektor (`-dy / len, dx / len` analog zu ETS2LAs `Vector3.Cross(Vector3.UnitY, tangent)`) gebildet und die Route permanent +2.25m nach rechts (bzw. -2.25m im UK-Linksverkehr via `isUkCoord`) verschoben.
+    - **Nahtlose Endpunkt-Rampen**: Sanfte Ein- und Ausblendung des Offsets über die ersten und letzten 25 Meter (Ramp-In/Ramp-Out), sodass die Route direkt unter der Zugmaschine startet und exakt auf der Abladebucht / Zielmarkierung endet.
+    - **Gauß-Relaxation & Bézier-Fillets**: 1-Pass [0.15, 0.70, 0.15] Gauß-Glättung verhindert jegliche Knicke oder Miter-Spikes und garantiert einen seidenweichen, spurtreuen Kurvenverlauf.
+  - **Intelligente Gegenfahrbahn-Erkennung bei festen Blitzern ([ets2Speedcams.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/data/ets2Speedcams.ts), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [Overlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Overlay.tsx))**:
+    - **Problem**: Bei stationären Blitzern (z. B. auf Autobahnen oder Bundesstraßen) warnte die Proximity-Engine bisher alle Fahrer im vorderen 80°-Blickwinkel – selbst wenn der Blitzer auf der Gegenfahrbahn stand und ausschließlich den Gegenverkehr überwachte.
+    - **Exakter Überwachungs-Winkel (`directionDeg`)**: Alle 84 ETS2-Festblitzer wurden mit ihrem exakten Richtungsvektor aus `ets2.geojson` versehen. Weicht der Fahrtrichtungs-Winkel (`headingDeg`) um mehr als 55° vom Überwachungswinkel ab (~180° Gegenverkehr), wird der Blitzer zuverlässig ignoriert.
+    - **Querversatz-Filter (Cross-Track Distance)**: Erkennung des physischen Seitenabstands zur Gegenfahrbahn über den Mittelstreifen hinweg (z. B. Blitzer mehr als 14m links auf der gegenüberliegenden Richtungsfahrbahn).
+    - **Routen-Konsistenzprüfung**: Bei aktiver Routenführung in `GameMapWidget.tsx` wird zusätzlich geprüft, ob der Blitzer überhaupt auf dem geplanten Routenstrang liegt (verhindert Fehlalarme bei Abfahrten und parallelen Überführungen).
+  - **Behebung des Prefab-Ladefehlers im Offline-Routenservice ([route-service.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/route-service.ts))**:
+    - **Fehlerursache**: Beim Einlesen der `europe-prefabs.json` (73.141 Prefab-Kreuzungen) trat ein `ReferenceError: type is not defined` auf, da `const type = classifyPrefabPath(pfPath)` vor der Initialisierung des `PrefabMetadata`-Objekts fehlte. Dadurch wurden 0 von 73.141 Prefabs geladen und der A*-Pathfinder konnte an Kreuzungen nicht auf NavCurves zurückgreifen.
+    - **Korrektur**: `classifyPrefabPath` wird nun für jedes Prefab aufgerufen. Alle 73.141 Prefabs werden nun vollständig in den Speicher geladen.
+ 
 ## [1.7.76] - 2026-10-01
  
 ### 👁️ Kontrast-Korrektur (Dynamisches Primary-Foreground) & Pfeil-Hover im LKW-Dock

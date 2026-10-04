@@ -240,6 +240,14 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
 
   const lastJob = useMemo(() => jobs.length > 0 ? jobs[0] : null, [jobs]);
 
+  const displayRole = useMemo(() => {
+    const rawRole = (isSelf ? (driver?.role || user?.role) : driver?.role) || driver?.role_obj?.name || (isSelf ? user?.role : null);
+    if (typeof rawRole === 'object' && rawRole?.name) return rawRole.name;
+    if (typeof rawRole === 'string' && rawRole.trim()) return rawRole.trim();
+    if (driver?.is_admin || (isSelf && (user?.is_admin || (user as any)?.isAdmin))) return "Admin";
+    return "Fahrer";
+  }, [driver, user, isSelf]);
+
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -719,7 +727,7 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
     <div className="space-y-8 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div id="tour-profile-container">
         {/* Header-Bereich (Full Width Banner) */}
-        <div className="relative w-full h-[35vh] sm:h-[45vh] shadow-2xl overflow-hidden bg-black">
+        <div className="relative w-full min-h-[360px] sm:min-h-[420px] h-[40vh] sm:h-[48vh] shadow-2xl overflow-hidden bg-black">
           <img src={finalBanner} alt="Profile Banner" className="w-full h-full object-cover scale-105" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
@@ -740,7 +748,7 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
             </label>
           )}
 
-          <div className="absolute inset-0 flex flex-col items-center justify-end text-center p-6 sm:p-8 pb-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-end text-center p-6 sm:p-8 pb-16 sm:pb-20">
             {/* Avatar Container */}
             <div className="relative group/avatar mb-4">
               <div className={`w-28 h-28 rounded-full bg-black border-4 overflow-hidden shadow-2xl relative transition-all duration-500 shrink-0 ${liveData?.online ? 'border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-[profile-pulse_2s_infinite]' : 'border-white/5'}`}>
@@ -765,8 +773,8 @@ const Profile = ({ memberId, onBack, telemetry, onViewOnMap }: { memberId: strin
               {driver?.name || user?.username}
             </h1>
 
-            <p className="text-xs mt-1.5 font-black uppercase tracking-widest text-primary drop-shadow-md italic">
-              {driver?.role?.name || 'Fahrer'}
+            <p className="text-xs sm:text-sm mt-1.5 font-black uppercase tracking-widest text-primary drop-shadow-md italic">
+              {displayRole}
             </p>
           </div>
         </div>

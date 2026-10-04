@@ -1,6 +1,6 @@
 /**
  * ETS2 Speed Camera Data & Proximity Engine
- * Directly extracted from vertices in ets2.geojson.
+ * Directly extracted from vertices in ets2.geojson with road orientation vectors.
  */
 
 export interface SpeedCamera {
@@ -11,6 +11,8 @@ export interface SpeedCamera {
   country: string;
   road: string;
   type: "gantry" | "pole" | "box";
+  directionDeg?: number;
+  bidirectional?: boolean;
 }
 
 export interface SpeedcamAlertInfo {
@@ -29,7 +31,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A1 Dortmund Kreuz",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 190.2
   },
   {
     "id": "de-a1-2",
@@ -38,7 +41,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A1 Köln Nord / Leverkusen",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 140.0
   },
   {
     "id": "de-a1-3",
@@ -47,7 +51,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A1 Bremer Kreuz",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 309.6
   },
   {
     "id": "de-a1-4",
@@ -56,7 +61,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A1 Buchholzer Dreieck",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 57.0
   },
   {
     "id": "de-a2-1",
@@ -65,7 +71,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A2 Hannover Ost",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 343.0
   },
   {
     "id": "de-a2-2",
@@ -74,7 +81,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A2 Magdeburg Kreuz",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 97.8
   },
   {
     "id": "de-a2-3",
@@ -83,7 +91,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A2 Kamener Kreuz",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 60.5
   },
   {
     "id": "de-a3-1",
@@ -92,7 +101,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A3 Frankfurter Kreuz",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 301.8
   },
   {
     "id": "de-a3-2",
@@ -101,7 +111,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A3 Nürnberg Nord",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 267.5
   },
   {
     "id": "de-a3-3",
@@ -110,7 +121,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A3 Würzburg Biebelried",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 103.6
   },
   {
     "id": "de-a4-1",
@@ -119,7 +131,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A4 Dresden West",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 108.2
   },
   {
     "id": "de-a4-2",
@@ -128,7 +141,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A4 Erfurt Ost",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 337.0
   },
   {
     "id": "de-a5-1",
@@ -137,7 +151,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A5 Heidelberg / Mannheim",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 31.3
   },
   {
     "id": "de-a5-2",
@@ -146,7 +161,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A5 Karlsruher Dreieck",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 44.8
   },
   {
     "id": "de-a7-1",
@@ -155,7 +171,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A7 Hamburg Elbtunnel",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 121.4
   },
   {
     "id": "de-a7-2",
@@ -164,7 +181,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A7 Kasseler Berge",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 266.4
   },
   {
     "id": "de-a7-3",
@@ -173,7 +191,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A7 Ulm / Elchingen",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 71.5
   },
   {
     "id": "de-a8-1",
@@ -182,7 +201,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A8 Stuttgart Albaufstieg",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 85.0
   },
   {
     "id": "de-a8-2",
@@ -191,7 +211,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A8 München Eschenried",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 229.3
   },
   {
     "id": "de-a9-1",
@@ -200,7 +221,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Germany",
     "road": "A9 Dreieck Potsdam",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 93.1
   },
   {
     "id": "de-a9-2",
@@ -209,7 +231,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A9 Schkeuditzer Kreuz",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 69.4
   },
   {
     "id": "de-a9-3",
@@ -218,7 +241,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A9 Nürnberg Ost",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 87.6
   },
   {
     "id": "de-a10-1",
@@ -227,7 +251,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Germany",
     "road": "A10 Berliner Ring Ost",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 138.8
   },
   {
     "id": "de-a40-1",
@@ -236,7 +261,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 60,
     "country": "Germany",
     "road": "A40 Ruhrschnellweg Duisburg",
-    "type": "box"
+    "type": "box",
+    "directionDeg": 97.6
   },
   {
     "id": "de-b1-1",
@@ -245,7 +271,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 50,
     "country": "Germany",
     "road": "B1 Dortmund Westfalenhallen",
-    "type": "box"
+    "type": "box",
+    "directionDeg": 281.1
   },
   {
     "id": "fr-a1-1",
@@ -254,7 +281,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A1 Paris Charles de Gaulle",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 92.1
   },
   {
     "id": "fr-a1-2",
@@ -263,7 +291,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A1 Lille Sud",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 183.9
   },
   {
     "id": "fr-a4-1",
@@ -272,7 +301,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 110,
     "country": "France",
     "road": "A4 Reims Contournement",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 61.8
   },
   {
     "id": "fr-a4-2",
@@ -281,7 +311,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A4 Strasbourg Nord",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 211.2
   },
   {
     "id": "fr-a6-1",
@@ -290,7 +321,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 70,
     "country": "France",
     "road": "A6 Tunnel de Fourvière",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 171.5
   },
   {
     "id": "fr-a7-1",
@@ -299,7 +331,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A7 Lyon Sud Chasse",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 129.7
   },
   {
     "id": "fr-a7-2",
@@ -308,7 +341,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A7 Marseille Entrée",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 185.0
   },
   {
     "id": "fr-a10-1",
@@ -317,7 +351,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A10 Bordeaux Rocade",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 217.5
   },
   {
     "id": "fr-a16-1",
@@ -326,7 +361,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A16 Calais Port",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 313.9
   },
   {
     "id": "fr-a61-1",
@@ -335,7 +371,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "France",
     "road": "A61 Toulouse Périphérique",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 253.2
   },
   {
     "id": "uk-m25-1",
@@ -344,7 +381,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M25 Dartford Crossing",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 305.0
   },
   {
     "id": "uk-m25-2",
@@ -353,7 +391,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M25 Heathrow Airport",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 171.0
   },
   {
     "id": "uk-m1-1",
@@ -362,7 +401,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 96,
     "country": "UK",
     "road": "M1 Luton / Watford",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 66.0
   },
   {
     "id": "uk-m1-2",
@@ -371,7 +411,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M1 Sheffield Smart Motorway",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 147.9
   },
   {
     "id": "uk-m6-1",
@@ -380,7 +421,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M6 Spaghetti Junction",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 276.6
   },
   {
     "id": "uk-m62-1",
@@ -389,7 +431,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M62 Manchester Ring",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 253.0
   },
   {
     "id": "uk-m20-1",
@@ -398,7 +441,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M20 Folkestone / Dover",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 64.7
   },
   {
     "id": "uk-m8-1",
@@ -407,7 +451,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "UK",
     "road": "M8 Glasgow Kingston Bridge",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 284.7
   },
   {
     "id": "at-a1-1",
@@ -416,7 +461,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Austria",
     "road": "A1 Salzburg West",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 272.3
   },
   {
     "id": "at-a1-2",
@@ -425,7 +471,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Austria",
     "road": "A23 Wien Südosttangente",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 60.9
   },
   {
     "id": "at-a12-1",
@@ -434,7 +481,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 100,
     "country": "Austria",
     "road": "A12 Inntal IG-L Radar",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 5.6
   },
   {
     "id": "at-a13-1",
@@ -443,7 +491,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Austria",
     "road": "A13 Brennerpass Europabrücke",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 96.6
   },
   {
     "id": "at-a10-1",
@@ -452,7 +501,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Austria",
     "road": "A10 Tauernautobahn",
-    "type": "box"
+    "type": "box",
+    "directionDeg": 100.9
   },
   {
     "id": "ch-a1-1",
@@ -461,7 +511,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Switzerland",
     "road": "A1 Zürich Nordring",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 207.5
   },
   {
     "id": "ch-a1-2",
@@ -470,7 +521,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Switzerland",
     "road": "A1 Genève Aéroport",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 123.0
   },
   {
     "id": "ch-a2-1",
@@ -479,7 +531,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Switzerland",
     "road": "A2 Gotthard Nordportal",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 27.0
   },
   {
     "id": "it-a1-1",
@@ -488,7 +541,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Italy",
     "road": "A1 Milano Sud Tangenziale",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 244.6
   },
   {
     "id": "it-a1-2",
@@ -497,7 +551,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A1 Bologna Casalecchio",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 127.1
   },
   {
     "id": "it-a1-3",
@@ -506,7 +561,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A1 Firenze Nord",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 118.4
   },
   {
     "id": "it-a1-4",
@@ -515,7 +571,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Italy",
     "road": "GRA Roma Ring Nord",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 103.3
   },
   {
     "id": "it-a4-1",
@@ -524,7 +581,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A4 Venezia Mestre",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 87.2
   },
   {
     "id": "it-a4-2",
@@ -533,7 +591,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Italy",
     "road": "A4 Torino / Settimo Torinese",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 255.6
   },
   {
     "id": "it-a22-1",
@@ -542,7 +601,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A22 Autostrada del Brennero",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 326.2
   },
   {
     "id": "it-a7-1",
@@ -551,7 +611,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A7 Genova Bolzaneto",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 19.4
   },
   {
     "id": "it-a3-1",
@@ -560,7 +621,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Italy",
     "road": "A3 Napoli Tangenziale",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 173.2
   },
   {
     "id": "nl-a1-1",
@@ -569,7 +631,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Netherlands",
     "road": "A10 Ring Amsterdam",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 201.0
   },
   {
     "id": "nl-a4-1",
@@ -578,7 +641,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Netherlands",
     "road": "A4 Rotterdam Trajectcontrole",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 172.8
   },
   {
     "id": "be-e19-1",
@@ -587,7 +651,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Belgium",
     "road": "R1 Antwerpen Ring",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 290.4
   },
   {
     "id": "be-e40-1",
@@ -596,7 +661,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Belgium",
     "road": "R0 Ring Bruxelles",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 291.2
   },
   {
     "id": "be-e25-1",
@@ -605,7 +671,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Belgium",
     "road": "E25 Liège Tunnel de Cointe",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 28.6
   },
   {
     "id": "pl-a2-1",
@@ -614,7 +681,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Poland",
     "road": "S8 / S2 Warszawa Ring",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 353.4
   },
   {
     "id": "pl-a4-1",
@@ -623,7 +691,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Poland",
     "road": "A4 Wrocław Południe",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 259.6
   },
   {
     "id": "pl-a4-2",
@@ -632,7 +701,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Poland",
     "road": "A4 Kraków Balice",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 101.3
   },
   {
     "id": "pl-a1-1",
@@ -641,7 +711,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Poland",
     "road": "A1 Gdańsk / Rusocin",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 71.0
   },
   {
     "id": "cz-d1-1",
@@ -650,7 +721,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Czech Republic",
     "road": "D1 Praha Jih Chodov",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 179.6
   },
   {
     "id": "cz-d1-2",
@@ -659,7 +731,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Czech Republic",
     "road": "D1 Brno Jih",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 91.2
   },
   {
     "id": "sk-d1-1",
@@ -668,7 +741,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Slovakia",
     "road": "D1 Bratislava Prístavný Most",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 1.7
   },
   {
     "id": "dk-e20-1",
@@ -677,7 +751,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Denmark",
     "road": "E20 København Storebælt",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 136.3
   },
   {
     "id": "se-e4-1",
@@ -686,7 +761,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 70,
     "country": "Sweden",
     "road": "E4 Stockholm Essingeleden",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 91.0
   },
   {
     "id": "se-e6-1",
@@ -695,7 +771,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 70,
     "country": "Sweden",
     "road": "E6 Göteborg Tingstadstunneln",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 311.0
   },
   {
     "id": "se-e6-2",
@@ -704,7 +781,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Sweden",
     "road": "E6 Malmö Ring",
-    "type": "pole"
+    "type": "pole",
+    "directionDeg": 251.6
   },
   {
     "id": "no-e6-1",
@@ -713,7 +791,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 70,
     "country": "Norway",
     "road": "E6 Oslo Operatunnelen",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 238.9
   },
   {
     "id": "no-e39-1",
@@ -722,7 +801,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 60,
     "country": "Norway",
     "road": "E39 Bergen Fløyfjellstunnel",
-    "type": "box"
+    "type": "box",
+    "directionDeg": 204.4
   },
   {
     "id": "es-m30-1",
@@ -731,7 +811,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 70,
     "country": "Spain",
     "road": "M-30 Madrid Calle 30",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 193.5
   },
   {
     "id": "es-ap7-1",
@@ -740,7 +821,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Spain",
     "road": "B-10 / B-20 Barcelona Ronda",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 266.2
   },
   {
     "id": "es-v30-1",
@@ -749,7 +831,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 90,
     "country": "Spain",
     "road": "V-30 Valencia Bypass",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 292.9
   },
   {
     "id": "es-se30-1",
@@ -758,7 +841,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Spain",
     "road": "SE-30 Sevilla Ring",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 61.4
   },
   {
     "id": "pt-a1-1",
@@ -767,7 +851,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Portugal",
     "road": "2ª Circular Lisboa",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 116.6
   },
   {
     "id": "pt-vci-1",
@@ -776,7 +861,8 @@ export const ETS2_SPEED_CAMERAS: SpeedCamera[] = [
     "speedLimit": 80,
     "country": "Portugal",
     "road": "VCI Porto Ponte da Arrábida",
-    "type": "gantry"
+    "type": "gantry",
+    "directionDeg": 72.0
   }
 ];
 
@@ -795,18 +881,31 @@ export function getSpeedCamerasGeoJson() {
         country: cam.country,
         road: cam.road,
         type: cam.type,
+        directionDeg: cam.directionDeg,
         sprite: 'speedcam_ico',
       },
     })),
   };
 }
 
+/**
+ * Searches for approaching speed cameras strictly on the player's driving lane and direction.
+ * Accurately filters out cameras on the Gegenfahrbahn (oncoming traffic) or opposite carriageway.
+ * 
+ * Checks performed:
+ * 1. Monitored Travel Direction: Compares vehicle heading against the camera's monitored road direction (cam.directionDeg).
+ *    Cameras monitoring the Gegenfahrbahn (~180° opposite) are rejected.
+ * 2. Forward Field of View: Camera must be ahead in the vehicle's forward travel arc.
+ * 3. Lateral / Cross-Track Position: Filters out cameras located across the median barrier on the oncoming carriageway.
+ * 4. Route Path Consistency: When an active route polyline is provided, cameras not along the route are skipped.
+ */
 export function findApproachingSpeedcam(
   lat: number,
   lng: number,
   currentSpeedKmh: number,
   maxDistanceMeters: number = 750,
-  headingDeg?: number
+  headingDeg?: number,
+  routeCoords?: [number, number][] | null
 ): SpeedcamAlertInfo | null {
   if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
 
@@ -825,18 +924,73 @@ export function findApproachingSpeedcam(
 
     if (distM > maxDistanceMeters) continue;
 
-    // Heading filter: only consider cameras ahead in our direction of travel
     if (headingDeg != null && !isNaN(headingDeg)) {
+      // 1. Heading check: The camera's monitored direction MUST match our heading!
+      // If the camera is on the Gegenfahrbahn (monitoring opposite traffic),
+      // cam.directionDeg is ~180° away from our heading.
+      if (cam.directionDeg != null && !isNaN(cam.directionDeg) && !cam.bidirectional) {
+        let directionDiff = Math.abs(cam.directionDeg - headingDeg) % 360;
+        if (directionDiff > 180) directionDiff = 360 - directionDiff;
+
+        // If the direction differs by more than 55 degrees, this speed camera is monitoring the Gegenfahrbahn
+        // (oncoming lane) or a cross-street!
+        if (directionDiff > 55) {
+          continue;
+        }
+      }
+
+      // 2. Line of sight / approaching angle: Camera must be in front of our vehicle
       const bearingToCam = (Math.atan2(dLng, dLat) * (180 / Math.PI) + 360) % 360;
       let angleDiff = Math.abs(bearingToCam - headingDeg) % 360;
       if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-      // When approaching from a distance (> 25m), camera must be within forward arc (+/- 80°)
-      if (distM > 25 && angleDiff > 80) {
+      // When approaching from a distance (> 25m), camera must be within forward arc (+/- 65°)
+      if (distM > 25 && angleDiff > 65) {
         continue;
       }
-      // When right alongside or just passed, ignore if camera is behind (> 105°)
-      if (angleDiff > 105) {
+      // When right alongside or just passed, ignore if camera is behind (> 100°)
+      if (angleDiff > 100) {
+        continue;
+      }
+
+      // 3. Lateral offset check: On multi-lane or dual carriageways,
+      // in continental Europe (right-hand traffic), oncoming traffic (Gegenfahrbahn) is to our LEFT.
+      // Cross-track distance: positive = to our right, negative = to our left.
+      const headingRad = (headingDeg * Math.PI) / 180;
+      const eastDistM = (dLng * 1000) / 19.0;
+      const northDistM = (dLat * 1000) / 19.0;
+      const crossTrackRightM = eastDistM * Math.cos(headingRad) - northDistM * Math.sin(headingRad);
+
+      const isUk = cam.country === 'UK';
+      // In Europe/ATS: Gegenfahrbahn is to our left (negative cross-track < -14m)
+      // In UK: Gegenfahrbahn is to our right (positive cross-track > 14m)
+      if (!isUk && crossTrackRightM < -14.0) {
+        continue;
+      }
+      if (isUk && crossTrackRightM > 14.0) {
+        continue;
+      }
+    }
+
+    // 4. Optional active route check: if user is following a planned route,
+    // verify camera is along the route path ahead
+    if (routeCoords && routeCoords.length >= 2 && distM > 35) {
+      let isNearRoute = false;
+      const maxRouteDeviationM = 45; // max meters away from planned path
+      for (let i = 0; i < routeCoords.length - 1; i++) {
+        const p1 = routeCoords[i];
+        const p2 = routeCoords[i + 1];
+        const segDist = Math.hypot(
+          (cam.lat - (p1[1] || p1[0])) * latKm * 1000 / 19.0,
+          (cam.lng - (p1[0] || p1[1])) * lngKm * 1000 / 19.0
+        );
+        if (segDist <= maxRouteDeviationM) {
+          isNearRoute = true;
+          break;
+        }
+      }
+      if (!isNearRoute) {
+        // Camera does not lie on our planned route (e.g. on straight motorway while we take an exit ramp)
         continue;
       }
     }
@@ -860,4 +1014,3 @@ export function findApproachingSpeedcam(
     overspeedKmh,
   };
 }
-

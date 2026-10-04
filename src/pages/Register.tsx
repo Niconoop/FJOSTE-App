@@ -19,7 +19,12 @@ const Register = ({ onSwitchToLogin }: { onSwitchToLogin: () => void }) => {
       await register(username.trim(), password, inviteCode.trim());
       toast.success('Account erstellt! Willkommen!');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Registrierung fehlgeschlagen. Prüfe deinen Einladungscode.');
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        err.message ||
+        'Registrierung fehlgeschlagen. Prüfe deinen Einladungscode.';
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }

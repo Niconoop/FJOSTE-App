@@ -1425,7 +1425,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     // Speedcam Proximity Detection
     if (showSpeedcams !== false && pos) {
-      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750, desiredBearing);
+      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750, desiredBearing, fullRemainingCoordsRef.current);
       onSpeedcamAlertRef.current?.(alert);
     }
 

@@ -138,7 +138,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (username: string, password: string, inviteCode: string) => {
-    const res = await axios.post(`${API_URL}/management/register`, { username, password, invite_code: inviteCode });
+    let res;
+    try {
+      res = await axios.post(`${API_URL}/auth/register`, { username, password, invite_code: inviteCode });
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        res = await axios.post(`${API_URL}/management/register`, { username, password, invite_code: inviteCode });
+      } else {
+        throw err;
+      }
+    }
     const newToken = res.data.token;
     localStorage.setItem('token', newToken);
     setToken(newToken);

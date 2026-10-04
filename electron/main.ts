@@ -96,8 +96,9 @@ let logoWin: BrowserWindow | null = null;
 let driversWin: BrowserWindow | null = null;
 let eventWin: BrowserWindow | null = null;
 let carplayWin: BrowserWindow | null = null;
-let carplayChild: any = null;
 const isCarPlayMode = process.argv.includes('--carplay-mode');
+const isPortableApp = !!(process.env.PORTABLE_EXECUTABLE_FILE || process.env.PORTABLE_EXECUTABLE_DIR);
+const portableExePath = process.env.PORTABLE_EXECUTABLE_FILE || null;
 
 // Read parent PID for clean process exiting in standalone mode
 const parentPidArg = process.argv.find(arg => arg.startsWith('--parent-pid='));
@@ -5164,7 +5165,11 @@ async function launchUpdateInstaller(installerPath: string): Promise<void> {
 }
 
 function downloadAndApplyUpdate(url: string, event: any) {
-  const tempUpdatePath = path.join(app.getPath('temp'), `OpenPipeClub-Setup-${Date.now()}.exe`);
+  const isPortableTarget = isPortableApp && !!portableExePath;
+  const tempUpdatePath = path.join(
+    app.getPath('temp'),
+    isPortableTarget ? `OpenPipeClub-Portable-${Date.now()}.exe` : `OpenPipeClub-Setup-${Date.now()}.exe`
+  );
 
   const file = fs.createWriteStream(tempUpdatePath, { highWaterMark: 1024 * 1024 });
 
@@ -5231,17 +5236,47 @@ function downloadAndApplyUpdate(url: string, event: any) {
     }
 
     try {
-      await launchUpdateInstaller(tempUpdatePath);
+      if (isPortableTarget && portableExePath) {
+        writeToLog(`[Updater] In-place Portable-Update wird durchgeführt: ${portableExePath}`);
+        event.sender.send('install-update-progress', { progress: 98, status: 'Aktualisiere Datei...' });
+        await new Promise(res => setTimeout(res, 500));
 
-      event.sender.send('install-update-progress', { progress: 100, status: 'Installationsassistent wird gestartet...', success: true });
+        const oldBackupPath = `${portableExePath}.old`;
+        if (fs.existsSync(oldBackupPath)) {
+          try { fs.unlinkSync(oldBackupPath); } catch {}
+        }
 
-      setTimeout(() => {
-        app.quit();
-      }, 1200);
+        // Running executable can be renamed on Windows NTFS
+        fs.renameSync(portableExePath, oldBackupPath);
+        fs.copyFileSync(tempUpdatePath, portableExePath);
+
+        event.sender.send('install-update-progress', { progress: 100, status: 'Update erfolgreich! Starte neu...', success: true });
+
+        try {
+          await shell.openPath(portableExePath);
+        } catch {
+          const child = spawn(portableExePath, [], { detached: true, stdio: 'ignore' });
+          child.unref();
+        }
+
+        setTimeout(() => {
+          app.quit();
+        }, 1200);
+
+      } else {
+        // Installed setup edition: launch NSIS installer wizard
+        await launchUpdateInstaller(tempUpdatePath);
+
+        event.sender.send('install-update-progress', { progress: 100, status: 'Installationsassistent wird gestartet...', success: true });
+
+        setTimeout(() => {
+          app.quit();
+        }, 1200);
+      }
     } catch (err: any) {
       console.error('Failed to run update installer:', err);
-      writeToLog(`[Updater] Failed to run update installer: ${err.message}`);
-      event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Starten des Installers: ${err.message}`, error: true });
+      writeToLog(`[Updater] Failed to apply update: ${err.message}`);
+      event.sender.send('install-update-progress', { progress: 0, status: `Fehler beim Update: ${err.message}`, error: true });
     }
   });
 
@@ -5269,13 +5304,19 @@ ipcMain.on('install-app-update', async (event) => {
     res.on('end', () => {
       try {
         const manifest = JSON.parse(data);
-        // Für Updates wird immer der saubere NSIS Setup-Installer verwendet,
-        // sodass auch in der Portable-Version das vollwertige Installationsfenster
-        // ohne jegliche CMD-Fenster-Pops erscheint.
-        let downloadUrl = manifest.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
+        const isPortableTarget = isPortableApp && !!portableExePath;
+        let downloadUrl = '';
 
-        if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download') || downloadUrl.endsWith('portable.exe') || downloadUrl.endsWith('setup.exe')) {
-          downloadUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
+        if (isPortableTarget) {
+          downloadUrl = manifest.portableUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App.exe';
+          if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download') || downloadUrl.endsWith('setup.exe')) {
+            downloadUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App.exe';
+          }
+        } else {
+          downloadUrl = manifest.downloadUrl || 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
+          if (!downloadUrl || downloadUrl.includes('openpipeclub.com/download') || downloadUrl.endsWith('portable.exe')) {
+            downloadUrl = 'https://open-pipe-club-backend.nicohertling09.workers.dev/api/updates/download/Open%20Pipe%20Club%20App%20Setup.exe';
+          }
         }
 
         event.sender.send('install-update-progress', { progress: 20, status: 'Starte Download von Cloudflare R2...' });
@@ -5293,6 +5334,14 @@ ipcMain.on('install-app-update', async (event) => {
 app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.openpipeclub.app.main');
+  }
+
+  // Clean up any lingering .old portable backup file from previous update
+  if (portableExePath) {
+    const oldBackupPath = `${portableExePath}.old`;
+    if (fs.existsSync(oldBackupPath)) {
+      try { fs.unlinkSync(oldBackupPath); } catch {}
+    }
   }
 
   await loadSettings(true);
