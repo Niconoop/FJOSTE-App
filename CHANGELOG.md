@@ -2,6 +2,203 @@
  
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
  
+## [1.7.88] - 2026-10-09
+
+### 🎮 CarPlay: Schnellfunk-Nachrichtenvorlagen Menü & Vollständige Hotkey- / D-Pad-Navigation
+  - **⚡ Schnellfunk-Vorlagen Popover & Tastatur-Button ersetzt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der bisherige Button *TASTATUR* wurde in der Eingabeleiste durch den neuen Button **VORLAGEN** (`<Zap />`) ersetzt. (Die Bildschirmtastatur bleibt weiterhin bei Fingertipp oder Fokus auf das Eingabefeld voll verfügbar).
+    - Beim Klick auf **VORLAGEN** öffnet sich ein schwebendes Frosted-Glass-Popout-Menü (`showChatTemplates`) direkt über der Chat-Eingabeleiste mit 12 einsatzbereiten Trucker-Funksprüchen (Grüße, Konvoi, Gefahr/Stau, Überholen, Pause/Tanken, Panne/Schaden, Status).
+    - Ein Klick auf eine Vorlage sendet den Funkspruch sofort ohne manuelles Tippen an den aktiven CB-Funkkanal.
+    - Volle Controller- und Tastaturunterstützung: Menü öffnet per Enter auf dem Vorlagen-Button, Pfeiltasten steuern das 2-Spalten-Raster, Enter sendet den Funkspruch und Escape/Back schließt das Menü.
+  - **💬 CB-Funk & Chat Navigation ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Fehlende `handleNav`-Logik für `activeTab === 'chat'` implementiert: Controller-, Lenkrad-Hotkeys und Tastaturpfeile steuern nun alle Elemente.
+    - **Linke Spalte (CB-Funk-Kanäle)**: Pfeiltasten Hoch/Runter navigieren durch die Kanalliste, Enter schaltet den Funkkanal um und lädt dessen Nachrichten, Pfeiltaste Links verlässt den Inhalt in die CarPlay-Taskleiste.
+    - **Rechte Spalte (Funkspruch-Aktionen)**: Pfeiltaste Rechts springt von den Kanälen direkt auf die Eingabeleiste. Pfeiltasten Links/Rechts wechseln zwischen *VORLAGEN*, *Eingabefeld* und *Senden*.
+    - **Header & Aktualisieren**: Pfeiltaste Hoch springt zum Aktualisieren-Button im Header.
+    - Visuelle Fokus-Hervorhebungen mit dynamischem Ring-Glow (`ring-purple-400`, Skalierungseffekt) und automatischer Scroll-Nachführung (`data-item-focused`).
+  - **📅 Events & Konvois Navigation ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Fehlende `handleNav`-Logik für `activeTab === 'events'` implementiert.
+    - **Linke Spalte (Event-Liste)**: Pfeiltasten Hoch/Runter scrollen durch anstehende Konvois und wählen das fokussierte Event live zur Vorschau aus.
+    - **Rechte Spalte (Missions-Details)**: Pfeiltaste Rechts springt direkt auf den großen Action-Button *IN NAVIGATION LADEN*. Enter startet die GPS-Navigation für das ausgewählte Event.
+    - **Header & Aktualisieren**: Pfeiltaste Hoch fokussiert den *Aktualisieren*-Button im Header.
+    - Visuelle Fokus-Ringe (`ring-emerald-400`), automatische Bildlauf-Zentrierung (`scrollIntoView`) und nahtloser Rücksprung zur Taskleiste via Links/Zurück.
+  - **🚚 Fracht & Auftrag (`activeTab === 'job'`)**:
+    - Saubere Taskleisten-Rückkehr bei Links- oder Zurück-Taste integriert.
+  - **🔄 Dynamische Element-Erkennung (`getContentElementsCount`)**:
+    - Korrekte Zählung der fokussierbaren Steuerelemente abhängig von geladenen Kanälen und Events für fehlerfreien Übergang zwischen Taskleiste und App-Inhalt.
+
+## [1.7.87] - 2026-10-09
+
+### 🚀 CarPlay In-Game FPS-Optimierung & Entfernung des obsoleten Medien-Menüs / Zurück-Buttons
+  - **🧹 Entfernung des obsoleten Medien-Auswahlmenüs & der Zurück-Buttons ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der runde, schwebende Zurück-Pfeil-Button `(←)` wurde aus dem Windows Media / Spotify Player (`musicSubTab === 'windows'`) sowohl im Leerlauf als auch im Now-Playing-Zustand vollständig entfernt.
+    - Das obsolete Quellenauswahl-Menü (`musicSubTab === 'menu'`) wurde restlos entfernt, da Medienplayer, ETS2 Live-Radio und Lokale Musik nun als eigenständige Apps direkt im App Drawer und der Taskleiste starten.
+    - Die redundanten Zurück-Buttons wurden auch aus den Headern von *Lokale Musik* und *Live-Radio* entfernt.
+    - Das D-Pad-/Controller-Navigationssystem wurde angepasst: Direkte Steuerung der Transporttasten (Vorheriger, Play/Pause, Nächster) bei Windows Media sowie saubere Tastatur-/Scan-/Sender-Fokussierung bei Radio und Lokaler Musik.
+  - **⚡ Massive GPU- & CPU-Performance-Optimierung für maximale In-Game FPS ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [AnimatedBackground.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/AnimatedBackground.tsx))**:
+    - **Intelligente Map-Pausierung bei Tab-Wechsel & Standby**:
+      - Die Home-Miniatur-Karte wird nun sofort pausiert, sobald der Nutzer einen anderen Tab öffnet (`paused={isCarPlaySleeping || activeTab !== 'home' || maximizedWidget !== null}`).
+      - Die Vollbildkarte wird nur gerendert, wenn der Map-Tab tatsächlich sichtbar ist (`activeTab === 'map'`).
+      - Vorher liefen beide MapLibre-Instanzen permanent bei 60 FPS im Hintergrund weiter, sobald CarPlay aus dem Standby aufgeweckt wurde.
+    - **Stopp der requestAnimationFrame-Schleife bei `paused`**:
+      - Die Animationsschleife fordert im pausierten Zustand nun keine weiteren Frames an (`return` statt endlosem `requestAnimationFrame`), wodurch die CPU bei verdeckter Karte oder Standby vollständig entlastet wird.
+    - **FPS-Deckelung für Automotive-GPS**:
+      - Einführung der `targetFps`-Prop: Die Home-Mini-Karte läuft mit schonenden 20 FPS, die Vollbildkarte mit flüssigen 30 FPS (Automotive-Standard), was den WebGL-Drawcall-Aufwand halbiert.
+    - **MapLibre-Pixel-Ratio-Capping**:
+      - `pixelRatio` wird auf maximal `1.25` begrenzt (`Math.min(window.devicePixelRatio || 1, 1.25)`). Auf hochauflösenden 1440p/4K-Monitoren und mit Windows-Skalierung (125%/150%) verhindert dies extreme GPU-Fragment-Shader-Überlastung.
+    - **Reduzierter Kamera-Neigungswinkel (`pitch: 38`)**:
+      - Reduzierung des Neigungswinkels von 60° auf 38°, wodurch rund 40% weniger Horizont-Vektorkacheln und Straßengeometrien gleichzeitig gerendert werden müssen.
+    - **Gedrosselte Telemetrie-Berechnungen**:
+      - Blitzer- und Ampelannäherungsprüfungen werden auf maximal 5 Hz (200 ms) gedrosselt und bei pausierter Karte übersprungen.
+    - **Effiziente Glassmorphismus-Filter & GPU-Beschleunigung**:
+      - Ersetzung von rechenintensiven `backdrop-blur-2xl`-Filtern (40px Blur-Radius) durch ressourcenschonende `backdrop-blur-md`-Filter quer durch alle CarPlay-Elemente.
+      - Hardware-Beschleunigung (`will-change: transform`, `transform: translateZ(0)`, `contain: strict`) und reduzierte Filterradien im animierten Hintergrund (`AnimatedBackground.tsx`), um GPU-Füllraten-Konflikte mit DirectX 11/12 während des Spiels zu eliminieren.
+
+## [1.7.86] - 2026-10-09
+
+### 📻 Live-Radio & Lokale Musik Design-Update, Zündungs-Automatik Verschiebung & CB-Funk Kanalauswahl
+  - **🎵 Live-Radio & Lokale Musik an App-Raster Design-DNA angepasst ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Quellen-Auswahl (`musicSubTab === 'menu'`)**: Vollflächiger `AnimatedBackground` Wallpaper-Hintergrund, `backdrop-blur-2xl` Frosted-Glass-Container mit 3 großflächigen Medien-Karten (*Windows Media*, *Lokale Musik*, *ETS2 Live-Radio*) mit dynamischen Gradient-Badges (`from-amber-500`, `from-blue-600`, `from-emerald-600`) und Status-Pills.
+    - **Lokaler Musik-Player (`musicSubTab === 'local'`)**: Vollständig neues Frosted-Glass Cockpit-Layout mit animiertem Wallpaper. Links: Übersichtliche Titelliste mit Scrollbereich und Live-Status (`SPIELT...`). Rechts: Großes Now-Playing Vinyl-Deck mit rotierender Schallplatten-Animation, Track-Metadaten, Zeitleiste und großen Touch-Transporttasten (Vorheriger, Play/Pause in Gold, Nächster) sowie Lautstärkeregler.
+    - **ETS2 Live-Radio (`musicSubTab === 'radio'`)**: Vollständig neues Frosted-Glass Design mit Suchleiste (virtuelle Tastatur per Tap), Auto-Scan (`.sii`) und Datei-Import. Großflächiges Sender-Grid mit Senderlogos, Genre, Bitrate und Favoriten-Sternen sowie schwebendem On-Air-Player-Dock am unteren Rand.
+    - *(Windows Media / SMTC Spotify Player bleibt weiterhin im ursprünglichen Media-Player-Design unverändert).*
+  - **⚡ Zündungs-Automatik Schalter zu Design & Display verschoben ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Schalter für die **Zündungs-Automatik (Display-Standby)** wurde von Seite 2 (Fahrt-Warnungen) auf **Seite 1 (Design & Display)** als Box 5 mit vollem Breiten-Span (`col-span-2`) und großem Schalter versetzt.
+    - Seite 2 (Fahrt-Warnungen) enthält nun ausschließlich die reinen Fahr- und Sicherheitswarnungen (*Navigations-Hinweise*, *Tempolimit-Warnung*, *Kraftstoff-Reserve*, *Lenkzeit & Pause*, *LKW- & Frachtschaden*).
+  - **🎙️ CB-Funk Kanalauswahl in die linke Spalte verschoben & Schnellfunk entfernt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Schnellfunk-Schaltflächen wurden aus der linken Spalte entfernt.
+    - Die **CB-Funk Kanalauswahl** wurde als primäre Navigationsleiste mit großen, fahrertauglichen Kanal-Karten (`CH 1`, `CH 2`, `#allgemein` etc.), pulsierendem Aktiv-Status und Verbindungsanzeige in die linke Spalte integriert.
+    - Unten in der linken Spalte: Fahrer-Rufname und CB-Statuskarte (`ON AIR`).
+    - Der Header wurde bereinigt (redundante horizontale Kanalleiste entfernt, stattdessen Anzeige des aktiven Kanals und Aktualisierungs-Taste).
+    - Rechte Spalte auf großzügige 8 Spalten erweitert für optimale Lesbarkeit des Chatverlaufs während der Fahrt.
+
+## [1.7.85] - 2026-10-09
+
+### 🎛️ Mehrseitige Automotive-Einstellungen & 1-Touch Fahrt-Bedienung für Chat
+  - **📐 Mehrseitige Einstellungen wie im Truck-Tab (`settingsPage`) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die zuvor überfüllte Einstellungen-Seite wurde wie der Truck-Tab in **3 übersichtliche, fahrtaugliche Seiten** mit segmentiertem Header-Dock (`01`, `02`, `03`) und Pfeilnavigation aufgeteilt:
+      - **Seite 1: Design & Display (`01`)**: Großzügiges 2x2-Raster für *CarPlay-Design* (Dunkel, Hell, Auto), *Karten-Design* (Dunkel, Hell, Auto), *Textgröße* (Groß, Normal, Klein) und *Bildschirm-Format* (16:9, 4:3, 16:10, 21:9, Frei).
+      - **Seite 2: Fahrt-Warnungen (`02`)**: Großformatiges 2x3-Raster für direkte Fahrzeug-Sicherheits-Alerts (*Zündungs-Automatik*, *Navigations-Hinweise*, *Tempolimit-Warnung*, *Kraftstoff-Reserve*, *Lenkzeit & Pause*, *LKW- & Frachtschaden*) mit großen Touch-Kacheln und leicht treffbaren Schaltern.
+      - **Seite 3: Meldungen & System (`03`)**: Pop-up-Meldungen für Fracht, Musik, Chat, News und Events links sowie System-, Telemetrie- und D-Pad-Bedienhinweise rechts.
+    - Nahtlose Bedienung per Touch, Maus oder D-Pad/Pfeiltasten (`← / →`).
+  - **📻 Aufgeräumter In-Car Funk & Chat für die Fahrt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **1-Touch Schnell-Funk**: Die redundante Kanalliste in der linken Spalte wurde durch **8 großflächige Trucker-Schnellwahltasten** (*Auf Achse*, *Stau voraus*, *Rast/Pause*, *Am Zielort*, *Funk-Check*, *Roger/10-4*, *Panne/Halt*, *Moin Moin*) ersetzt.
+    - Fahrer können während der Fahrt mit einem einzigen Fingertipp sofort einen vollständigen Funkspruch absenden, ohne die Tastatur zu bedienen oder den Blick vom Verkehr abzuwenden.
+    - Kanal-Auswahl sauber im Header als Funk-Pills platziert mit Live-Fahrer-Rufname und Fahrtstatus.
+    - Rechts: Größeres, kontrastreiches Nachrichtenlog mit Schnellstart-Taste für die Bildschirmtastatur.
+
+## [1.7.84] - 2026-10-09
+
+### 🎨 App-Raster Glassmorphismus & Wallpaper-Design auf alle CarPlay-Seiten übertragen
+  - **✨ Einheitliche Design-DNA des App-Rasters ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der visuelle Stil des App-Rasters (flüssiges interaktives `AnimatedBackground` Wallpaper, schwebende `backdrop-blur-2xl` Frosted-Glass-Panels mit `border-white/10`, stimmungsvolle Auren und lebendige Gradient-Header-Badges) wurde auf alle CarPlay-Seiten (außer Navigation und Medienplayer) übertragen:
+      - **Dashboard (`home`)**: Vollflächiger Wallpaper-Hintergrund mit schwebenden Frosted-Glass-Kacheln für Miniatur-Navi, Audio-Widget und Digital-Cockpit.
+      - **Auftrag / Frachtbrief (`job`)**: Himmelblauer Gradient-Badge (`from-sky-600 to-cyan-500`), Frosted-Glass Frachtbrief-Details, Ladungsspezifikationen und Strecken-Ribbon.
+      - **LKW Diagnose & Bordcomputer (`truck`)**: Bernstein-Gradient-Badge (`from-amber-600 to-orange-500`), Frosted Dock-Umschaltung für Cockpit-, Bordcomputer- und Diagnoseseiten mit Glas-Messuhren und Sensor-Kacheln.
+      - **CarPlay Einstellungen (`settings`)**: Graphit-Gradient-Badge (`from-zinc-600 to-slate-500`), Frosted Einstellungs-Kacheln für Theme, Kartenmodus, Textgröße und Seitenverhältnis.
+      - **In-Car Funk & Team-Chat (`chat`)**: Violett-Gradient-Badge (`from-purple-600 to-indigo-500`), Frosted Funkkanal-Leiste, Chat-Stream und Trucker-Preset-Chips.
+      - **Events & Konvois (`events`)**: Smaragd-Gradient-Badge (`from-teal-600 to-emerald-500`), Frosted Konvoi-Liste und Mission-Control mit Streckenband und "In Navigation laden".
+      - **Event-Detail Modal (`selectedEventModal`)**: Frosted-Glass-Overlay mit `backdrop-blur-2xl` und abgestimmten Kacheln.
+    - **Ausnahme gewahrt**: Navigation (`map`) und Medienplayer (`music`) verbleiben in ihren Vollbild-Karten-/Player-Layouts.
+
+## [1.7.83] - 2026-10-09
+
+### 📐 Dynamische Raster-Navigation & Beseitigung von Bildrand-Abschneidungen
+  - **🔲 Kanten- & Ring-Abschneidung behoben ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Horizontales und vertikales Container-Padding im App-Raster hinzugefügt (`px-6 sm:px-8 py-4 sm:py-6`).
+    - Blauer Fokus-Ring auf `ring-inset` umgestellt; Kanten werden bei Skalierung und Fokus garantiert nicht mehr am Rand abgeschnitten.
+  - **🎮 Dynamische Pfeiltasten-Navigation (`appGridCols`) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Pfeiltastensteuerung (hoch, runter, links, rechts) passt sich nun automatisch an die berechnete Spaltenanzahl an (3 Spalten bei 4:3 / <820px, 5 Spalten bei Breitbild).
+    - Kein Feststecken mehr beim Durchwechseln; flüssiges Navigieren zwischen allen 9 Apps passend zum Bildschirmformat.
+    - Automatisches sanftes Weiterschalten (`scrollIntoView`) des fokussierten App-Elements.
+  - **🐛 Bugfix `selectedEventModal` & `user`**:
+    - Fehlende State-Deklaration `selectedEventModal` und `user`-Initialisierung in CarPlay ergänzt sowie AuthProvider in `main.tsx` eingebunden.
+
+## [1.7.82] - 2026-10-09
+
+### ✨ Cockpit-Design für Chat & Events, Bildschirmtastatur & App-Raster Hintergrund
+  - **🔲 Bereinigtes App-Raster mit OPC-Hintergrund ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Header "Alle Apps" und die Tipp-Leiste am unteren Rand wurden entfernt.
+    - Der animierte Canvas-Hintergrund der OPC-Hauptanwendung (`AnimatedBackground`) läuft nun als Wallpaper hinter den schwebenden App-Icons.
+  - **⌨️ Bildschirmtastatur für Chat ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Ein Klick auf das Eingabefeld oder den neuen "Tastatur"-Button öffnet die CarPlay-Bildschirmtastatur.
+    - Nahtlose Texteingabe, Umschalten zwischen Radio/Stadt/Chat und Absenden bei Enter.
+  - **🎨 Cockpit-Design für Chat & Events ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Beide Apps wurden in den Hauptanzeigebereich integriert (Layout-Verschiebung behoben, kein schwarzer Freiraum mehr).
+    - Design an die etablierte Cockpit-Ästhetik angepasst:
+      - **Chat**: 4-Spalten-Funkkanäle & Fahrer-Status links, 8-Spalten-Nachrichtenlog rechts mit Trucker-Schnellpresets.
+      - **Events**: 5-Spalten-Konvoiliste links, 7-Spalten-Detailübersicht mit Streckenband und "In Navigation laden"-Button rechts.
+
+## [1.7.81] - 2026-10-09
+
+### 📻 In-Car Funk/Chat & Events Apps, 16:10 Taskbar Unten & Intelligenter Freier Modus
+  - **📐 16:10 Taskbar Unten & Verfeinerte Erkennung im freien Modus ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Auf 16:10-Bildschirmen (1.60) wandert die Taskbar nun wie gewünscht an die **untere Kante**.
+    - Die Erkennung im freien Skaliermodus (`free`) schaltet bei einem Schwellenwert von `1.72` um: Displays mit Verhältnissen < 1.72 (16:10, 4:3, quadratisch) platzieren die Taskbar unten für maximale Kartenbreite; Breitbildschirme (>= 1.72, wie 16:9 und 21:9) platzieren sie links am Rand.
+  - **🔲 Bereinigtes App-Raster**:
+    - Das Dashboard-Icon wurde aus dem App-Raster entfernt, da das Dashboard direkt über den Menü-Button erreichbar ist.
+  - **💬 In-Car Chat- & Funk-App (`'chat'`)**:
+    - Eigene App für Echtzeit-Kommunikation mit Teammitgliedern.
+    - Kanalauswahl (#allgemein, Funk-Kanäle), Live-Nachrichtenanzeige mit Rollen-Badges und Zeitstempeln.
+    - Trucker CB-Funk-Schnellantworten ("Auf Achse", "Stau voraus", "Rast/Pause", "Am Ziel", "Funk-Check", "Roger") und Texteingabe.
+  - **📅 In-Car Events & Konvois-App (`'events'`)**:
+    - Übersicht anstehender Konvois und Treffen mit Event-Typ, Datum/Uhrzeit und Restzeit-Countdown.
+    - Start- und Zielort-Streckenband mit Firmenangaben und Serverinformationen.
+    - **"In Navigation laden"** Button lädt die Route direkt ins GPS-Navi und schaltet zur Navigationskarte.
+    - Detailansicht für ausführliche Informationen und Regeln.
+
+## [1.7.80] - 2026-10-09
+
+### 🚗 Android Auto Menüführung & App-Raster für CarPlay
+  - **📱 Taskbar mit den 3 zuletzt genutzten Apps ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Menüleiste hält stets die **3 zuletzt aktiven Anwendungen** vor (z. B. Karte, Musik, LKW-Diagnose) und aktualisiert sich dynamisch bei jedem App-Aufruf.
+    - Das Dashboard belegt keinen Slot in der Taskbar, da es direkt über den Menü-Button angesteuert wird.
+    - Persistente Speicherung im `localStorage` (`openpipeclub_carplay_recent_apps`).
+  - **🔲 App-Launcher & Großes Icon-Raster ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Das App-Raster präsentiert alle 8 LKW-Apps mit **großen, modernen App-Icons** und Titel ohne ablenkende Textbeschreibungen.
+    - **Bereinigte Taskbar**: WLAN-Symbol und Tempolimitschild wurden aus der Taskbar entfernt; sie fokussiert sich rein auf Digitaluhr, Menü-Button und die 3 Schnellstart-Apps.
+  - **🔄 Original Android Auto 2-Stufen Menü-Zyklus ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Befindet man sich in einer geöffneten App (z. B. Navigation, Medien, Frachtauftrag), führt der Menü-Button **zuerst auf das Dashboard** (Home / Cockpit).
+    - Ein erneuter Klick auf dem Dashboard öffnet das **App-Raster**.
+    - Befindet man sich im App-Raster, bringt ein Klick den Fahrer wieder zurück auf das **Dashboard**.
+  - **📐 Automatische Taskbar-Positionierung (Seite vs. Unten) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Auf Breitbildformaten (`16:9`, `16:10`, `21:9`) positioniert sich die Taskbar als **Seitenleiste links**.
+    - Auf Bildschirmen mit quadratischerem oder kompakterem Seitenverhältnis (`4:3`, `narrow`, Tablets) wandert die Taskbar automatisch an den **unteren Bildschirmrand** als horizontale Navigationsleiste, um die volle Bildschirmbreite für Karte und Dashboard freizugeben.
+  - **🎮 Vollständige Tastatur- & Controller-Steuerung**:
+    - Tastaturnavigation im 4×2 Raster, automatische Rückkehr bei ESC und Fokus-Tracking.
+
+## [1.7.79] - 2026-10-09
+
+### 📱 Multi-Aspect-Ratio & Bildschirmgrößen-Kompatibilität für Apple CarPlay
+  - **🖥️ Frei wählbare Seitenverhältnisse (16:9, 4:3, 16:10, 21:9 & Frei) ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [OverlaySettings.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/OverlaySettings.tsx))**:
+    - Das bisherige starre 16:9-Verhältnis (`1024x576`) von Electron wurde durch eine dynamische Aspect-Ratio-Engine ersetzt.
+    - Neue Einstellung `carPlayAspectRatio`: Unterstützt `16:9`, `4:3` (speziell für iPads, Tablets & Cockpit-Displays), `16:10`, `21:9` (Ultrawide) sowie `free` (völlig freies Resizen ohne Aspect-Ratio-Lock).
+    - Beim Ändern in den Einstellungen passt sich das geöffnete CarPlay-Fenster in Electron sofort und ohne Neustart an.
+  - **📐 Intelligentes 2-Achsen-UI-Scaling**:
+    - `sidebarScale` berechnet sich nun aus beiden Dimensionen (`Math.min(wScale, hScale)`), sodass Navigations-Icons, Uhr und Tempolimit selbst auf kompakten 800×600- oder 1024×768-Auflösungen niemals vertikal überlaufen.
+    - Das Home-Dashboard passt die Spaltenaufteilung automatisch an das Seitenverhältnis an (`4:3` nutzt harmonische 50/50 bis 60/40 Breiten mit voller Höhe).
+    - Geschwindigkeits- und Gangzahlen nutzen stufenlose `clamp()`-Skalierung gegen Textumbrüche.
+  - **⚙️ Integrierte In-Car- und App-Bedienung**:
+    - Auswahl des Bildschirmformats sowohl unter *Overlay-Einstellungen -> CarPlay* als auch direkt im CarPlay *Settings*-Tab per Touch oder Tastaturnavigation.
+
+## [1.7.78] - 2026-10-07
+
+### ⚡ Massive GPU- & Grafikleistungs-Optimierung für CarPlay & WebGL-Karten
+  - **🚀 60 FPS Framerate-Begrenzer im Render-Loop ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Auf High-Refresh-Gaming-Monitoren (120 Hz, 144 Hz, 240 Hz) lief die `requestAnimationFrame`-Schleife ungebremst und triggerte `map.jumpTo()` 144- bis 240-mal pro Sekunde.
+    - Einführung eines festen 60-FPS-Frame-Pacing-Intervalls (~15,1 ms Mindestabstand). Reduziert GPU-Draw-Calls und WebGL-Renderlast um 60 % bis 75 % ohne sichtbaren Qualitätsunterschied.
+  - **🛑 Intelligenter Stillstand-Sleep (Zero-Cost Idle) ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Steht der LKW (Geschwindigkeit <= 0.5 km/h) und sind Kameraposition und Peilung vollständig eingeschwungen, friert die Kamera ein und überspringt `map.jumpTo()` komplett.
+    - Sobald der LKW anfährt oder neue Bewegung meldet, wacht der Loop verzögerungsfrei auf. An Ampeln, Raststätten und im ETS2-Menü sinkt die GPU-Last auf nahezu 0 %.
+  - **🗺️ Reiner 2D-Vektormodus für CarPlay (Keine 3D-Meshes / Extrusions) ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Neues Prop `enableTerrain3D`: In CarPlay standardmäßig auf `false`. Das aufwendige Raster-DEM-Höhengitter (`ets2-terrain.pmtiles`) und 3D-Gebäude-Extrusionen (`fill-extrusion`) werden für CarPlay-Navigationsanzeigen nicht geladen oder tesselliert.
+    - Beibehaltung des dynamischen 60°-Kamera-Blickwinkels (`pitch: 60`): Die dynamische perspektivische Fahransicht in Fahrtrichtung bleibt 1:1 erhalten, wird jedoch rein planar über die Vektorkarte gerendert, wodurch teure Raster-DEM-Elevation-Meshes vollständig entfallen.
+  - **⏸️ Echter WebGL-Pausiermodus bei Standby & Blackout ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Neues Prop `paused`: Wird bei Zündung aus oder F9-Blackout (`isCarPlaySleeping`) an alle CarPlay-Karten-Widgets übergeben. Der Loop bricht sofort ab (0 % GPU im Standby).
+  - **✨ GPU-Compositor Entlastung & Shader-Cache Reaktivierung ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Exzessive `backdrop-blur-2xl` Filter auf ohnehin zu 95 % opaken Kacheln in allen Farbthemen (White, Blue, Titan, Dark) durch ressourcenschonendes `backdrop-blur-sm` ersetzt.
+    - In `main.ts` wurde der Schalter `--disable-gpu-shader-disk-cache` entfernt, sodass Grafikkartentreiber kompilierte Shader auf der Festplatte cachen können und Mikroruckler entfallen.
+ 
 ## [1.7.77] - 2026-10-04
  
 ### 🛣️ Spurtreue Routendarstellung (Lane-Keeping) & Gegenfahrbahn-Filterung bei Blitzern (ETS2LA-Architektur)

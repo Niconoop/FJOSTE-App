@@ -57,7 +57,6 @@ app.commandLine.appendSwitch('disable-breakpad');
 app.commandLine.appendSwitch('disable-speech-api');
 app.commandLine.appendSwitch('disable-voice-input');
 app.commandLine.appendSwitch('disable-notifications');
-app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('no-first-run');
@@ -164,6 +163,7 @@ let overlaySettings: any = {
   showSpotify: true,
   showCarPlay: false,
   carPlayTheme: 'dark',
+  carPlayAspectRatio: '16:9',
   carPlayHotkeys: {
     toggle: 'F9',
     next: 'Ctrl+Alt+Right',
@@ -528,6 +528,7 @@ async function loadSettings(isAppStart = false) {
           trafficLightVariant: 'compact',
           showCarPlay: false,
           carPlayTheme: 'dark',
+          carPlayAspectRatio: '16:9',
           carPlayHotkeys: {
             toggle: 'F9',
             next: 'Ctrl+Alt+Right',
@@ -3329,6 +3330,14 @@ function spawnCarPlayProcess() {
   createCarPlayWindow();
 }
 
+function getCarPlayAspectRatio(ratio?: string): number | null {
+  if (ratio === '4:3' || ratio === '4/3') return 4 / 3;
+  if (ratio === '16:10' || ratio === '16/10') return 16 / 10;
+  if (ratio === '21:9' || ratio === '21/9') return 21 / 9;
+  if (ratio === 'free' || ratio === 'auto' || ratio === 'none') return null;
+  return 16 / 9; // Default 16:9
+}
+
 function createCarPlayWindow() {
   if (!userToken) return;
   if (carplayWin && !carplayWin.isDestroyed()) {
@@ -3339,9 +3348,21 @@ function createCarPlayWindow() {
     return;
   }
 
+  const currentRatio = overlaySettings.carPlayAspectRatio || '16:9';
+  let initWidth = 1024;
+  let initHeight = 576;
+  if (currentRatio === '4:3' || currentRatio === '4/3') {
+    initHeight = 768;
+  } else if (currentRatio === '16:10' || currentRatio === '16/10') {
+    initHeight = 640;
+  } else if (currentRatio === '21:9' || currentRatio === '21/9') {
+    initWidth = 1344;
+    initHeight = 576;
+  }
+
   carplayWin = new BrowserWindow({
-    width: 1024,
-    height: 576,
+    width: initWidth,
+    height: initHeight,
     title: 'OPC CarPlay',
     icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
     frame: false,
@@ -3354,20 +3375,21 @@ function createCarPlayWindow() {
       backgroundThrottling: false,
       webSecurity: false,
     },
-    minWidth: 640,
-    minHeight: 360,
+    minWidth: 480,
+    minHeight: 320,
   });
 
   carplayWin.center();
   carplayWin.showInactive();
 
-  const ASPECT_RATIO = 16 / 9;
   let isResizing = false;
   const enforceAspectRatio = () => {
     if (isResizing || !carplayWin || carplayWin.isDestroyed()) return;
+    const ratio = getCarPlayAspectRatio(overlaySettings.carPlayAspectRatio);
+    if (!ratio) return; // 'free' mode allows unrestricted resizing
     isResizing = true;
     const [width, height] = carplayWin.getSize();
-    const newHeight = Math.round(width / ASPECT_RATIO);
+    const newHeight = Math.round(width / ratio);
     if (Math.abs(height - newHeight) > 1) {
       carplayWin.setSize(width, newHeight);
     }
@@ -3430,8 +3452,21 @@ ipcMain.on('carplay-media-control', (_, action) => {
 ipcMain.on('overlay-settings-changed', (_, settings) => {
   const carPlayChanged = overlaySettings.showCarPlay !== settings.showCarPlay;
   const hotkeysChanged = JSON.stringify(overlaySettings.carPlayHotkeys) !== JSON.stringify(settings.carPlayHotkeys);
+  const oldRatio = overlaySettings.carPlayAspectRatio;
+  const newRatio = settings.carPlayAspectRatio;
+  const ratioChanged = oldRatio !== newRatio;
+
   overlaySettings = settings;
   saveSettings();
+
+  if (ratioChanged && carplayWin && !carplayWin.isDestroyed()) {
+    const targetRatio = getCarPlayAspectRatio(newRatio);
+    if (targetRatio) {
+      const [currentW] = carplayWin.getSize();
+      const targetH = Math.round(currentW / targetRatio);
+      carplayWin.setSize(currentW, targetH);
+    }
+  }
   overlayWin?.webContents.send('overlay-settings-updated', settings);
   if (carplayWin && !carplayWin.isDestroyed()) {
     carplayWin.webContents.send('overlay-settings-updated', settings);

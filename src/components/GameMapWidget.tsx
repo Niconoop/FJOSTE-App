@@ -88,6 +88,12 @@ interface GameMapWidgetProps {
   onApproachingTrafficLightChange?: (light: ApproachingTrafficLight | null) => void;
   /** Optional manual top padding override for camera following */
   followPaddingTop?: number;
+  /** Whether 3D terrain heightfield is enabled (defaults to false for 2D CarPlay performance) */
+  enableTerrain3D?: boolean;
+  /** Whether rendering is paused (e.g. CarPlay standby or hidden tab) */
+  paused?: boolean;
+  /** Target frame rate cap (e.g. 20 for mini-map, 30 for full navigation). Defaults to 30 FPS */
+  targetFps?: number;
 }
 
 // --- ETS2 coordinate → lat/lng projection (Lambert Conformal Conic) ---
@@ -417,42 +423,43 @@ const createArrowImage = (map: maplibregl.Map) => {
   }
 };
 
-function createEts2Style(): maplibregl.StyleSpecification {
+function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpecification {
   const tileRoot = `${API_URL}/map/proxy`;
 
+  const sources: Record<string, any> = {
+    ets2: {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/ets2.pmtiles`,
+    },
+    world: {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/world.pmtiles`,
+    },
+    contours: {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/ets2-contours.pmtiles`,
+    },
+    footprints: {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
+    },
+  };
+
+  if (enableTerrain3D) {
+    sources.terrain = {
+      type: 'raster-dem',
+      url: `pmtiles://${tileRoot}/ets2-terrain.pmtiles`,
+      tileSize: 256,
+      encoding: 'mapbox',
+    };
+  }
 
   return {
     version: 8,
     glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sprite: `${tileRoot}/sprites`,
-    sources: {
-      ets2: {
-        type: 'vector',
-        url: `pmtiles://${tileRoot}/ets2.pmtiles`,
-      },
-      world: {
-        type: 'vector',
-        url: `pmtiles://${tileRoot}/world.pmtiles`,
-      },
-      terrain: {
-        type: 'raster-dem',
-        url: `pmtiles://${tileRoot}/ets2-terrain.pmtiles`,
-        tileSize: 256,
-        encoding: 'mapbox',
-      },
-      contours: {
-        type: 'vector',
-        url: `pmtiles://${tileRoot}/ets2-contours.pmtiles`,
-      },
-      footprints: {
-        type: 'vector',
-        url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
-      },
-    },
-    terrain: {
-      source: 'terrain',
-      exaggeration: 2.2,
-    },
+    sources,
+    ...(enableTerrain3D ? { terrain: { source: 'terrain', exaggeration: 2.2 } } : {}),
     layers: [
       {
         id: 'background',
@@ -541,9 +548,9 @@ function createEts2Style(): maplibregl.StyleSpecification {
           'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
         },
       },
-      {
+      ...(enableTerrain3D ? [{
         id: 'ets2-extrusions',
-        type: 'fill-extrusion',
+        type: 'fill-extrusion' as const,
         source: 'footprints',
         'source-layer': 'footprints',
         minzoom: 8.5,
@@ -562,7 +569,7 @@ function createEts2Style(): maplibregl.StyleSpecification {
           'fill-extrusion-opacity': 0.8,
           'fill-extrusion-vertical-gradient': true,
         },
-      },
+      }] : []),
 
       {
         id: 'ets2-roads-casing',
@@ -884,8 +891,19 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   nearbyVehicles, nearbyVehicleColor = '#007aff',
   semaphores,
   onApproachingTrafficLightChange,
-  followPaddingTop
+  followPaddingTop,
+  enableTerrain3D = false,
+  pitch = 38,
+  paused = false,
+  targetFps = 30,
 }, ref) => {
+  const pausedRef = useRef<boolean>(paused);
+  pausedRef.current = paused;
+  const pitchRef = useRef<number>(pitch ?? 38);
+  pitchRef.current = pitch ?? 38;
+  const currentSpeedRef = useRef<number | undefined>(currentSpeed);
+  currentSpeedRef.current = currentSpeed;
+  const hasNewMotionRef = useRef<boolean>(true);
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerEl = useRef<HTMLDivElement | null>(null);
@@ -896,6 +914,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   const lastNearbyCountRef = useRef<number>(0);
   const lastRoadQueryTimeRef = useRef<number>(0);
   const lastRoadQueryPosRef = useRef<[number, number] | null>(null);
+  const lastProximityCheckTimeRef = useRef<number>(0);
   const cachedRoadTypeRef = useRef<'freeway' | 'divided' | 'local' | 'unknown'>('unknown');
   const lastCameraPaddingTopRef = useRef<number>(-1);
   const [following, setFollowing] = useState(true);
@@ -1173,23 +1192,24 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: createEts2Style(),
+      style: createEts2Style(enableTerrain3D),
       center: [1.85, 50.95],
       zoom: currentZoomRef.current,
       minZoom: 4,
       maxZoom: 13,
       bearing: 0,
-      pitch: 60,
+      pitch: pitch ?? 38,
       attributionControl: false,
       interactive: true,
       dragRotate: true,
       pitchWithRotate: false,
       touchZoomRotate: true,
       doubleClickZoom: true,
-      maxTileCacheSize: 15,
+      maxTileCacheSize: 10,
       fadeDuration: 0,
       collectResourceTiming: false,
       renderWorldCopies: false,
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 1.25),
     });
     map.setMinZoom(4);
     map.setMaxZoom(13);
@@ -1286,7 +1306,9 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           });
         }
 
-        map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+        if (enableTerrain3D) {
+          map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
+        }
       } catch (err) {
         console.debug("Terrain load notice:", err);
       }
@@ -1405,6 +1427,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     }
     prevTargetPosRef.current = pos;
     targetPosRef.current = pos;
+    hasNewMotionRef.current = true;
 
     if (!hasInitializedPosRef.current) {
       currentPosRef.current = pos;
@@ -1423,51 +1446,75 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       currentBearingRef.current = desiredBearing;
     }
 
-    // Speedcam Proximity Detection
-    if (showSpeedcams !== false && pos) {
-      const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750, desiredBearing, fullRemainingCoordsRef.current);
-      onSpeedcamAlertRef.current?.(alert);
-    }
+    // If paused, update target positions but skip heavy proximity and route calculations
+    if (pausedRef.current) return;
 
     // Dynamic route progress slicing: update traveled vs remaining path as vehicle drives forward
     sliceRouteProgress(effX, effY);
 
-    // Traffic Light (Ampel) Ahead Detection: only active when <= 100m in front of vehicle
-    const activeLight = detectApproachingTrafficLight(
-      semaphores,
-      effX,
-      effY,
-      heading,
-      desiredBearing,
-      100
-    );
-    const prevLight = lastReportedLightRef.current;
-    const hasLightChanged =
-      (!prevLight && !!activeLight) ||
-      (!!prevLight && !activeLight) ||
-      (!!prevLight && !!activeLight && (
-        prevLight.id !== activeLight.id ||
-        prevLight.state !== activeLight.state ||
-        prevLight.distance !== activeLight.distance ||
-        prevLight.timeRemaining !== activeLight.timeRemaining
-      ));
-    if (hasLightChanged) {
-      lastReportedLightRef.current = activeLight;
-      onApproachingTrafficLightChangeRef.current?.(activeLight);
+    // Proximity checks throttled to at most 5 times per second (200ms) to spare CPU/GPU
+    const nowChecks = performance.now();
+    if (nowChecks - lastProximityCheckTimeRef.current >= 200) {
+      lastProximityCheckTimeRef.current = nowChecks;
+
+      // Speedcam Proximity Detection
+      if (showSpeedcams !== false && pos) {
+        const alert = findApproachingSpeedcam(pos[0], pos[1], currentSpeed ?? 0, 750, desiredBearing, fullRemainingCoordsRef.current);
+        onSpeedcamAlertRef.current?.(alert);
+      }
+
+      // Traffic Light (Ampel) Ahead Detection: only active when <= 100m in front of vehicle
+      const activeLight = detectApproachingTrafficLight(
+        semaphores,
+        effX,
+        effY,
+        heading,
+        desiredBearing,
+        100
+      );
+      const prevLight = lastReportedLightRef.current;
+      const hasLightChanged =
+        (!prevLight && !!activeLight) ||
+        (!!prevLight && !activeLight) ||
+        (!!prevLight && !!activeLight && (
+          prevLight.id !== activeLight.id ||
+          prevLight.state !== activeLight.state ||
+          prevLight.distance !== activeLight.distance ||
+          prevLight.timeRemaining !== activeLight.timeRemaining
+        ));
+      if (hasLightChanged) {
+        lastReportedLightRef.current = activeLight;
+        onApproachingTrafficLightChangeRef.current?.(activeLight);
+      }
     }
   }, [gameX, gameY, heading, currentSpeed, showSpeedcams, dest, destCompany, source, city, semaphores]);
 
 
 
-  // High Performance 60 FPS requestAnimationFrame Smooth Driving Camera & Marker Loop
+  // High Performance Smooth Driving Camera & Marker Loop with Idle Sleep & Standby Pause
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
+    if (!mapReady || !mapRef.current || paused) return;
 
     let animFrameId: number;
     let lastFrameTime = performance.now();
+    let isIdleSleeping = false;
+    const TARGET_FPS = targetFps ?? 30;
+    const FRAME_MIN_INTERVAL = 1000 / TARGET_FPS - 1.5;
 
     const renderLoop = (now: number) => {
-      const dt = Math.min((now - lastFrameTime) / 1000, 0.1); // clamp delta time
+      // 1. Standby / Paused Bailout: 0% GPU when CarPlay is sleeping or hidden
+      if (pausedRef.current) {
+        return;
+      }
+
+      // 2. High-Refresh Monitor FPS Limiter: Cap at TARGET_FPS (saves 60-75% GPU on 144Hz/240Hz monitors)
+      const elapsed = now - lastFrameTime;
+      if (elapsed < FRAME_MIN_INTERVAL) {
+        animFrameId = requestAnimationFrame(renderLoop);
+        return;
+      }
+
+      const dt = Math.min(elapsed / 1000, 0.1); // clamp delta time
       lastFrameTime = now;
 
       const map = mapRef.current;
@@ -1476,6 +1523,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         const curPos = currentPosRef.current;
         const vel = targetVelocityRef.current;
         const timeSinceTarget = (now - lastTargetTimeRef.current) / 1000;
+        const curSpeed = currentSpeedRef.current ?? 0;
 
         // Smooth Dead Reckoning: extrapolate vehicle position forward along velocity vector between telemetry updates (capped at 60ms)
         const extrapTime = Math.min(timeSinceTarget, 0.06);
@@ -1500,45 +1548,6 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
         const newBearing = normalizeBearing(curBearing + deltaBearing * bearingAlpha);
         currentBearingRef.current = newBearing;
 
-        // Player marker setup & smooth update without DOM recreation (Solid Apple CarPlay Blue Navigation Chevron)
-        if (!markerEl.current) {
-          const el = document.createElement('div');
-          el.className = 'game-map-player-marker';
-          el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
-          const inner = document.createElement('div');
-          inner.style.cssText = 'display:flex;align-items:center;justify-content:center;transform-origin:center center;filter:drop-shadow(0 2px 8px rgba(0,122,255,0.85)) drop-shadow(0 4px 14px rgba(0,0,0,0.9));will-change:transform;';
-          inner.innerHTML = `
-            <svg width="58" height="72" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Outer Dark Contour border for crisp contrast on light & dark road surfaces -->
-              <path d="M14 2L2.5 32.5L14 25.5L25.5 32.5L14 2Z" fill="#070b19" stroke="#070b19" stroke-width="2.5" stroke-linejoin="round"/>
-              <!-- Solid monochrome Apple CarPlay blue navigation chevron -->
-              <path d="M14 3.2L4.0 31.6L14 25.4L24.0 31.6L14 3.2Z" fill="#007aff"/>
-            </svg>
-          `;
-          el.appendChild(inner);
-          markerEl.current = el;
-          markerInnerEl.current = inner;
-        }
-
-        const mapBearing = map.getBearing();
-        const isFollow = isFollowingRef.current;
-        // When following the truck, the map rotates with the vehicle so the arrow points straight forward (0 deg).
-        // Only in free-cam mode does the arrow rotate relative to the free map bearing.
-        const arrowRotation = isFollow ? 0 : (newBearing - mapBearing);
-        if (markerInnerEl.current) {
-          markerInnerEl.current.style.transform = `perspective(600px) rotateX(60deg) rotate(${arrowRotation}deg)`;
-        }
-
-        if (!markerRef.current) {
-          markerRef.current = new maplibregl.Marker({
-            element: markerEl.current,
-          })
-            .setLngLat([newLng, newLat])
-            .addTo(map);
-        } else {
-          markerRef.current.setLngLat([newLng, newLat]);
-        }
-
         // Smooth high-frequency zoom convergence (zero delay, perfectly smooth 60 FPS transition)
         const zoomDecay = 18.0;
         const zoomAlpha = 1 - Math.exp(-zoomDecay * dt);
@@ -1548,29 +1557,75 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
           currentZoomRef.current = targetZoomRef.current;
         }
 
-        // Camera follow
-        if (isFollow) {
-          const topOffset = followPaddingTopRef.current !== undefined
-            ? followPaddingTopRef.current
-            : ((showInstructionsRef.current && navInstructionRef.current.primary) ? (fullWidthInstructionsRef.current ? 140 : 150) : 0);
+        const isFollow = isFollowingRef.current;
+        const topOffset = followPaddingTopRef.current !== undefined
+          ? followPaddingTopRef.current
+          : ((showInstructionsRef.current && navInstructionRef.current.primary) ? (fullWidthInstructionsRef.current ? 140 : 150) : 0);
 
-          const isPosMoving = Math.abs(predictedLat - curPos[0]) > 1e-6 || Math.abs(predictedLng - curPos[1]) > 1e-6;
-          const isBearingRotating = Math.abs(deltaBearing) > 0.04;
-          const isZoomChanging = Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005;
-          const isPaddingChanging = lastCameraPaddingTopRef.current !== topOffset;
+        const isPosMoving = Math.abs(predictedLat - curPos[0]) > 1e-6 || Math.abs(predictedLng - curPos[1]) > 1e-6;
+        const isBearingRotating = Math.abs(deltaBearing) > 0.02;
+        const isZoomChanging = Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005;
+        const isPaddingChanging = lastCameraPaddingTopRef.current !== topOffset;
 
-          if (isPosMoving || isBearingRotating || isZoomChanging || isPaddingChanging) {
+        // 3. Intelligent Idle Sleep: If vehicle is stopped (speed <= 0.5) and camera has fully settled, sleep WebGL draws!
+        if (!isPosMoving && !isBearingRotating && !isZoomChanging && !isPaddingChanging && curSpeed <= 0.5 && !hasNewMotionRef.current) {
+          isIdleSleeping = true;
+        } else {
+          isIdleSleeping = false;
+          hasNewMotionRef.current = false;
+        }
+
+        if (!isIdleSleeping) {
+          // Player marker setup & smooth update without DOM recreation (Solid Apple CarPlay Blue Navigation Chevron)
+          if (!markerEl.current) {
+            const el = document.createElement('div');
+            el.className = 'game-map-player-marker';
+            el.style.cssText = 'width:64px;height:64px;position:relative;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999999;';
+            const inner = document.createElement('div');
+            inner.style.cssText = 'display:flex;align-items:center;justify-content:center;transform-origin:center center;filter:drop-shadow(0 2px 8px rgba(0,122,255,0.85)) drop-shadow(0 4px 14px rgba(0,0,0,0.9));will-change:transform;';
+            inner.innerHTML = `
+              <svg width="58" height="72" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Outer Dark Contour border for crisp contrast on light & dark road surfaces -->
+                <path d="M14 2L2.5 32.5L14 25.5L25.5 32.5L14 2Z" fill="#070b19" stroke="#070b19" stroke-width="2.5" stroke-linejoin="round"/>
+                <!-- Solid monochrome Apple CarPlay blue navigation chevron -->
+                <path d="M14 3.2L4.0 31.6L14 25.4L24.0 31.6L14 3.2Z" fill="#007aff"/>
+              </svg>
+            `;
+            el.appendChild(inner);
+            markerEl.current = el;
+            markerInnerEl.current = inner;
+          }
+
+          const mapBearing = map.getBearing();
+          const arrowRotation = isFollow ? 0 : (newBearing - mapBearing);
+          const currentPitch = pitchRef.current;
+          if (markerInnerEl.current) {
+            markerInnerEl.current.style.transform = `perspective(600px) rotateX(${currentPitch}deg) rotate(${arrowRotation}deg)`;
+          }
+
+          if (!markerRef.current) {
+            markerRef.current = new maplibregl.Marker({
+              element: markerEl.current,
+            })
+              .setLngLat([newLng, newLat])
+              .addTo(map);
+          } else {
+            markerRef.current.setLngLat([newLng, newLat]);
+          }
+
+          // Camera follow
+          if (isFollow) {
             lastCameraPaddingTopRef.current = topOffset;
             map.jumpTo({
               center: [newLng, newLat],
               bearing: newBearing,
               zoom: currentZoomRef.current,
-              pitch: 60,
+              pitch: currentPitch,
               padding: { top: topOffset, bottom: 0, left: 0, right: 0 },
             });
+          } else if (isZoomChanging) {
+            map.setZoom(currentZoomRef.current);
           }
-        } else if (Math.abs(targetZoomRef.current - currentZoomRef.current) > 0.005) {
-          map.setZoom(currentZoomRef.current);
         }
       }
 
@@ -1579,7 +1634,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
 
     animFrameId = requestAnimationFrame(renderLoop);
     return () => cancelAnimationFrame(animFrameId);
-  }, [mapReady]);
+  }, [mapReady, paused, targetFps]);
 
   // Auto max-zoom to 12 when destination company prop becomes active
   const lastDestCompanyRef = useRef<string | undefined>(destCompany);

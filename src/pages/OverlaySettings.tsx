@@ -52,6 +52,7 @@ interface OverlaySettingsType {
   showCarPlay: boolean;
   carPlayTheme: 'dark' | 'light' | 'auto';
   carPlayTextScale: 'small' | 'medium' | 'large';
+  carPlayAspectRatio?: '16:9' | '4:3' | '16:10' | '21:9' | 'free';
   carPlayShowNavInstructions?: boolean;
   carPlayIgnitionSleep?: boolean;
   carPlayHotkeys: {
@@ -312,6 +313,7 @@ const DEFAULT_SETTINGS: OverlaySettingsType = {
   showCarPlay: false,
   carPlayTheme: 'dark',
   carPlayTextScale: 'medium',
+  carPlayAspectRatio: '16:9',
   carPlayShowNavInstructions: true,
   carPlayIgnitionSleep: false,
   carPlayHotkeys: {
@@ -3188,6 +3190,42 @@ const OverlaySettings = () => {
                                 </button>
                               ))}
                             </div>
+                          </div>
+
+                          {/* Aspect Ratio selector */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-400 font-medium block">Bildschirmformat (Aspect Ratio)</span>
+                              <span className="text-[10px] text-primary font-mono font-bold uppercase">
+                                {settings.carPlayAspectRatio || '16:9'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1.5">
+                              {[
+                                { id: '16:9', label: '16:9', desc: 'Standard' },
+                                { id: '4:3', label: '4:3', desc: 'iPad / LKW' },
+                                { id: '16:10', label: '16:10', desc: 'Laptop' },
+                                { id: '21:9', label: '21:9', desc: 'Ultrawide' },
+                                { id: 'free', label: 'Frei', desc: 'Beliebig' }
+                              ].map(ratio => (
+                                <button
+                                  key={ratio.id}
+                                  type="button"
+                                  onClick={() => updateSetting('carPlayAspectRatio', ratio.id as any)}
+                                  className={`px-1.5 py-1.5 rounded-lg text-center border transition-all cursor-pointer ${
+                                    (settings.carPlayAspectRatio || '16:9') === ratio.id
+                                      ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_8px_var(--primary-glow)] font-bold'
+                                      : 'bg-[#18181b] border-white/10 text-slate-400 hover:bg-[#27272a] hover:text-white'
+                                  }`}
+                                >
+                                  <div className="text-[9.5px] font-black uppercase tracking-wider">{ratio.label}</div>
+                                  <div className="text-[7.5px] text-slate-500 font-medium truncate">{ratio.desc}</div>
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[9px] text-slate-500 leading-relaxed">
+                              Kompatibel mit allen Displays: <strong>16:9</strong> für normale Monitore, <strong>4:3</strong> für iPads & LKW-GPS-Bildschirme, <strong>16:10</strong>, <strong>21:9</strong> oder <strong>Frei</strong> für stufenloses Skalieren.
+                            </p>
                           </div>
 
                           {/* Navigation Instructions Toggle */}
