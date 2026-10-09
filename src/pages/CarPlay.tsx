@@ -85,6 +85,7 @@ interface OverlaySettings {
   carPlayTextScale: 'small' | 'medium' | 'large';
   carPlayAspectRatio?: '16:9' | '4:3' | '16:10' | '21:9' | 'free';
   carPlayShowNavInstructions?: boolean;
+  carPlayHqOverlay?: 'truckline' | 'truckersmp' | 'all' | 'none';
   carPlayIgnitionSleep?: boolean;
   carPlayHotkeys: {
     toggle: string;
@@ -111,6 +112,7 @@ const DEFAULT_SETTINGS: OverlaySettings = {
   carPlayTextScale: 'medium',
   carPlayAspectRatio: '16:9',
   carPlayShowNavInstructions: true,
+  carPlayHqOverlay: 'truckline',
   carPlayIgnitionSleep: false,
   carPlayHotkeys: {
     toggle: 'F9',
@@ -3733,6 +3735,7 @@ export default function CarPlayPage() {
                           width={mapDims.w}
                           height={mapDims.h}
                           mapId="carplay-home"
+                          hqOverlay={settings.carPlayHqOverlay || 'truckline'}
                           zoom={carPlayMapZoom}
                           onZoomChange={setCarPlayMapZoom}
                           showInstructions={settings.carPlayShowNavInstructions !== false}
@@ -5645,6 +5648,53 @@ export default function CarPlayPage() {
                             </div>
                           </div>
 
+                          {/* Box: Multiplayer HQ Overlay */}
+                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
+                            <div>
+                              <span className="text-[10px] font-mono font-black text-amber-400 uppercase tracking-widest block mb-1">
+                                🏢 MULTIPLAYER HQ OVERLAY
+                              </span>
+                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
+                                Wähle das Hauptquartier passend zu deinem aktuellen Multiplayer-Server.
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                              {[
+                                { id: 'truckline', label: 'Truckline HQ', desc: 'Dillenburg (B255)', icon: '🚚' },
+                                { id: 'truckersmp', label: 'TruckersMP HQ', desc: 'Wrocław (Polen)', icon: '🚛' },
+                                { id: 'all', label: 'Beide HQs', desc: 'Alle Overlays', icon: '🏢' },
+                                { id: 'none', label: 'Keins', desc: 'Vanilla ETS2', icon: '🌐' }
+                              ].map((item) => {
+                                const isActive = (settings.carPlayHqOverlay || 'truckline') === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => updateSetting('carPlayHqOverlay', item.id as any)}
+                                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between h-20 ${
+                                      isActive
+                                        ? 'border-amber-500 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.35)] ring-1 ring-amber-500'
+                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-base">{item.icon}</span>
+                                      {isActive && <Check size={14} className="text-amber-400" />}
+                                    </div>
+                                    <div>
+                                      <span className={`text-[10px] font-black uppercase tracking-wider block ${isActive ? 'text-amber-300' : 'text-white'}`}>
+                                        {item.label}
+                                      </span>
+                                      <span className="text-[8px] font-medium text-zinc-400 block truncate">
+                                        {item.desc}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
                           {/* Box 3: Text Scale */}
                           <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
                             <div>
@@ -6093,6 +6143,7 @@ export default function CarPlayPage() {
                     width={maxMapDims.w}
                     height={maxMapDims.h}
                     mapId="carplay-maptab"
+                    hqOverlay={settings.carPlayHqOverlay || 'truckline'}
                     zoom={carPlayMapZoom}
                     onZoomChange={setCarPlayMapZoom}
                     showInstructions={settings.carPlayShowNavInstructions !== false}
@@ -6961,6 +7012,7 @@ export default function CarPlayPage() {
                 width={maxMapDims.w}
                 height={maxMapDims.h}
                 mapId="carplay-max"
+                hqOverlay={settings.carPlayHqOverlay || 'truckline'}
                 zoom={carPlayMapZoom}
                 onZoomChange={setCarPlayMapZoom}
                 showInstructions={settings.carPlayShowNavInstructions !== false}

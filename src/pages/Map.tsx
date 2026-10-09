@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Car, ChevronDown, Check, Radio, Navigation, List, Box, Camera, SlidersHorizontal, Mountain } from 'lucide-react';
+import { RefreshCw, Truck, MapPin, Clock, Users, X, Search, Map as MapIcon, ChevronRight, Gauge, Package, ArrowRight, Globe, AlertTriangle, Car, ChevronDown, Check, Radio, Navigation, List, Box, Camera, SlidersHorizontal, Mountain, HardDrive } from 'lucide-react';
 
 
 import axios from 'axios';
@@ -12,6 +12,8 @@ import * as proj4 from 'proj4';
 import * as pmtiles from 'pmtiles';
 import { loadAllCities, findCity, findClosestCity } from '../data/ets2Cities';
 import { getSpeedCamerasGeoJson } from '../data/ets2Speedcams';
+import { OfflineMapsModal } from '../components/OfflineMapsModal';
+import { getSharedPmTilesProtocol, syncOfflineMapSourcesWithProtocol } from '../utils/mapTileCache';
 
 const SIDEBAR_WIDTH = 320;
 
@@ -20,15 +22,141 @@ const SPECIAL_ROAD_COORDS: Record<string, [number, number]> = {
   "c-d road": [51.050, 4.350],
   "cd road": [51.050, 4.350],
   "calais - duisburg": [51.050, 4.350],
+  "truckline hq": [50.7633, 8.6311],
+  "truckline": [50.7633, 8.6311],
+  "truckersmp hq": [51.11, 17.03],
+  "truckersmp": [51.11, 17.03],
 };
 
 // Register PMTiles protocol once
 let pmTilesProtocolAdded = false;
 function addPmTilesProtocol() {
   if (pmTilesProtocolAdded) return;
-  const protocol = new pmtiles.Protocol();
+  const protocol = getSharedPmTilesProtocol();
   maplibregl.addProtocol('pmtiles', (params: any, abortController: any) => protocol.tile(params, abortController));
+  syncOfflineMapSourcesWithProtocol().catch(() => {});
   pmTilesProtocolAdded = true;
+}
+
+function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visibility: 'visible' | 'none' = 'visible') {
+  return [
+    {
+      id: `${prefix}-areas`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea'], ['!=', ['get', 'hidden'], true]],
+      layout: { 'fill-sort-key': ['get', 'zIndex'], visibility },
+      paint: {
+        'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs-base`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { visibility },
+      paint: {
+        'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads-casing`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+        ['!=', ['get', 'roadType'], 'unknown'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', visibility },
+      paint: {
+        'line-color': isLight ? '#64748b' : '#1e293b',
+        'line-gap-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          8, 1.5, 11, 2.5, 14, 4.0, 16, 6.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { visibility },
+      paint: {
+        'fill-color': isLight ? '#8e9aa8' : '#475569',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+        ['!=', ['get', 'roadType'], 'unknown'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', visibility },
+      paint: {
+        'line-color': isLight
+          ? [
+            'match', ['get', 'roadType'],
+            'freeway', '#ff9f1c',
+            'divided', '#ffd166',
+            'local', '#8e9aa8',
+            '#8e9aa8',
+          ]
+          : [
+            'match', ['get', 'roadType'],
+            'freeway', '#3b82f6',
+            'divided', '#cbd5e1',
+            'local', '#475569',
+            '#475569',
+          ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-pois`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2',
+      minzoom: 8,
+      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi']],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.65, 11, 1.0, 14, 1.4],
+        visibility,
+      },
+    },
+  ];
 }
 
 function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
@@ -61,6 +189,14 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
       footprints: {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
+      },
+      'truckline-hq': {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-truckline-hq.pmtiles`,
+      },
+      'truckersmp-hq': {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-truckersmp-hq.pmtiles`,
       },
     },
 
@@ -442,6 +578,8 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
           'text-halo-width': 1.5,
         },
       },
+      ...createHqLayers('truckline-hq', 'tl', isLight, 'visible'),
+      ...createHqLayers('truckersmp-hq', 'tmp', isLight, 'visible'),
     ],
   } as any;
 }
@@ -811,6 +949,9 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
   const [is3DMode, setIs3DMode] = useState(false);
   const [showTerrain3D, setShowTerrain3D] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [showTrucklineHq, setShowTrucklineHq] = useState(true);
+  const [showTruckersmpHq, setShowTruckersmpHq] = useState(true);
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
 
   // Sync with interactive onboarding spotlight tour
   useEffect(() => {
@@ -1744,13 +1885,22 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                 <span className="text-[10px] font-black text-emerald-400 uppercase tracking-tighter">{onlineCount} Fahrer aktiv</span>
               </div>
             </div>
-            <button
-              onClick={() => { setLoading(true); fetchData(); if (showTraffic) fetchTraffic(); }}
-              className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all border border-white/5 cursor-pointer shrink-0"
-              title="Karte & Daten aktualisieren"
-            >
-              <RefreshCw size={14} className={loading || trafficLoading ? "animate-spin text-amber-400" : ""} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => setShowOfflineModal(true)}
+                className="w-8 h-8 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 flex items-center justify-center text-amber-400 hover:text-white transition-all border border-amber-500/30 cursor-pointer shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                title="Offline-Karten Speicher (PMTiles lokal herunterladen)"
+              >
+                <HardDrive size={14} />
+              </button>
+              <button
+                onClick={() => { setLoading(true); fetchData(); if (showTraffic) fetchTraffic(); }}
+                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all border border-white/5 cursor-pointer"
+                title="Karte & Daten aktualisieren"
+              >
+                <RefreshCw size={14} className={loading || trafficLoading ? "animate-spin text-amber-400" : ""} />
+              </button>
+            </div>
           </div>
 
           {/* Traffic & Map Layer Control Card */}
@@ -1841,6 +1991,86 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                       <Box size={14} className={is3DMode ? "text-cyan-400" : ""} />
                       <span>3D Kamera</span>
                     </button>
+                  </div>
+
+                  {/* Multiplayer HQs & Quick Jump */}
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      <span>Multiplayer HQs</span>
+                      <button
+                        onClick={() => setShowOfflineModal(true)}
+                        className="text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer font-bold"
+                        title="Offline Karten-Speicher öffnen"
+                      >
+                        <HardDrive size={11} />
+                        <span>Karten Laden</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div
+                        onClick={() => {
+                          const next = !showTrucklineHq;
+                          setShowTrucklineHq(next);
+                          const vis = next ? 'visible' : 'none';
+                          ['tl-areas', 'tl-prefabs-base', 'tl-roads-casing', 'tl-prefabs', 'tl-roads', 'tl-pois'].forEach(id => {
+                            if (mapRef.current?.getLayer(id)) mapRef.current.setLayoutProperty(id, 'visibility', vis);
+                          });
+                        }}
+                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl font-bold text-xs transition-all border cursor-pointer ${
+                          showTrucklineHq
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                            : "bg-white/5 text-slate-500 border-white/5 hover:text-slate-400"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm">🚚</span>
+                          <span className="truncate text-[11px]">Truckline HQ</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            mapRef.current?.flyTo({ center: [8.6311, 50.7633], zoom: 12.5, pitch: is3DMode ? 55 : 0, duration: 1500 });
+                          }}
+                          className="p-1 hover:bg-white/10 rounded text-amber-400/80 hover:text-amber-300 cursor-pointer shrink-0"
+                          title="Zum Truckline HQ springen (Dillenburg, B255)"
+                        >
+                          <Navigation size={12} />
+                        </button>
+                      </div>
+
+                      <div
+                        onClick={() => {
+                          const next = !showTruckersmpHq;
+                          setShowTruckersmpHq(next);
+                          const vis = next ? 'visible' : 'none';
+                          ['tmp-areas', 'tmp-prefabs-base', 'tmp-roads-casing', 'tmp-prefabs', 'tmp-roads', 'tmp-pois'].forEach(id => {
+                            if (mapRef.current?.getLayer(id)) mapRef.current.setLayoutProperty(id, 'visibility', vis);
+                          });
+                        }}
+                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl font-bold text-xs transition-all border cursor-pointer ${
+                          showTruckersmpHq
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                            : "bg-white/5 text-slate-500 border-white/5 hover:text-slate-400"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm">🚛</span>
+                          <span className="truncate text-[11px]">TruckersMP HQ</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            mapRef.current?.flyTo({ center: [17.03, 51.11], zoom: 12.5, pitch: is3DMode ? 55 : 0, duration: 1500 });
+                          }}
+                          className="p-1 hover:bg-white/10 rounded text-amber-400/80 hover:text-amber-300 cursor-pointer shrink-0"
+                          title="Zum TruckersMP HQ springen (Wrocław, Polen)"
+                        >
+                          <Navigation size={12} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
 
@@ -2292,6 +2522,12 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
           <Users size={20} />
         </button>
       )}
+
+      {/* Offline Maps Download Manager Modal */}
+      <OfflineMapsModal
+        isOpen={showOfflineModal}
+        onClose={() => setShowOfflineModal(false)}
+      />
 
       <style>{`
         @keyframes map-marker-pulse {

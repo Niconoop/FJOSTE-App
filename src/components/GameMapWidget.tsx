@@ -14,12 +14,15 @@ import type { GameMapWidgetHandle, NearbyTrafficVehicle, NearbySemaphore } from 
 import { detectApproachingTrafficLight, type ApproachingTrafficLight } from '../utils/trafficLightDetector';
 import { TrafficLightWidget } from './TrafficLightWidget';
 
+import { getSharedPmTilesProtocol, syncOfflineMapSourcesWithProtocol } from '../utils/mapTileCache';
+
 // Register PMTiles protocol once
 let pmTilesProtocolAdded = false;
 function addPmTilesProtocol() {
   if (pmTilesProtocolAdded) return;
-  const protocol = new pmtiles.Protocol();
-  maplibregl.addProtocol('pmtiles', protocol.tile);
+  const protocol = getSharedPmTilesProtocol();
+  maplibregl.addProtocol('pmtiles', (params: any, abortController: any) => protocol.tile(params, abortController));
+  syncOfflineMapSourcesWithProtocol().catch(() => {});
   pmTilesProtocolAdded = true;
 }
 
@@ -94,6 +97,8 @@ interface GameMapWidgetProps {
   paused?: boolean;
   /** Target frame rate cap (e.g. 20 for mini-map, 30 for full navigation). Defaults to 30 FPS */
   targetFps?: number;
+  /** Multiplayer HQ Overlay selection ('truckline' | 'truckersmp' | 'all' | 'none') */
+  hqOverlay?: 'truckline' | 'truckersmp' | 'all' | 'none';
 }
 
 // --- ETS2 coordinate → lat/lng projection (Lambert Conformal Conic) ---
@@ -423,6 +428,119 @@ const createArrowImage = (map: maplibregl.Map) => {
   }
 };
 
+function createHqLayers(sourceId: string, prefix: string) {
+  return [
+    {
+      id: `${prefix}-areas`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea'], ['!=', ['get', 'hidden'], true]],
+      layout: { 'fill-sort-key': ['get', 'zIndex'], 'visibility': 'none' },
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs-base`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { 'visibility': 'none' },
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads-casing`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+        ['!=', ['get', 'roadType'], 'unknown'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': 'none' },
+      paint: {
+        'line-color': '#1e293b',
+        'line-gap-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          8, 1.5, 11, 2.5, 14, 4.0, 16, 6.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { 'visibility': 'none' },
+      paint: {
+        'fill-color': '#475569',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+        ['!=', ['get', 'roadType'], 'unknown'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': 'none' },
+      paint: {
+        'line-color': [
+          'match', ['get', 'roadType'],
+          'freeway', '#3b82f6',
+          'divided', '#cbd5e1',
+          'local', '#475569',
+          '#475569',
+        ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-pois`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2',
+      minzoom: 8,
+      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi']],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.65, 11, 1.0, 14, 1.4],
+        'visibility': 'none',
+      },
+    },
+  ];
+}
+
 function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpecification {
   const tileRoot = `${API_URL}/map/proxy`;
 
@@ -442,6 +560,14 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
     footprints: {
       type: 'vector',
       url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
+    },
+    'truckline-hq': {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/ets2-truckline-hq.pmtiles`,
+    },
+    'truckersmp-hq': {
+      type: 'vector',
+      url: `pmtiles://${tileRoot}/ets2-truckersmp-hq.pmtiles`,
     },
   };
 
@@ -789,6 +915,8 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
           'text-halo-width': 1.5,
         },
       },
+      ...createHqLayers('truckline-hq', 'tl'),
+      ...createHqLayers('truckersmp-hq', 'tmp'),
     ],
   } as any;
 }
@@ -896,6 +1024,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   pitch = 38,
   paused = false,
   targetFps = 30,
+  hqOverlay = 'all',
 }, ref) => {
   const pausedRef = useRef<boolean>(paused);
   pausedRef.current = paused;
@@ -922,6 +1051,25 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
   isFollowingRef.current = following;
   const [mapReady, setMapReady] = useState(false);
   const lastPos = useRef<[number, number] | null>(null);
+
+  // Sync Multiplayer HQ Overlay visibility dynamically
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    const showTruckline = hqOverlay === 'truckline' || hqOverlay === 'all';
+    const showTruckersmp = hqOverlay === 'truckersmp' || hqOverlay === 'all';
+    const tlLayers = ['tl-areas', 'tl-prefabs-base', 'tl-roads-casing', 'tl-prefabs', 'tl-roads', 'tl-pois'];
+    const tmpLayers = ['tmp-areas', 'tmp-prefabs-base', 'tmp-roads-casing', 'tmp-prefabs', 'tmp-roads', 'tmp-pois'];
+    for (const lid of tlLayers) {
+      if (mapRef.current.getLayer(lid)) {
+        mapRef.current.setLayoutProperty(lid, 'visibility', showTruckline ? 'visible' : 'none');
+      }
+    }
+    for (const lid of tmpLayers) {
+      if (mapRef.current.getLayer(lid)) {
+        mapRef.current.setLayoutProperty(lid, 'visibility', showTruckersmp ? 'visible' : 'none');
+      }
+    }
+  }, [hqOverlay, mapReady]);
 
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Download, CheckCircle, AlertTriangle, ChevronRight, Monitor, SlidersHorizontal, HelpCircle } from 'lucide-react';
+import { Bell, Users, LayoutDashboard, Newspaper, Image as ImageIcon, Map as MapIcon, FileText, Settings, X, Minus, Route, LogOut, MessageSquare, Calendar, Menu, Square, Bot, Download, CheckCircle, AlertTriangle, ChevronRight, Monitor, SlidersHorizontal, HelpCircle, Compass } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
