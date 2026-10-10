@@ -3,9 +3,15 @@ import { useTheme, hexToRgbValues } from '../context/ThemeContext';
 
 interface AnimatedBackgroundProps {
   activePage?: string;
+  isAbsolute?: boolean;
+  ignoreCustomImage?: boolean;
 }
 
-export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({ activePage }) => {
+export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
+  activePage,
+  isAbsolute = false,
+  ignoreCustomImage = false,
+}) => {
   const isHidden = activePage === 'map';
   const { appearance, effectiveGlowColor } = useTheme();
 
@@ -13,20 +19,21 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({ activePa
 
   const { r, g, b } = hexToRgbValues(effectiveGlowColor);
   const factor = (appearance.glowIntensity || 90) / 100;
-  const isCustomImage = appearance.backgroundType === 'custom' && !!appearance.customBgImage;
+  const isCustomImage = !ignoreCustomImage && Boolean(appearance.customBgImage && appearance.customBgImage.trim() !== '');
 
   return (
     <div
-      className="fixed inset-0 overflow-hidden pointer-events-none z-0 bg-[#050608] select-none"
+      className={`${isAbsolute ? 'absolute' : 'fixed'} inset-0 overflow-hidden pointer-events-none z-0 bg-[#050608] select-none`}
       style={{ contain: 'strict', willChange: 'transform', transform: 'translateZ(0)' }}
     >
       {/* Custom Background Image Mode */}
       {isCustomImage ? (
         <>
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          <img
+            src={appearance.customBgImage}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none transition-all duration-300"
             style={{
-              backgroundImage: `url(${appearance.customBgImage})`,
               filter: appearance.bgBlur > 0 ? `blur(${appearance.bgBlur}px)` : 'none',
               transform: appearance.bgBlur > 0 ? 'scale(1.06)' : 'none',
               willChange: appearance.bgBlur > 0 ? 'transform, filter' : 'auto',

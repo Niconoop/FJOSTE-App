@@ -1,16 +1,16 @@
 {
   "name": "open-pipe-club-app",
   "private": true,
-  "version": "1.8.9",
+  "version": "1.8.10",
   "description": "Open Pipe Club App",
   "author": "Open Pipe Club",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "set NODE_OPTIONS=--no-deprecation && vite",
-    "build": "set NODE_OPTIONS=--no-deprecation && vite build",
-    "preview": "set NODE_OPTIONS=--no-deprecation && vite preview",
-    "dist": "set NODE_OPTIONS=--no-deprecation && vite build && electron-builder"
+    "dev": "set NODE_OPTIONS=--no-deprecation --max-old-space-size=2048 && vite",
+    "build": "set NODE_OPTIONS=--no-deprecation --max-old-space-size=2048 && vite build",
+    "preview": "set NODE_OPTIONS=--no-deprecation --max-old-space-size=2048 && vite preview",
+    "dist": "set NODE_OPTIONS=--no-deprecation --max-old-space-size=2048 && vite build && electron-builder"
   },
   "build": {
     "appId": "com.openpipeclubgroup.tracker",

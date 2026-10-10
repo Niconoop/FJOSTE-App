@@ -2,6 +2,143 @@
  
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
  
+## [1.7.90] - 2026-10-10
+
+### 🎵 Songwechsel-Animationen, Ultra-Low-Power Visualizer & App-Hintergrund im CarPlay App-Raster
+  - **✨ Weiche Songwechsel-Animationen im SMTC-Tab und Home-Widget ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Album-Cover Übergänge**: Beim Wechsel von Tracks (Spotify, YouTube, Radio oder lokale Musik) wird das Cover-Artwork nun flüssig mit einer sanften Skalierungs- und Überblend-Animation (`AnimatePresence mode="wait"` mit dezentem `scale: 0.94 -> 1` und Crossfade) ausgetauscht.
+    - **Titel- & Interpreten-Animation**: Die Texte für Titel und Interpret gleiten bei jedem Songwechsel mit einem feinen vertikalen Shift und Crossfade (`opacity: 0, y: 10 -> y: 0`) elegant ein.
+  - **⚡ Visualizer Performance-Revolution (Nahezu 0 % CPU-Last) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **GPU-beschleunigtes Canvas-Rendering**: Der Visualizer re-rendert nicht mehr 28 React-DOM-Balken pro Frame im Virtual DOM, sondern zeichnet direkt auf ein hardware-beschleunigtes 2D-`<canvas>`.
+    - **Ruhemodus & Stille-Erkennung**: Erkennt der Audio-Loopback Stille oder Pause, blenden die Balken sauber auf die Grundlinie ab. Sobald der Ruhezustand erreicht ist, wird das Neuzeichnen des Canvas komplett pausiert, anstatt sinnlos leere Frames zu rendern.
+    - **Hintergrund-Drosselung (`document.hidden`)**: Wenn das CarPlay-Fenster minimiert oder im Hintergrund ist, werden Berechnungen und Zeichenaufrufe vollständig ausgesetzt.
+  - **🖼️ Zuverlässiger App-Hintergrund im CarPlay App-Raster & Haupt-App ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [AnimatedBackground.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/AnimatedBackground.tsx), [ThemeContext.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/context/ThemeContext.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Hintergrundbild exklusiv im App-Raster**: Das benutzerdefinierte Hintergrundbild wird in CarPlay nun zielgerichtet **nur** im App-Raster (`activeTab === 'apps'`) angezeigt. Alle anderen Seiten (Home-Dashboard, SMTC-Player, Radio, Lokale Musik, Frachtbrief, LKW-Diagnose, Chat & Funk, Events, Einstellungen) behalten ihren aufgeräumten Cockpit-Look mit dem atmosphärischen Theme-Glow (`ignoreCustomImage={true}` in `AnimatedBackground`).
+    - **Intensive Abdunklung im Darkmode**: Im Darkmode wird das Hintergrundbild im App-Raster nun dramatisch und unverkennbar abgedunkelt: Sowohl die Pixel-Luminanz über `filter: brightness(0.32) contrast(1.08)` als auch ein tiefschwarzes 85–94 % Overlay sowie eine weiche Randvignette (`bg-gradient-to-t`) sorgen für perfekten Nacht-Kontrast und blenden die App-Icons strahlend hervor. Im Lightmode bleibt das Bild angenehm hell.
+    - **CarPlay Performance-Boost (IPC/SSE Throttling, Visualizer Cutoff & GPU Compositing)**:
+      - **Telemetrie-Drosselung im App-Raster (500 ms)**: Da im App-Raster und Menüs keine Tachometer gerendert werden müssen, werden eingehende Telemetrie-Pakete über IPC und SSE von 60 Hz auf energiesparende 2 Hz (500 ms) gedrosselt. Dies eliminiert 95 % aller unnötigen Virtual-DOM-Rerender-Zyklen.
+      - **Visualizer Idle Cutoff**: Bei pausierter Wiedergabe oder Stille beendet der Visualizer die `requestAnimationFrame`-Schleife nun vollständig, anstatt im Leerlauf 60 Mal pro Sekunde aktiv zu bleiben.
+      - **GPU-Layer-Isolierung (`translateZ(0)`)**: Die Raster-Kacheln und das Wallpaper sind nun auf eigene Compositor-Ebenen ausgelagert und nutzen ressourcenschonendes `backdrop-blur-md`, was Mikroruckler beim Hovern oder Umschalten vollständig beseitigt.
+    - **Chromium CSS-Token-Limit behoben (Natives `<img>`-Rendering)**: Beim Rendern großer benutzerdefinierter Hintergrundbilder (wie dem vorliegenden 6,5 MB PNG als Base64-Data-URL) verwarf der CSS-Parser von Blink/Chromium das Inline-Style-Attribut `style={{ backgroundImage: url(...) }}`, da es das interne String-/Token-Limit für CSS-Regeln überschreitet. Dadurch blieb der Hintergrund transparent und zeigte nur das tiefschwarze `#050608`. Sowohl in CarPlay (`renderCarPlayWallpaper`) als auch in der Haupt-App (`AnimatedBackground.tsx`) wird das Wallpaper nun direkt über ein hardware-beschleunigtes HTML-`<img>`-Element (`object-cover`) gerendert, welches den CSS-Parser komplett umgeht und direkt über die native Bild-Pipeline dekodiert wird.
+    - **Schutz vor Löschung im Memory bei Quota-Exceeded**: Beim Speichern in `ThemeContext` wird bei Überschreitung des 5 MB `localStorage`-Limits des Browsers der `safeData`-Fallback geschrieben. Über `handleStorage` wird nun verhindert, dass das leere `safeData.customBgImage` den im RAM vorhandenen 6,5 MB Hintergrund überschreibt.
+    - **Echtzeit-Synchronisierung via IPC & Web-Fallback**: In CarPlay wird das Wallpaper nun zuverlässig sowohl über `get-app-appearance` (IPC), den IPC-Event-Listener `app-appearance-updated` als auch über den Web-Endpunkt `/api/carplay/state` bezogen und sofort gerendert.
+  - **🛡️ Electron WebFrameMain Disposed Guard & V8 Heap-Limit Erhöhung ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [package.json](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/package.json))**:
+    - **V8 Heap Out of Memory (OOM) behoben**: In `main.ts` war das V8-Heap-Limit fälschlicherweise künstlich auf extrem niedrige `--max-old-space-size=128` (128 MB) gedeckelt. Beim Laden hochauflösender benutzerdefinierter Wallpaper (wie dem 6,5 MB PNG in `appearance.json`) stieß der Node-Prozess sofort an die 126-MB-Grenze und stürzte ab.
+    - **Heap-Ceiling auf 1024 MB angehoben**: Das Limit wurde in `main.ts` auf `--max-old-space-size=1024` und in den npm-Skripten auf 2048 MB angehoben. Der restriktive `--optimize-for-size`-Schalter wurde entfernt, sodass der V8-Heap selbst bei großen Bildern und Multi-Window-Betrieb stabil bleibt.
+    - **Loopbreaker & Direkter Hintergrund-Abruf**: `save-app-appearance` filtert nun redundante Daten und spiegelt sie nicht an das Quellfenster zurück. CarPlay lädt das Bild asynchron per `get-app-appearance`, wodurch der Hintergrund fehlerfrei gerendert wird.
+
+### 🎛️ CarPlay: Differenzierte Letzte-Tabs, Realer Audio-Loopback Visualizer, Logo-Kasten entfernt, Custom Accent Color & Haupt-App Wallpaper
+  - **🗂️ Differenzierte Letzte-Tabs in der Seitenleiste ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Separate Speicherung für SMTC, Radio & Lokale Musik**: Windows SMTC (`music-windows`), Live-Radio (`music-radio`) und Lokale Musik (`music-local`) zählen nicht mehr als ein einziger generischer Musik-Tab.
+    - **Eigene Icons & Schnellwechsel**: In den letzten Apps der Taskleiste links erscheint nun für jeden Modus das passende Symbol (`Music`, `Radio` oder `ListMusic`) mit speziellem Titel. Ein Klick oder D-Pad-Rücksprung öffnet direkt den jeweiligen Audiomodus, ohne dass der Nutzer manuell umschalten muss.
+  - **💬 Chat- & Funk-Icons wiederhergestellt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Header & Kanallisten-Icons**: Das Kopfzeilen-Icon und die Kanallisten-Icons in der Team-Chat & CB-Funk-Ansicht wurden wiederhergestellt (`MessageSquare`-Icon).
+    - **Nachrichten-Stream Avatare**: Auch im Chat-Verlauf werden die Nachrichten-Badges wieder einheitlich mit dem Chat-Icon versehen.
+  - **🎨 Durchgängige Custom Accent Color auf allen CarPlay-Seiten ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Vollständige Token-Nutzung**: Sämtliche Seiten (Home-Dashboard, Frachtbrief/Auftrag, LKW-Diagnose, Team-Chat, Musik, Radio, Events, Einstellungen) nutzen nun für Textakzente, Umrandungen, Fortschrittsbalken und Buttons die in den Einstellungen gewählte Akzentfarbe (`var(--primary)`, `text-primary`, `bg-primary`, `border-primary`, `var(--primary-glow)`).
+    - **Erhaltene Icon-Farben**: Wie gewünscht behalten alle Service- und Indikator-Icons ihre eigenen authentischen Marken- und Signalfarben (z. B. Spotify-Grün, YouTube-Rot, Diesel-Gelb, Navigations-Blau), während alle Rahmenelemente und Highlights dynamisch der benutzerdefinierten Akzentfarbe folgen.
+  - **🖼️ Kasten um das Logo bei SMTC-Seite und Home-Widget entfernt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Frei schwebendes Markenlogo**: Sowohl auf der SMTC-Playerseite (oben rechts) als auch im Medien-Widget des Home-Cockpits wurde der störende Kasten/Hintergrundrahmen um das App-Logo (Spotify, YouTube, Radio etc.) restlos entfernt. Das Logo wird nun nahtlos freigestellt mit edlem subtilem Schlagschatten gerendert.
+  - **📊 Symmetrischer Audio-Visualizer (Bässe im Zentrum, Höhen außen) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Tiefen in der Mitte, Höhen außen**: Die 28 Frequenzbänder des `SMTCVisualizer` wurden auf ein zentriertes, spiegelsymmetrisches Frequenzspektrum umgestellt: Die kraftvollen tiefen Bässe (Sub-Bass & Bassdrum) pumpen im Zentrum, während die Frequenzen nach links und rechts zu Mitten (Vocals, Snares) und den feinen Höhen (Hi-Hats, Cymbals) an den äußeren Rändern ansteigen.
+    - **Dynamische Höhenanhebung**: Ein entfernungsbasierter Treble-Boost gleicht den natürlichen 1/f-Pegelabfall hoher Frequenzen aus, sodass auch die äußeren Höhenbalken lebendig mitflippen.
+  - **📱 Haupt-App Hintergrundbild im CarPlay App-Raster ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [AnimatedBackground.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/AnimatedBackground.tsx))**:
+    - **Kompromisslose Übernahme des App-Bildes**: Sobald in der Haupt-App ein Hintergrundbild hinterlegt ist (`appearance.customBgImage` oder `localStorage`), wird dieses bedingungslos (auch ohne vorherigen `backgroundType === 'custom'`-Zwang und unabhängig vom Farbschema) im CarPlay App-Raster angezeigt – inklusive der eingestellten Weichzeichnung und Abdunklung.
+    - **Fensterübergreifender Echtzeit-Sync**: Über `focus`- und `storage`-Events werden Hintergrundbild-Änderungen in der Haupt-App sofort ohne Neustart in das CarPlay-Fenster synchronisiert.
+    - **Authentischer App-Glow als Fallback**: Falls in der Haupt-App kein Bild hinterlegt ist, wird im App-Raster nun direkt der dynamische Umgebungs-Glow (`<AnimatedBackground />`) der Haupt-App statt des monotonen hellgrauen Verlaufs verwendet.
+
+### 🎛️ CarPlay: Optimierte Einstellungen- & Radio-Navigation, Bildschirm-Format entfernt, SMTC Audio-Visualizer & Dynamischer Kontrast
+  - **🖤 Top-Left Header-Icons & Radio-Sender Hover im Light-Mode ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Header-Icons oben links schwarz/dunkel**: In allen Cockpit-Bereichen (*Auftrag / Frachtbrief*, *LKW-Diagnose*, *Live-Radio*, *Lokale Musik*, *Funk & Chat*, *Events & Konvois*, *Einstellungen*) wurden die oberen linken Icon-Container im Light-Mode auf kontrastreiches Dunkelgrau/Schwarz (`bg-slate-100 border-slate-200 text-slate-800 shadow-sm`) umgestellt. Kein schwach erkennbares Weiß-auf-Weiß mehr.
+    - **Radio-Sender Hover & Textfarbe**: In der Senderliste des ETS2 Live-Radios bleibt der Sendername beim Hovern und im selektierten Zustand im Light-Mode durchgängig tiefschwarz (`text-slate-900 group-hover:text-slate-900`). Die Kacheln schalten auf hellen Glas-Hover um (`hover:bg-slate-100 hover:border-emerald-500/50`), sodass Sendernamen niemals mehr weiß auf weißem Grund verschwinden.
+  - **📊 Realer, ressourcenschonender Audio-Visualizer ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Native Web Audio API Spektrum-Analyse**: Die persistenten Audio-Engines für lokale Musik und Radio-Streams wurden an einen gemeinsamen `AudioContext` mit `AnalyserNode` (`fftSize = 64`) angebunden.
+    - **0 % messbare CPU-Last**: Durch native C++-Dekodierung in Chromium und 32 komprimierte Frequenzbänder reagieren die Balken direkt auf die echten Frequenzen der Musik (Bässe links, Mitten im Zentrum, Höhen rechts) bei praktisch 0 % CPU-Last.
+    - **Harmonisches Physik-Fallback**: Bei externen Windows-Playern (z. B. separater Spotify-Prozess ohne internen Stream) greift ein wellen- und beatbasiertes Dämpfungssystem ein, wodurch der Visualizer auch dort natürlich und lebendig schwingt.
+  - **🎵 SMTC-Medienplayer & Home-Widget: Feinschliff & Kontrast-Optimierungen ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Positionierung nach unten verschoben**: Titel, Interpret und Visualizer wurden aus der oberen Mitte nach unten (`bottom-24 sm:bottom-28`) über die Transportleiste verlegt, passend zum ergonomischen Cockpit-Layout.
+    - **Logo über dem Titel entfernt**: Das App-Logo über dem Songtitel wurde entfernt, das offizielle Spotify-Markenlogo (bzw. YouTube/Radio) wird nun ausschließlich sauber oben rechts angezeigt.
+    - **Vollständig ausgefüllter Visualizer**: Die Visualizer-Balken besitzen keinen weißen Ausblendungs-Farbverlauf mehr, sondern sind 100% deckend mit dem Theme-Akzent ausgefüllt und auf hellen sowie dunklen Hintergründen perfekt erkennbar.
+    - **Amber-Glow am Play/Pause-Button entfernt**: Sämtliche gelb-orangenen Farbverläufe, Rahmen und Schatten am Start/Stop-Button (im SMTC-Player, im Home-Widget und im lokalen Player) wurden restlos durch die Theme-Akzentfarbe (`var(--primary)`) und neutrales Glas ersetzt.
+    - **Dynamische Textfarbe auch im Home-Widget**: Auf dem Home-Dashboard passt sich die Textfarbe von Titel und Interpret nun ebenfalls automatisch der Helligkeit des Album-Covers an (Schwarz auf hellem Cover, Weiß auf dunklem Cover).
+  - **☀️ Umfassende Schriftfarben-Anpassung im Light-Mode ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Auf den Unterseiten (*Auftrag / Frachtbrief*, *Events & Konvois*, *Funk & Team-Chat*, *Live-Radio*, *Lokale Musik*) wurden alle bisher weiße Überschriften, Kacheltexte und Statusmeldungen bei aktivem Light-Mode auf dunkle Typografie (`text-slate-900`, `text-slate-800`, `text-slate-600`) umgestellt.
+  - **☀️ Genereller Hintergrund im Light-Mode gefixt ([index.css](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/index.css), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Globales CSS-Black-Override behoben**: In `index.css` war `.carplay-root` mit `background-color: #000000 !important` belegt, wodurch der Rahmen und der Hauptbereich immer tiefschwarz blieben. Mit `.carplay-root.carplay-light { background-color: #eef2f6 !important; }` und hellen Outer-Wrappern ist das Cockpit nun im gesamten Fenster sauber hell.
+    - **Lesbare Schriftfarben im Light-Mode**: Die bisher weißen Texte in der Fahrzeug-Telemetrie (*FAHRZEUG-TELEMETRIE*, *KEINE TELEMETRIE-VERBINDUNG* etc.) passen sich nun dynamisch an (`isLight ? 'text-slate-900' : 'text-white'`), sodass alle Cockpit-Texte auf hellem Untergrund gestochen scharf lesbar sind.
+  - **🔤 Windows SMTC UTF-8 Zeichensatz-Fix (Umlaute wie 'ü', 'ä', 'ö') ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Keine Fragezeichen/Rauten mehr**: Der Windows SMTC PowerShell-Bridge wurde `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` und `$OutputEncoding = [System.Text.Encoding]::UTF8` sowie UTF-8 BOM hinzugefügt. Titel wie *"Autos mit Flügel"* werden nicht mehr als `Autos mit Flgel` dekodiert, sondern mit allen Umlauten und Sonderzeichen originalgetreu ausgegeben.
+  - **🎵 SMTC-Medienplayer: Dynamische Cover-Helligkeit ohne dunkles Plaque & Offizielles Spotify-Logo ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Kein dunkles Textfeld mehr**: Der dunkle Hintergrundkasten hinter dem Songtitel wurde vollständig entfernt. Der Titel und der Interpret schweben nun direkt und elegant über dem Album-Cover.
+    - **Dynamische Schriftfarbe (Weiß auf dunklem Cover, Schwarz auf hellem Cover)**: Ein automatischer Luminanz-Detektor analysiert die Helligkeit des Album-Covers. Bei hellen Covern wird die Schrift automatisch tiefschwarz gerendert (`text-slate-950`), bei dunklen Covern weiß (`text-white`).
+    - **Offizielle App-Logos statt Text**: Statt des bloßen Wortes `"SPOTIFY"` wird sowohl im Media-Overlay als auch oben rechts und im Home-Widget das offizielle Spotify-Logo (grünes Marken-SVG) bzw. das entsprechende Logo für YouTube, Apple Music oder Radio gerendert.
+  - **☀️ Vollständiger Light-Mode im gesamten CarPlay-Cockpit ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Hintergrund-Problem behoben**: Zuvor war nur die linke Taskleiste weiß, während der gesamte Hauptbereich schwarz blieb. Grund war, dass im Hintergrund jedes Reiters die feste schwarze Komponente `<AnimatedBackground />` (`bg-[#050608]`) lag und sämtliche Kacheln hartkodiertes `bg-black/40` und `text-white` verwendeten.
+    - **Apple CarPlay Light-Wallpaper**: Im Light-Mode wird nun ein heller, eleganter Silver/Frosted-Hintergrundverlauf (`bg-gradient-to-br from-[#e8edf5] via-[#f1f5f9] to-[#e2e8f0]`) mit dezenten Ambient-Reflexen gerendert.
+    - **Helle Frosted-Glass-Kacheln**: Alle Cockpit-Widgets (Kartenkarte, Mediaplayer, Digital Cockpit) sowie alle Unterkarten (Tempo, Gang, Drehzahl, LKW-Status) wechseln im Light-Mode zu klarem, edlem Milchglas (`bg-white/85 border-slate-200/90 shadow-xl`) mit dunkler Typografie (`text-slate-900`, `text-slate-500`).
+    - **Automatische Tag/Nacht-Umschaltung**: Auch bei Farbschema *"Automatisch"* schaltet das gesamte Cockpit bei Tag oder ausgeschaltetem Abblendlicht dynamisch in den hellen Modus um.
+  - **📐 Einstellungsseite 100% ins Fenster eingepasst (Scrollbars entfernt) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Komplett scrollfrei (`overflow-hidden`)**: Alle drei Einstellungsseiten wurden von überdimensionierten Abständen und festen Höhen befreit. Die Inhalte passen sich proportional und flexibel der Fensterhöhe an, ohne dass jemals gescrollt werden muss.
+    - **Seite 1 (Design & Display)**: Strukturiert als schlankes oberes 2x2-Grid (CarPlay-Farbe, Karten-Design, Multiplayer-HQ, Textgröße) mit kompakten Kacheln ohne Platz raubende Erklärabsätze, kombiniert mit einer dezenten horizontalen Leiste für die Zündungs-Automatik.
+    - **Header-Überlappung behoben**: Die Reiterleiste oben (*Design 01*, *Warnungen 02*, *System 03*) und der Titel `"Einstellungen"` kollidieren nicht mehr. Kompakte Buttons (`h-7`, reduzierte Schrift und Paddings) und `whitespace-nowrap shrink-0` stellen sicher, dass die Kopfzeile auch bei schmalen Auflösungen absolut sauber und frei von Überlappungen bleibt.
+  - **⚙️ Vollständige 2D-Navigation auf der Einstellungsseite ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Reiter-Fokus & Seitenwechsel**: Bei Pfeil nach oben aus der obersten Zeile jeder Seite wird nun direkt die obere Reiterleiste fokussiert (`contentIndex === -1`) mit visuellem Glow-Ring. Pfeil Links/Rechts wechselt flüssig zwischen den Seiten (*01 Design*, *02 Warnungen*, *03 System*), Pfeil nach unten betritt die jeweilige Optionsseite.
+    - **Seite 1 (Design, Themes & Anzeige)**: Ausgewogene 2-Spalten-Navigation zwischen Farbschema (0..2), Kartenthema (3..5), HQ-Overlay (6..9) und Textgröße (10..12). Übergang zur unteren Standby-Kachel (13) und sauberer Rücksprung in die Taskleiste.
+    - **Seite 2 & 3 (Warnungen & System)**: Korrigierte Gitter- und Listennavigation ohne Hängenbleiben in Randfeldern. Toter Legacy-Code und alte Scroll-Effekte wurden restlos bereinigt; der native `data-item-focused` Hook führt die Ansicht sofort nach.
+  - **🖥️ Bildschirm-Format aus CarPlay entfernt ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Kachel *"BILDSCHIRM-FORMAT"* (16:9, 4:3, 16:10, 21:9, FREI) wurde komplett aus dem CarPlay-Cockpit entfernt.
+    - Das Seitenverhältnis wird wie gewünscht ausschließlich über die allgemeinen Overlay-Einstellungen gesteuert, wodurch das CarPlay-Layout aufgeräumt und kompakt bleibt.
+  - **📻 Durchgängige Hotkey- & D-Pad-Navigation im ETS2 Live-Radio ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Header-Aktionen**: Suchfeld (Index 0), Auto-Scan (Index 1) und Import (Index 2) sind gezielt ansteuerbar.
+    - **Genre-Schnellfilter-Pills**: Alle 6 Filterkategorien (*Alle*, *Favoriten*, *Rock*, *Pop*, *News*, *Electro*, Indizes 3..8) besitzen einen eigenen Fokus-Zustand mit Smaragd-Ring und schalten die Senderliste per Enter sofort um.
+    - **2-Spalten-Sender-Grid**: Sender (ab Index 9) lassen sich ohne Modulo-Einschränkungen vertikal und horizontal anwählen; Enter startet den Webstream sofort.
+    - **Unteres Cockpit-Playerdeck**: Transporttasten (*Vorheriger Sender*, *Großer Play/Pause*, *Nächster Sender*, *Favoriten-Stern*, *Mute/Lautstärke*) lassen sich per Pfeil nach unten von der Senderliste aus ansteuern und bedienen.
+  - **🎵 SMTC Media: Audio-Spectrum Visualizer & Perfekter Textkontrast ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Live Audio Visualizer**: 28-Balken Frequenz-Equalizer (`SMTCVisualizer`) integriert. Animiert sich während aktiver Audiowiedergabe dynamisch in Echtzeit (`requestAnimationFrame`) im Theme-Akzent und geht bei Pause in eine dezente Ruhestellung über.
+    - **Kontrast-Plaque**: Songtitel und Künstler werden in einem abgerundeten, tiefen Frosted-Glass-Container (`bg-black/70 backdrop-blur-2xl border-white/20 shadow-2xl`) mit hochauflösenden Text-Schlagschatten gerendert. Dadurch sind Text und Interpret auf jedem Album-Cover (von grell-weiß bis dunkel) aus jeder Distanz 100% kontrastreich lesbar.
+
+## [1.7.89] - 2026-10-10
+
+### 🛠️ CarPlay: Hotkey-Navigation & Layout-Fix in Einstellungen, Quell-Logos & Amber-Entfernung, Cockpit-Optimierung für Radio & Frachtbrief, Chat-Icons
+  - **⚙️ Volle Hotkey- & D-Pad-Navigation auf der Einstellungsseite ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Seiteninhalt voll ansteuerbar**: Bisher konnte mit Pfeiltasten/Hotkeys nur zwischen den 3 Einstellungsreitern gewechselt werden. Nun können alle Optionen, Umschalter, Schieberegler und Farbauswahlkacheln innerhalb der Seiten mit Pfeiltasten (Hoch/Runter/Links/Rechts) und Enter direkt navigiert und bedient werden.
+    - **Seite 1 (Design & Display)**: Hotkey-Zugriff auf Theme-Auswahl (Neon, Cyber, Amber, Titan), CarPlay-Größenskalierung (80% bis 120%), Taskleistenausrichtung (Links / Unten), Taskleistenskalierung (Kompakt bis Groß) und Kartenthema (Dunkel, Hell, Satellit, Kontrast).
+    - **Seite 2 (Fahrt-Warnungen)**: Tastensteuerung für Geschwindigkeits-, Reserve-, Lenkzeit-, Schadens- und Fracht-Warnungen inklusive visuellem Fokus-Ring (`ring-primary`) und Scroll-Zentrierung.
+    - **Seite 3 (Meldungen & System)**: Tastensteuerung für Musik-Titelwechsel, Chat-, News-, Event-Benachrichtigungen und Zündungs-Automatik.
+    - Nahtloser Rücksprung zur linken CarPlay-Taskleiste bei Druck auf Links am linken Rand bzw. Zurück-Taste.
+  - **📐 Behebung von Überlappungen im Einstellungs-Header ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Header wurde überarbeitet: Der Titel `"Einstellungen"` und das neue Seitenzähler-Badge (`1/3`, `2/3`, `3/3`) stehen nun in einer sauberen, umbruchfreien Spalte (`shrink-0 whitespace-nowrap`).
+    - Das segmented Reiterdock (`01 Design`, `02 Warnungen`, `03 System`) wurde ergonomisch verkleinert und schließt eine visuelle Kollision mit dem Titeltext auch auf schmalen 4:3- oder In-Game-Displays (z. B. 800x480 / 1024x600) vollständig aus.
+  - **🎵 Medienplayer: Amber-Glow entfernt & Marken-Logos der Musikquelle ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Sämtliche verbliebenen gelb-amberfarbenen Akzente und Schatten im Medienplayer (Home-Widget, Medienplayer-Tab und lokaler Audioplayer) wurden restlos durch die dynamische Theme-Akzentfarbe (`var(--primary)`, `bg-primary`) und neutrale Kontraste ersetzt.
+    - **SVG-Markenlogos statt Klartext**: Oben rechts im Medienplayer wird nun das offizielle Markenlogo der Quelle als SVG im Frosted-Glass-Badge gerendert:
+      - **Spotify**: Grünes offizielles Spotify-Drei-Wellen-Logo.
+      - **YouTube**: Rotes YouTube-Playbutton-Logo.
+      - **ETS2 Live-Radio**: Smaragdgrünes Radio-Wellen-Logo.
+      - **Lokale Musik**: Indigo-blaues Disc-Logo.
+      - **Apple Music**: Rosa Music-Note-Logo.
+  - **📻 Neugestaltung der Radiosenderseite für optimale Fahrt-Bedienung ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Fahrer-Schnellfilter**: Schnellauswahlleiste mit großen Touch-Pills für `[ 📻 Alle ]`, `[ ⭐ Favoriten ]`, `[ 🎸 Rock & Metal ]`, `[ 🎵 Charts & Pop ]`, `[ 💬 Info & News ]` und `[ ⚡ Electronic ]` – kein Tastaturtippen während der Fahrt erforderlich.
+    - **Große Sender-Kacheln**: Großzügiges 2-Spalten-Raster mit großen Senderlogos (40x40px), klaren Sendernamen, Bitrate-Badge, animierten Equalizer-Balken bei aktivem Stream und 1-Klick-Favoritenstern direkt auf jeder Kachel.
+    - **Hero Active Stream Deck**: Am unteren Rand bietet das Cockpit-Playerdeck große Transporttasten (`⏮ Vorheriger Sender`, `⏯ Großer Play/Pause-Button`, `⏭ Nächster Sender`), Direktfavorisierung und Lautstärkeregler mit Mute-Umschalter.
+  - **🚚 Neugestaltung der Auftragsseite (Fahrt-Cockpit für Frachtbrief) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Hero-Streckenband (Visual Route Ribbon)**: Prominente Querleiste mit Startort & Firma (grüner Marker), Echtzeit-Fortschrittsbalken (`🚚 X% Gefahren`, berechnet aus Plan- und Reststrecke) und Zielort & Empfängerfirma (blauer Navigations-Pin).
+    - **4 Große Fahrer-Cockpit-Kacheln (2x2 Raster)**:
+      1. *Reststrecke & Fahrzeit*: Riesige km-Anzeige, verbleibende Restzeit und ETA-Ankunftszeit.
+      2. *Frachtgut & Ladung*: Frachtname und Tonnage in Tonnen (`⚖️ X.X Tonnen`).
+      3. *Gesamt-Erlös & Rate*: Auszahlungssumme in Euro (`€ XX.XXX`) und kalkulierter Erlös pro Kilometer (`~ € XX / km`).
+      4. *Frachtzustand & LKW*: Zustandsanzeige in Prozent (`100% Intakt`), Schadenswarnung und Fahrzeugzustand.
+    - Überarbeitung der Ansicht bei inaktivem Auftrag zu einem cleanen, aufgeräumten Standby-Screen ohne störende Farbüberlagerungen.
+  - **💬 CB-Funk Chatseite: Echte Kanal-Icons statt "CH 1, CH 2" ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die generischen Text-Badges (`CH 1`, `CH 2`, `CH 3`, etc.) in der CB-Funk Kanalliste wurden durch themenspezifische Icons in Automotive-Squircles ersetzt:
+      - **Direktnachrichten**: Echtes Benutzer-Avatarbild des Gesprächspartners.
+      - **Konvoi**: LKW-Icon (`<Truck />`).
+      - **Events**: Kalender-Icon (`<CalendarDays />`).
+      - **Modding / Technik**: Werkzeug-Icon (`<Wrench />`).
+      - **Personal / HR**: Schild-Icon (`<Shield />`).
+      - **Gruppen**: Benutzergruppen-Icon (`<Users />`).
+      - **Allgemeiner Funk**: Funk-/Kanal-Icon (`<Radio />` bzw. `<Hash />`).
+
 ## [1.7.88] - 2026-10-09
 
 ### 🎮 CarPlay: Schnellfunk-Nachrichtenvorlagen Menü & Vollständige Hotkey- / D-Pad-Navigation

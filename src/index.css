@@ -2,9 +2,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
 @import "tailwindcss";
 
-/* Force pure black background to prevent white corner bleed in CarPlay overlay */
-html, body, #root, .carplay-root {
+/* Force pure black background in dark mode, light background in carplay-light */
+html, body, #root {
+  background-color: #000000;
+}
+.carplay-root {
   background-color: #000000 !important;
+}
+.carplay-root.carplay-light {
+  background-color: #eef2f6 !important;
 }
 
 /* CarPlay Ignition-Standby sleep overlay – must be fully opaque to hide content behind clock */

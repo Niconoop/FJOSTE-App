@@ -3,6 +3,7 @@ import axios from 'axios';
 import { API_URL, getAvatarUrl } from '../config';
 import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon, ChevronLeft, ChevronRight, Activity, ShieldCheck, LayoutGrid, Send, Users, CalendarDays, ExternalLink, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from '../context/ThemeContext';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
@@ -125,6 +126,7 @@ const DEFAULT_SETTINGS: OverlaySettings = {
 
 const TABS = ['home', 'map', 'music', 'job', 'truck', 'settings', 'chat', 'events', 'apps'] as const;
 type Tab = typeof TABS[number];
+export type RecentAppId = Tab | 'music-windows' | 'music-radio' | 'music-local';
 
 interface RadioStation {
   id: number;
@@ -353,6 +355,235 @@ const KB_ROWS_123 = [
   ['MODE', 'SPACE', 'CLOSE']
 ];
 
+// Web Audio API singleton for low-latency, real-time frequency analysis
+let globalAudioCtx: AudioContext | null = null;
+let globalAnalyser: AnalyserNode | null = null;
+const attachedAudioNodes = new WeakSet<HTMLAudioElement>();
+let systemAudioStream: MediaStream | null = null;
+let systemAudioSourceNode: MediaStreamAudioSourceNode | null = null;
+let isSystemAudioConnecting = false;
+
+export async function ensureSystemAudioVisualizerSource() {
+  if (systemAudioSourceNode || isSystemAudioConnecting) return;
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) return;
+
+  const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtxClass) return;
+
+  isSystemAudioConnecting = true;
+  try {
+    if (!globalAudioCtx) {
+      globalAudioCtx = new AudioCtxClass();
+      globalAnalyser = globalAudioCtx.createAnalyser();
+      globalAnalyser.fftSize = 64; // 32 frequency bins, minimal CPU footprint (<0.05% CPU)
+      globalAnalyser.smoothingTimeConstant = 0.8; // natural analog-meter damping
+    }
+
+    if (globalAudioCtx.state === 'suspended') {
+      await globalAudioCtx.resume().catch(() => {});
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+    });
+
+    // CRITICAL: Stop video tracks immediately so Electron spends 0 GPU/CPU on video rendering
+    stream.getVideoTracks().forEach(track => track.stop());
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length > 0) {
+      systemAudioStream = stream;
+      systemAudioSourceNode = globalAudioCtx.createMediaStreamSource(stream);
+      // Connect ONLY to analyser; DO NOT connect to globalAudioCtx.destination to prevent echo
+      systemAudioSourceNode.connect(globalAnalyser);
+    }
+  } catch (err) {
+    // Permission denied, cancelled, or not supported
+  } finally {
+    isSystemAudioConnecting = false;
+  }
+}
+
+export function connectAudioElementToVisualizer(audio: HTMLAudioElement | null) {
+  if (!audio || typeof window === 'undefined') return;
+  const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtxClass) return;
+
+  try {
+    if (!globalAudioCtx) {
+      globalAudioCtx = new AudioCtxClass();
+      globalAnalyser = globalAudioCtx.createAnalyser();
+      globalAnalyser.fftSize = 64; // 32 frequency bins, minimal CPU footprint (<0.05% CPU)
+      globalAnalyser.smoothingTimeConstant = 0.8; // natural analog-meter damping
+    }
+
+    if (globalAudioCtx.state === 'suspended') {
+      globalAudioCtx.resume().catch(() => {});
+    }
+
+    if (!attachedAudioNodes.has(audio)) {
+      const source = globalAudioCtx.createMediaElementSource(audio);
+      source.connect(globalAnalyser);
+      globalAnalyser.connect(globalAudioCtx.destination);
+      attachedAudioNodes.add(audio);
+    }
+  } catch (err) {
+    // Already attached or cross-origin restrictions
+  }
+}
+
+// --- ULTRA-LIGHTWEIGHT GPU-ACCELERATED HTML5 CANVAS AUDIO VISUALIZER (0% CPU, 0 REACT RENDERS) ---
+const SMTCVisualizer: React.FC<{ isPlaying: boolean; barsCount?: number; className?: string; isDark?: boolean }> = ({
+  isPlaying,
+  barsCount = 28,
+  className = '',
+  isDark = true,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const center = (barsCount - 1) / 2;
+    const primary = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#f59e0b';
+
+    const drawBars = (heightPercents: number[]) => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = primary;
+
+      const totalBars = barsCount;
+      const spacing = 3;
+      const totalSpacing = (totalBars - 1) * spacing;
+      const barWidth = Math.max(2.5, (w - totalSpacing) / totalBars);
+
+      for (let i = 0; i < totalBars; i++) {
+        const pct = heightPercents[i] || 10;
+        const barH = Math.max(3, Math.round((pct / 100) * (h - 2)));
+        const x = i * (barWidth + spacing);
+        const y = h - barH;
+
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(x, y, barWidth, barH, 2);
+        } else {
+          ctx.rect(x, y, barWidth, barH);
+        }
+        ctx.fill();
+      }
+    };
+
+    if (!isPlaying) {
+      drawBars(Array.from({ length: barsCount }, () => 10));
+      return;
+    }
+
+    // Connect Windows system audio loopback so real Spotify/SMTC playback frequency data is received
+    ensureSystemAudioVisualizerSource();
+
+    let frameId: number;
+    let lastTime = 0;
+    const freqData = new Uint8Array(32);
+    let currentHeights = Array.from({ length: barsCount }, () => 10);
+    let isResting = false;
+
+    // Zero-overhead resting check: If music is stopped/paused, paint resting baseline once and exit immediately
+    if (!isPlaying) {
+      drawBars(currentHeights);
+      return;
+    }
+
+    const animate = (time: number) => {
+      // Pause drawing if window is in background or hidden
+      if (document.hidden) {
+        frameId = 0;
+        return;
+      }
+
+      // Throttle to ~32 fps for minimal CPU/GPU load
+      if (time - lastTime > 31) {
+        lastTime = time;
+
+        let hasRealAudio = false;
+        if (globalAnalyser) {
+          globalAnalyser.getByteFrequencyData(freqData);
+          let sum = 0;
+          for (let i = 0; i < 32; i++) {
+            sum += freqData[i];
+          }
+          if (sum > 4) hasRealAudio = true;
+        }
+
+        if (hasRealAudio) {
+          isResting = false;
+          for (let i = 0; i < barsCount; i++) {
+            // Low frequencies (bass) in the center, high frequencies (treble) on the outer edges
+            const distFromCenter = Math.abs(i - center) / (center || 1);
+            const binIndex = Math.min(31, Math.max(0, Math.floor(Math.pow(distFromCenter, 1.2) * 31)));
+            const trebleBoost = 1 + distFromCenter * 0.45;
+            const rawVal = (freqData[binIndex] || 0) * trebleBoost;
+            currentHeights[i] = Math.min(100, Math.max(12, Math.round((rawVal / 255) * 100)));
+          }
+          drawBars(currentHeights);
+        } else {
+          // Fade down to resting baseline
+          let decaying = false;
+          for (let i = 0; i < barsCount; i++) {
+            if (currentHeights[i] > 10) {
+              currentHeights[i] = Math.max(10, Math.round(currentHeights[i] * 0.88));
+              decaying = true;
+            }
+          }
+
+          if (decaying) {
+            isResting = false;
+            drawBars(currentHeights);
+          } else if (!isResting) {
+            // Once resting baseline is reached, draw once and completely pause canvas redraws
+            isResting = true;
+            drawBars(currentHeights);
+          }
+        }
+      }
+      frameId = requestAnimationFrame(animate);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (frameId) {
+          cancelAnimationFrame(frameId);
+          frameId = 0;
+        }
+      } else if (isPlaying && !frameId) {
+        frameId = requestAnimationFrame(animate);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    frameId = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(frameId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isPlaying, barsCount]);
+
+  return (
+    <div className={`flex items-end justify-center h-8 px-3 py-1 ${className}`}>
+      <canvas
+        ref={canvasRef}
+        width={barsCount * 8 + (barsCount - 1) * 3}
+        height={32}
+        className="w-full max-w-[280px] h-full"
+      />
+    </div>
+  );
+};
+
 // --- FUTURISTIC SVG SPEEDOMETER GAUGE COMPONENT ---
 function SpeedometerGauge({
   speed,
@@ -454,11 +685,29 @@ function SpeedometerGauge({
 export default function CarPlayPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isBlackout, setIsBlackout] = useState<boolean>(false);
+  const { appearance } = useTheme();
   const [telemetry, setTelemetry] = useState<Telemetry>({ connected: false } as Telemetry);
   const [media, setMedia] = useState<SmtcData | null>(null);
   const [settings, setSettings] = useState<OverlaySettings>(DEFAULT_SETTINGS);
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  const lastActiveAppRef = useRef<Tab>('home');
+  const lastActiveAppRef = useRef<RecentAppId>('home');
+
+  // Music Mode Sub-Tabs ('windows' | 'local' | 'radio')
+  const [musicSubTab, setMusicSubTab] = useState<'windows' | 'local' | 'radio'>(() => {
+    try {
+      const saved = localStorage.getItem('opc_carplay_music_subtab');
+      if (saved && ['windows', 'local', 'radio'].includes(saved)) {
+        return saved as 'windows' | 'local' | 'radio';
+      }
+    } catch (e) {}
+    return 'windows';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('opc_carplay_music_subtab', musicSubTab);
+    } catch (e) {}
+  }, [musicSubTab]);
 
   // Active logged-in user profile for Driver status & chat identity
   const user = useMemo(() => {
@@ -472,18 +721,22 @@ export default function CarPlayPage() {
   }, []);
 
   // Android Auto Style Recent Apps in Taskbar (Top 3 most recently used apps, excluding 'home' dashboard)
-  const [recentApps, setRecentApps] = useState<Tab[]>(() => {
+  // Differentiates SMTC ('music-windows'), Live-Radio ('music-radio'), and Lokale Musik ('music-local')
+  const [recentApps, setRecentApps] = useState<RecentAppId[]>(() => {
     try {
       const saved = localStorage.getItem('openpipeclub_carplay_recent_apps');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter(t => ['map', 'music', 'job', 'truck', 'settings'].includes(t));
-          if (valid.length >= 3) return valid.slice(0, 3) as Tab[];
+          const valid = parsed.filter(t => [
+            'map', 'music', 'music-windows', 'music-radio', 'music-local',
+            'job', 'truck', 'settings', 'chat', 'events'
+          ].includes(t));
+          if (valid.length >= 3) return valid.slice(0, 3) as RecentAppId[];
         }
       }
     } catch (e) {}
-    return ['map', 'music', 'truck'];
+    return ['map', 'music-windows', 'truck'];
   });
 
   const openApp = useCallback((tab: Tab, subMode?: 'windows' | 'local' | 'radio') => {
@@ -497,21 +750,27 @@ export default function CarPlayPage() {
       setContentIndex(0);
       return;
     }
-    lastActiveAppRef.current = tab;
     setActiveTab(tab);
     setContentIndex(0);
+    const effectiveSubMode = tab === 'music' ? (subMode || musicSubTab || 'windows') : undefined;
     if (tab === 'music' && subMode) {
       setMusicSubTab(subMode);
     }
+    const recentId: RecentAppId = tab === 'music'
+      ? (`music-${effectiveSubMode}` as RecentAppId)
+      : tab;
+
+    lastActiveAppRef.current = recentId;
+
     setRecentApps(prev => {
-      const filtered = prev.filter(t => t !== tab && t !== 'home');
-      const updated = [tab, ...filtered].slice(0, 3);
+      const filtered = prev.filter(t => t !== recentId && t !== 'home' && t !== 'apps');
+      const updated = [recentId, ...filtered].slice(0, 3);
       try {
         localStorage.setItem('openpipeclub_carplay_recent_apps', JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
-  }, []);
+  }, [musicSubTab]);
 
   const handleAndroidAutoMenuButton = useCallback(() => {
     // Android Auto Zyklus:
@@ -552,10 +811,11 @@ export default function CarPlayPage() {
   const activeTheme: 'dark' | 'light' = settings.carPlayTheme === 'auto'
     ? (isLowBeamOn ? 'dark' : 'light')
     : (settings.carPlayTheme === 'light' ? 'light' : 'dark');
+  const isLight = activeTheme === 'light';
 
   const mapThemeSetting = settings.carPlayMapTheme || 'auto';
   const activeMapTheme: 'dark' | 'light' = mapThemeSetting === 'auto'
-    ? (isLowBeamOn ? 'dark' : 'light')
+    ? (settings.carPlayTheme === 'light' ? 'light' : (isLowBeamOn ? 'dark' : 'light'))
     : (mapThemeSetting === 'light' ? 'light' : 'dark');
 
   // Responsive sidebar scaling & aspect ratio category
@@ -661,23 +921,6 @@ export default function CarPlayPage() {
       localStorage.setItem('opc_carplay_settings_page', String(settingsPage));
     } catch (e) {}
   }, [settingsPage]);
-
-  // Music Mode Sub-Tabs ('windows' | 'local' | 'radio')
-  const [musicSubTab, setMusicSubTab] = useState<'windows' | 'local' | 'radio'>(() => {
-    try {
-      const saved = localStorage.getItem('opc_carplay_music_subtab');
-      if (saved && ['windows', 'local', 'radio'].includes(saved)) {
-        return saved as 'windows' | 'local' | 'radio';
-      }
-    } catch (e) {}
-    return 'windows';
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('opc_carplay_music_subtab', musicSubTab);
-    } catch (e) {}
-  }, [musicSubTab]);
 
   // Local Music Player State
   const [localTracks, setLocalTracks] = useState<{ id: string; name: string; url: string; file: File }[]>([]);
@@ -790,13 +1033,13 @@ export default function CarPlayPage() {
 
   // Auto scroll list item when focused via hotkeys/keyboard (Instant 60 FPS scrolling)
   useEffect(() => {
-    if ((activeTab === 'music' || activeTab === 'chat' || activeTab === 'events') && focusZone === 'content') {
+    if ((activeTab === 'music' || activeTab === 'chat' || activeTab === 'events' || activeTab === 'settings') && focusZone === 'content') {
       const focusedElement = document.querySelector('[data-item-focused="true"]');
       if (focusedElement) {
         focusedElement.scrollIntoView({ block: 'nearest', behavior: 'auto' });
       }
     }
-  }, [contentIndex, activeTab, focusZone, musicSubTab]);
+  }, [contentIndex, activeTab, focusZone, musicSubTab, settingsPage]);
 
   // Auto scroll app raster item when focused via hotkeys/keyboard
   useEffect(() => {
@@ -827,6 +1070,7 @@ export default function CarPlayPage() {
       localAudioRef.current.pause();
       setIsLocalPlaying(false);
     } else {
+      connectAudioElementToVisualizer(localAudioRef.current);
       localAudioRef.current.play().catch(() => {});
       setIsLocalPlaying(true);
     }
@@ -838,6 +1082,7 @@ export default function CarPlayPage() {
     setIsLocalPlaying(true);
     setTimeout(() => {
       if (localAudioRef.current) {
+        connectAudioElementToVisualizer(localAudioRef.current);
         localAudioRef.current.play().catch(() => {});
       }
     }, 50);
@@ -847,6 +1092,7 @@ export default function CarPlayPage() {
   useEffect(() => {
     if (!radioAudioRef.current) return;
     if (isRadioPlaying && activeRadio) {
+      connectAudioElementToVisualizer(radioAudioRef.current);
       radioAudioRef.current.src = activeRadio.url;
       radioAudioRef.current.load();
       const playPromise = radioAudioRef.current.play();
@@ -878,6 +1124,20 @@ export default function CarPlayPage() {
       setActiveRadio(target);
       setIsRadioPlaying(true);
     }
+  };
+
+  const playPrevRadioStation = () => {
+    if (filteredRadioStations.length === 0) return;
+    const curIdx = activeRadio ? filteredRadioStations.findIndex(s => s.id === activeRadio.id) : 0;
+    const prevIdx = (curIdx - 1 + filteredRadioStations.length) % filteredRadioStations.length;
+    togglePlayRadio(filteredRadioStations[prevIdx]);
+  };
+
+  const playNextRadioStation = () => {
+    if (filteredRadioStations.length === 0) return;
+    const curIdx = activeRadio ? filteredRadioStations.findIndex(s => s.id === activeRadio.id) : -1;
+    const nextIdx = (curIdx + 1) % filteredRadioStations.length;
+    togglePlayRadio(filteredRadioStations[nextIdx]);
   };
 
   const autoLoadSii = useCallback(async () => {
@@ -1427,144 +1687,24 @@ export default function CarPlayPage() {
 
   const getContentElementsCount = () => {
     if (activeTab === 'home') return 2;
-    if (activeTab === 'music') return 3;
+    if (activeTab === 'music') {
+      if (musicSubTab === 'radio') return 3 + filteredRadioStations.length + (activeRadio ? 4 : 0);
+      if (musicSubTab === 'local') return 1 + localTracks.length;
+      return 3;
+    }
     if (activeTab === 'truck') return 3;
-    if (activeTab === 'settings') return 3; // 3 pages: 0: Design & Display, 1: Fahrt-Warnungen, 2: Meldungen & System
+    if (activeTab === 'settings') {
+      if (settingsPage === 0) return 14;
+      if (settingsPage === 1) return 5;
+      if (settingsPage === 2) return 5;
+      return 14;
+    }
     if (activeTab === 'map') return 1;
     if (activeTab === 'apps') return 9; // 9 apps in Android Auto app grid drawer
     if (activeTab === 'chat') return Math.max(chatChannels.length, 1) + 4;
     if (activeTab === 'events') return Math.max(carPlayEvents.length, 1) + 2;
     if (activeTab === 'job') return 1;
     return 0;
-  };
-
-  // --- Settings Navigation Model ---
-  type SettingsNavCol = 'left' | 'right';
-
-  interface SettingsNavState {
-    col: SettingsNavCol;
-    leftRow: number; // 0..3 for theme/mapTheme/textScale/aspectRatio
-    leftCol: number; // 0..2 for theme/map/text, 0..4 for aspectRatio
-    rightRow: number; // 0..10 for toggles
-  }
-
-  const getInitialSettingsNav = (): SettingsNavState => ({
-    col: 'left',
-    leftRow: 0,
-    leftCol: 0,
-    rightRow: 0,
-  });
-
-  const settingsNavToContentIndex = (nav: SettingsNavState): number => {
-    if (nav.col === 'left') {
-      if (nav.leftRow === 3) return 9 + nav.leftCol;
-      return nav.leftRow * 3 + nav.leftCol;
-    }
-    return 14 + nav.rightRow;
-  };
-
-  const contentIndexToSettingsNav = (idx: number): SettingsNavState => {
-    if (idx < 9) {
-      return { col: 'left', leftRow: Math.floor(idx / 3), leftCol: idx % 3, rightRow: 0 };
-    }
-    if (idx < 14) {
-      return { col: 'left', leftRow: 3, leftCol: idx - 9, rightRow: 0 };
-    }
-    return { col: 'right', leftRow: 0, leftCol: 0, rightRow: idx - 14 };
-  };
-
-  const isSettingsFocused = (col: SettingsNavCol, row: number, colIdx = 0): boolean => {
-    if (activeTab !== 'settings' || focusZone !== 'content') return false;
-    const expected = contentIndexToSettingsNav(contentIndex);
-    if (expected.col !== col) return false;
-    if (col === 'left') return expected.leftRow === row && expected.leftCol === colIdx;
-    return expected.rightRow === row;
-  };
-
-  const setSettingsNav = (nav: SettingsNavState) => {
-    setContentIndex(settingsNavToContentIndex(nav));
-  };
-
-  const updateSettingsFocus = (updater: (nav: SettingsNavState) => SettingsNavState) => {
-    const current = contentIndexToSettingsNav(contentIndex);
-    setSettingsNav(updater(current));
-  };
-
-  const navigateSettingsUp = () => {
-    updateSettingsFocus((nav) => {
-      if (nav.col === 'left') {
-        if (nav.leftRow > 0) return { ...nav, leftRow: nav.leftRow - 1, leftCol: Math.min(nav.leftCol, 2) };
-        return { ...nav, leftRow: 3, leftCol: Math.min(nav.leftCol, 4) };
-      }
-      if (nav.rightRow > 0) return { ...nav, rightRow: nav.rightRow - 1 };
-      return { ...nav, rightRow: 10 };
-    });
-  };
-
-  const navigateSettingsDown = () => {
-    updateSettingsFocus((nav) => {
-      if (nav.col === 'left') {
-        if (nav.leftRow < 3) return { ...nav, leftRow: nav.leftRow + 1, leftCol: Math.min(nav.leftCol, nav.leftRow + 1 === 3 ? 4 : 2) };
-        return { ...nav, leftRow: 0, leftCol: Math.min(nav.leftCol, 2) };
-      }
-      if (nav.rightRow < 10) return { ...nav, rightRow: nav.rightRow + 1 };
-      return { ...nav, rightRow: 0 };
-    });
-  };
-
-  const navigateSettingsLeft = () => {
-    updateSettingsFocus((nav) => {
-      if (nav.col === 'left') {
-        if (nav.leftCol > 0) return { ...nav, leftCol: nav.leftCol - 1 };
-        setFocusZone('sidebar');
-        setSidebarIndex(4);
-        return nav;
-      }
-      if (nav.rightRow < 4) {
-        return { ...nav, col: 'left', leftRow: nav.rightRow, leftCol: nav.rightRow === 3 ? 4 : 2 };
-      }
-      setFocusZone('sidebar');
-      setSidebarIndex(4);
-      return nav;
-    });
-  };
-
-  const navigateSettingsRight = () => {
-    updateSettingsFocus((nav) => {
-      if (nav.col === 'left') {
-        const maxCol = nav.leftRow === 3 ? 4 : 2;
-        if (nav.leftCol < maxCol) return { ...nav, leftCol: nav.leftCol + 1 };
-        return { ...nav, col: 'right', rightRow: Math.min(nav.leftRow, 10) };
-      }
-      setFocusZone('sidebar');
-      setSidebarIndex(4);
-      return nav;
-    });
-  };
-
-  const activateSettingsItem = () => {
-    if (contentIndex < 3) updateSetting('carPlayTheme', ['dark', 'light', 'auto'][contentIndex] as any);
-    else if (contentIndex < 6) updateSetting('carPlayMapTheme', ['dark', 'light', 'auto'][contentIndex - 3] as any);
-    else if (contentIndex < 9) updateSetting('carPlayTextScale', ['small', 'medium', 'large'][contentIndex - 6] as any);
-    else if (contentIndex < 14) updateSetting('carPlayAspectRatio', ['16:9', '4:3', '16:10', '21:9', 'free'][contentIndex - 9] as any);
-    else {
-      const keys = [
-        'carPlayIgnitionSleep',
-        'carPlayShowNavInstructions',
-        'carPlayNotifySpeed',
-        'carPlayNotifyFuel',
-        'carPlayNotifyRest',
-        'carPlayNotifyDamage',
-        'carPlayNotifyCargo',
-        'carPlayNotifyMusic',
-        'carPlayNotifyChat',
-        'carPlayNotifyNews',
-        'carPlayNotifyEvent'
-      ];
-      const key = keys[contentIndex - 14];
-      const currentVal = key === 'carPlayIgnitionSleep' ? Boolean(settings.carPlayIgnitionSleep) : settings[key as keyof OverlaySettings] !== false;
-      updateSetting(key as any, !currentVal);
-    }
   };
 
   const handleNav = (dir: string) => {
@@ -1841,7 +1981,11 @@ export default function CarPlayPage() {
         return;
       }
       if (activeTab === 'apps') {
-        openApp(lastActiveAppRef.current || 'home');
+        const lastApp = lastActiveAppRef.current || 'home';
+        if (lastApp === 'music-windows') openApp('music', 'windows');
+        else if (lastApp === 'music-radio') openApp('music', 'radio');
+        else if (lastApp === 'music-local') openApp('music', 'local');
+        else openApp(lastApp as Tab);
         setFocusZone('content');
         return;
       }
@@ -1887,7 +2031,10 @@ export default function CarPlayPage() {
           setContentIndex(0);
         } else {
           const targetApp = recentApps[sidebarIndex - 1] || 'home';
-          openApp(targetApp);
+          if (targetApp === 'music-windows') openApp('music', 'windows');
+          else if (targetApp === 'music-radio') openApp('music', 'radio');
+          else if (targetApp === 'music-local') openApp('music', 'local');
+          else openApp(targetApp as Tab);
         }
       }
       return;
@@ -1970,60 +2117,84 @@ export default function CarPlayPage() {
 
       // Direct sub-player navigation ('windows', 'local', 'radio')
       if (musicSubTab === 'radio') {
-        const totalRadioItems = 3 + filteredRadioStations.length;
+        const totalStations = filteredRadioStations.length;
+        const deckStart = 3 + totalStations;
 
-        if (dir === 'left') {
-          if (contentIndex === 2) setContentIndex(1);
-          else if (contentIndex === 1) setContentIndex(0);
-          else if (contentIndex === 0) {
-            setFocusZone('sidebar');
-            setSidebarIndex(1);
-          } else if (contentIndex >= 3) {
-            if (contentIndex % 2 === 0) {
-              setContentIndex(prev => prev - 1);
-            } else {
-              setFocusZone('sidebar');
-              setSidebarIndex(1);
-            }
+        if (contentIndex === 0) {
+          // 0: Search
+          if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(1); }
+          else if (dir === 'right') setContentIndex(1);
+          else if (dir === 'down') {
+            if (totalStations > 0) setContentIndex(3);
+            else if (activeRadio) setContentIndex(deckStart + 1);
           }
-        } else if (dir === 'right') {
-          if (contentIndex === 0) setContentIndex(1);
-          else if (contentIndex === 1) setContentIndex(2);
-          else if (contentIndex === 2) setContentIndex(filteredRadioStations.length > 0 ? 3 : 2);
-          else if (contentIndex >= 3) {
-            if (contentIndex % 2 === 1 && contentIndex + 1 < totalRadioItems) {
+          else if (dir === 'enter') openVirtualKeyboard('radio');
+        } else if (contentIndex === 1) {
+          // 1: Auto-Scan
+          if (dir === 'left') setContentIndex(0);
+          else if (dir === 'right') setContentIndex(2);
+          else if (dir === 'down') {
+            if (totalStations > 1) setContentIndex(4);
+            else if (totalStations === 1) setContentIndex(3);
+            else if (activeRadio) setContentIndex(deckStart + 1);
+          }
+          else if (dir === 'enter') autoLoadSii();
+        } else if (contentIndex === 2) {
+          // 2: Import
+          if (dir === 'left') setContentIndex(1);
+          else if (dir === 'down') {
+            if (totalStations > 1) setContentIndex(4);
+            else if (totalStations === 1) setContentIndex(3);
+            else if (activeRadio) setContentIndex(deckStart + 1);
+          }
+          else if (dir === 'enter') siiFileInputRef.current?.click();
+        } else if (contentIndex >= 3 && contentIndex < deckStart) {
+          // 3..3+N-1: Stations Grid (2 columns: left = 3, 5, 7; right = 4, 6, 8)
+          const sIdx = contentIndex - 3;
+          const col = sIdx % 2;
+
+          if (dir === 'left') {
+            if (col === 0) { setFocusZone('sidebar'); setSidebarIndex(1); }
+            else setContentIndex(prev => prev - 1);
+          } else if (dir === 'right') {
+            if (col === 0 && contentIndex + 1 < deckStart) setContentIndex(prev => prev + 1);
+          } else if (dir === 'up') {
+            if (sIdx === 0) setContentIndex(0);
+            else if (sIdx === 1) setContentIndex(1);
+            else setContentIndex(prev => prev - 2);
+          } else if (dir === 'down') {
+            if (contentIndex + 2 < deckStart) {
+              setContentIndex(prev => prev + 2);
+            } else if (contentIndex + 1 < deckStart && col === 0) {
               setContentIndex(prev => prev + 1);
+            } else if (activeRadio) {
+              setContentIndex(deckStart + 1); // Play/pause button in player deck
             }
-          }
-        } else if (dir === 'down') {
-          if (contentIndex === 0) setContentIndex(1);
-          else if (contentIndex === 1 || contentIndex === 2) setContentIndex(filteredRadioStations.length > 0 ? 3 : contentIndex);
-          else {
-            const nextRow = contentIndex + 2;
-            if (nextRow < totalRadioItems) {
-              setContentIndex(nextRow);
-            } else if (contentIndex % 2 === 1 && contentIndex + 1 < totalRadioItems) {
-              setContentIndex(contentIndex + 1);
-            }
-          }
-        } else if (dir === 'up') {
-          if (contentIndex >= 5) {
-            setContentIndex(prev => prev - 2);
-          } else if (contentIndex === 3 || contentIndex === 4) {
-            setContentIndex(1);
-          } else if (contentIndex === 1 || contentIndex === 2) {
-            setContentIndex(0);
-          }
-        } else if (dir === 'enter') {
-          if (contentIndex === 0) {
-            openVirtualKeyboard('radio');
-          } else if (contentIndex === 1) {
-            autoLoadSii();
-          } else if (contentIndex === 2) {
-            siiFileInputRef.current?.click();
-          } else if (contentIndex >= 3) {
-            const targetStation = filteredRadioStations[contentIndex - 3];
+          } else if (dir === 'enter') {
+            const targetStation = filteredRadioStations[sIdx];
             if (targetStation) togglePlayRadio(targetStation);
+          }
+        } else if (contentIndex >= deckStart && contentIndex < deckStart + 4) {
+          // Bottom Player Deck (deckStart+0: Prev, +1: Play/Pause, +2: Next, +3: Mute)
+          const bIdx = contentIndex - deckStart;
+
+          if (dir === 'left') {
+            if (bIdx === 0) { setFocusZone('sidebar'); setSidebarIndex(1); }
+            else setContentIndex(prev => prev - 1);
+          } else if (dir === 'right') {
+            if (bIdx < 3) setContentIndex(prev => prev + 1);
+          } else if (dir === 'up') {
+            if (totalStations > 0) setContentIndex(deckStart - 1);
+            else setContentIndex(1);
+          } else if (dir === 'enter') {
+            if (bIdx === 0) playPrevRadioStation();
+            else if (bIdx === 1) togglePlayRadio();
+            else if (bIdx === 2) playNextRadioStation();
+            else if (bIdx === 3) {
+              const nextVol = radioVolume > 0 ? 0 : 0.8;
+              setRadioVolume(nextVol);
+              if (radioAudioRef.current) radioAudioRef.current.volume = nextVol;
+            }
           }
         }
       } else if (musicSubTab === 'local') {
@@ -2082,16 +2253,141 @@ export default function CarPlayPage() {
         setSidebarIndex(4);
       }
     } else if (activeTab === 'settings') {
-      if (dir === 'left') {
-        if (settingsPage > 0) setSettingsPage(prev => prev - 1);
-        else { setFocusZone('sidebar'); setSidebarIndex(4); }
-      } else if (dir === 'right') {
-        if (settingsPage < 2) setSettingsPage(prev => prev + 1);
-      } else if (dir === 'enter') {
-        setSettingsPage(prev => (prev + 1) % 3);
-      } else if (dir === 'back') {
+      if (dir === 'back') {
         setFocusZone('sidebar');
         setSidebarIndex(4);
+        return;
+      }
+
+      if (dir === 'next-tab') {
+        setSettingsPage(prev => (prev + 1) % 3);
+        setContentIndex(0);
+        return;
+      }
+      if (dir === 'prev-tab') {
+        setSettingsPage(prev => (prev - 1 + 3) % 3);
+        setContentIndex(0);
+        return;
+      }
+
+      // If contentIndex === -1: Header Tab Bar is focused!
+      if (contentIndex === -1) {
+        if (dir === 'left') {
+          if (settingsPage > 0) setSettingsPage(prev => prev - 1);
+          else { setFocusZone('sidebar'); setSidebarIndex(4); }
+        } else if (dir === 'right') {
+          if (settingsPage < 2) setSettingsPage(prev => prev + 1);
+        } else if (dir === 'down' || dir === 'enter') {
+          setContentIndex(0);
+        }
+        return;
+      }
+
+      if (settingsPage === 0) {
+        // Page 0: Design & Display (14 items: 0..2 Theme, 3..5 Map, 6..9 HQ, 10..12 Scale, 13 Standby)
+        if (dir === 'left') {
+          if (contentIndex === 0 || contentIndex === 6 || contentIndex === 13) {
+            setFocusZone('sidebar');
+            setSidebarIndex(4);
+          } else {
+            setContentIndex(prev => prev - 1);
+          }
+        } else if (dir === 'right') {
+          if (contentIndex === 5 || contentIndex === 12 || contentIndex === 13) {
+            // End of row
+          } else {
+            setContentIndex(prev => prev + 1);
+          }
+        } else if (dir === 'down') {
+          if (contentIndex === 0) setContentIndex(6);
+          else if (contentIndex === 1) setContentIndex(7);
+          else if (contentIndex === 2) setContentIndex(8);
+          else if (contentIndex === 3) setContentIndex(10);
+          else if (contentIndex === 4) setContentIndex(11);
+          else if (contentIndex === 5) setContentIndex(12);
+          else if (contentIndex >= 6 && contentIndex <= 12) setContentIndex(13);
+        } else if (dir === 'up') {
+          if (contentIndex <= 5) {
+            setContentIndex(-1); // Enter Header Tabs
+          } else if (contentIndex === 6) setContentIndex(0);
+          else if (contentIndex === 7) setContentIndex(1);
+          else if (contentIndex === 8 || contentIndex === 9) setContentIndex(2);
+          else if (contentIndex === 10) setContentIndex(3);
+          else if (contentIndex === 11) setContentIndex(4);
+          else if (contentIndex === 12) setContentIndex(5);
+          else if (contentIndex === 13) setContentIndex(6);
+        } else if (dir === 'enter') {
+          if (contentIndex < 3) {
+            updateSetting('carPlayTheme', ['dark', 'light', 'auto'][contentIndex] as any);
+          } else if (contentIndex < 6) {
+            updateSetting('carPlayMapTheme', ['dark', 'light', 'auto'][contentIndex - 3] as any);
+          } else if (contentIndex < 10) {
+            updateSetting('carPlayHqOverlay', ['truckline', 'truckersmp', 'all', 'none'][contentIndex - 6] as any);
+          } else if (contentIndex < 13) {
+            updateSetting('carPlayTextScale', ['small', 'medium', 'large'][contentIndex - 10] as any);
+          } else if (contentIndex === 13) {
+            updateSetting('carPlayIgnitionSleep', !settings.carPlayIgnitionSleep);
+          }
+        }
+      } else if (settingsPage === 1) {
+        // Page 1: Fahrt-Warnungen (5 items: 2 columns: left 0, 2, 4; right 1, 3)
+        const keys = [
+          'carPlayShowNavInstructions',
+          'carPlayNotifySpeed',
+          'carPlayNotifyFuel',
+          'carPlayNotifyRest',
+          'carPlayNotifyDamage'
+        ];
+        if (dir === 'left') {
+          if (contentIndex % 2 === 0) {
+            setFocusZone('sidebar');
+            setSidebarIndex(4);
+          } else {
+            setContentIndex(prev => prev - 1);
+          }
+        } else if (dir === 'right') {
+          if (contentIndex % 2 === 0 && contentIndex + 1 < 5) {
+            setContentIndex(prev => prev + 1);
+          }
+        } else if (dir === 'down') {
+          if (contentIndex + 2 < 5) setContentIndex(prev => prev + 2);
+          else if (contentIndex === 2 || contentIndex === 3) setContentIndex(4);
+        } else if (dir === 'up') {
+          if (contentIndex <= 1) {
+            setContentIndex(-1); // Enter Header Tabs
+          } else {
+            setContentIndex(prev => prev - 2);
+          }
+        } else if (dir === 'enter') {
+          const k = keys[contentIndex];
+          const curr = settings[k as keyof OverlaySettings] !== false;
+          updateSetting(k as any, !curr);
+        }
+      } else if (settingsPage === 2) {
+        // Page 2: Meldungen & System (5 notification toggles in vertical list)
+        const keys = [
+          'carPlayNotifyCargo',
+          'carPlayNotifyMusic',
+          'carPlayNotifyChat',
+          'carPlayNotifyNews',
+          'carPlayNotifyEvent'
+        ];
+        if (dir === 'left') {
+          setFocusZone('sidebar');
+          setSidebarIndex(4);
+        } else if (dir === 'down') {
+          setContentIndex(prev => Math.min(4, prev + 1));
+        } else if (dir === 'up') {
+          if (contentIndex === 0) {
+            setContentIndex(-1); // Enter Header Tabs
+          } else {
+            setContentIndex(prev => prev - 1);
+          }
+        } else if (dir === 'enter') {
+          const k = keys[contentIndex];
+          const curr = settings[k as keyof OverlaySettings] !== false;
+          updateSetting(k as any, !curr);
+        }
       }
     } else if (activeTab === 'apps') {
       // 9 Apps arranged dynamically based on screen ratio/cols
@@ -2405,29 +2701,6 @@ export default function CarPlayPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto scroll settings container to focused element
-  useEffect(() => {
-    if (activeTab === 'settings' && focusZone === 'content') {
-      const nav = contentIndexToSettingsNav(contentIndex);
-      if (nav.col === 'right') {
-        const container = document.querySelector('.scrollbar-thin');
-        const focusedElement = container?.children[nav.rightRow] as HTMLElement;
-        if (container && focusedElement) {
-          const cTop = container.scrollTop;
-          const cBot = cTop + container.clientHeight;
-          const eTop = focusedElement.offsetTop;
-          const eBot = eTop + focusedElement.clientHeight;
-
-          if (eTop < cTop) {
-            container.scrollTop = eTop;
-          } else if (eBot > cBot) {
-            container.scrollTop = eBot - container.clientHeight;
-          }
-        }
-      }
-    }
-  }, [contentIndex, activeTab, focusZone]);
-
   // Sync state on mount and register listeners
   useEffect(() => {
     document.title = 'OPC CarPlay';
@@ -2483,9 +2756,13 @@ export default function CarPlayPage() {
               setTelemetry(data.telemetry);
             }
             if (data.media?.title) setMedia(data.media);
+            if (data.appearance && typeof data.appearance === 'object') {
+              setBgSyncTick(t => t + 1);
+            }
           } catch (err) { }
         });
 
+        let sseLastRenderTimestamp = 0;
         eventSource.addEventListener('telemetry-update', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
@@ -2497,9 +2774,22 @@ export default function CarPlayPage() {
               }
             }
             pendingTelemetry.current = data;
+
+            // Smart Tab Throttling for SSE: When in app drawer, settings or background tabs, avoid high-frequency 60 FPS re-renders
+            const currentTab = activeTabRef.current;
+            const isDrivingView = currentTab === 'home' || currentTab === 'truck' || currentTab === 'map';
+            const isSleeping = isCarPlaySleepingRef.current;
+            const now = performance.now();
+            const throttleMs = currentTab === 'apps' ? 500 : (isSleeping ? 1000 : 250);
+
+            if (!isDrivingView && (now - sseLastRenderTimestamp < throttleMs)) {
+              return;
+            }
+
             if (!telemetryRaf) {
               telemetryRaf = requestAnimationFrame(() => {
                 if (pendingTelemetry.current) {
+                  sseLastRenderTimestamp = performance.now();
                   if (pendingTelemetry.current.connected) {
                     setTelemetry(pendingTelemetry.current);
                   } else {
@@ -2518,6 +2808,10 @@ export default function CarPlayPage() {
             const data = JSON.parse(e.data);
             if (data) setSettings(data);
           } catch (err) { }
+        });
+
+        eventSource.addEventListener('app-appearance-updated', () => {
+          setBgSyncTick(t => t + 1);
         });
 
         eventSource.addEventListener('smtc-update', (e: MessageEvent) => {
@@ -2607,8 +2901,9 @@ export default function CarPlayPage() {
       const isDrivingView = currentTab === 'home' || currentTab === 'truck' || currentTab === 'map';
       const isSleeping = isCarPlaySleepingRef.current;
       const now = performance.now();
+      const throttleMs = currentTab === 'apps' ? 500 : (isSleeping ? 1000 : 250);
 
-      if ((!isDrivingView || isSleeping) && (now - lastRenderTimestamp < 250)) {
+      if ((!isDrivingView || isSleeping) && (now - lastRenderTimestamp < throttleMs)) {
         return; // Throttled cleanly in non-driving tabs
       }
 
@@ -3257,24 +3552,26 @@ export default function CarPlayPage() {
 
   // Theme styling logic
   const getThemeClasses = () => {
-    const th = settings.carPlayTheme || 'dark';
+    const th = settings.carPlayTheme === 'auto'
+      ? activeTheme
+      : (settings.carPlayTheme || 'dark');
     switch (th) {
       case 'light':
         return {
           wrapper: 'bg-[#f1f3f6] text-[#1e293b] border-slate-300 shadow-inner',
           sidebar: 'bg-[#e2e7ec] border-r border-slate-300 text-[#334155]',
-          activeTab: 'bg-amber-500/20 text-amber-600 shadow-md border border-amber-500/40 shadow-[0_0_10px_var(--primary-glow-subtle)] font-bold',
-          inactiveTab: 'text-slate-500 hover:bg-slate-300/40 hover:text-[#1e293b]',
-          card: 'bg-white/95 backdrop-blur-sm border border-slate-300/80 shadow-lg rounded-3xl text-[#1e293b] overflow-hidden',
+          activeTab: 'bg-primary text-white shadow-md border border-primary/40 shadow-[0_0_10px_var(--primary-glow-subtle)] font-bold',
+          inactiveTab: 'text-slate-500 hover:bg-slate-300/50 hover:text-slate-900',
+          card: 'bg-white/90 backdrop-blur-md border border-slate-250 shadow-lg rounded-3xl text-[#1e293b] overflow-hidden',
           innerCard: 'bg-slate-100/90 border border-slate-250 text-slate-800 shadow-sm rounded-2xl overflow-hidden',
           subBox: 'bg-slate-200/80 border border-slate-300 text-slate-900 rounded-xl',
-          badge: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
+          badge: 'bg-primary/15 text-primary border-primary/30',
           mutedText: 'text-slate-500 font-medium',
-          accentText: 'text-amber-600 font-bold',
+          accentText: 'text-primary font-bold',
           headingText: 'text-slate-900 font-black',
-          progressBg: 'bg-black/10 border border-black/5',
+          progressBg: 'bg-slate-200 border border-slate-300',
           progressFill: 'bg-primary shadow-sm',
-          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/30'
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-primary/30'
         };
       case 'blue':
         return {
@@ -3297,41 +3594,267 @@ export default function CarPlayPage() {
         return {
           wrapper: 'bg-gradient-to-br from-[#1e222b] to-[#111318] text-[#eceff1] border-[#374151] relative overflow-hidden',
           sidebar: 'bg-[#151921] border-r border-[#374151] text-[#9ca3af]',
-          activeTab: 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-[0_0_10px_var(--primary-glow)]',
+          activeTab: 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_10px_var(--primary-glow)]',
           inactiveTab: 'text-[#9ca3af] hover:bg-[#202530] hover:text-white',
           card: 'bg-[#1a1e26]/95 backdrop-blur-sm border border-[#374151] shadow-xl rounded-3xl text-[#eceff1] overflow-hidden',
           innerCard: 'bg-[#12151b]/90 border border-[#374151]/60 text-[#eceff1] rounded-2xl overflow-hidden',
           subBox: 'bg-[#0d1015]/80 border border-[#374151]/40 text-white rounded-xl',
-          badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+          badge: 'bg-primary/15 text-primary border border-primary/25',
           mutedText: 'text-[#9ca3af] font-medium',
-          accentText: 'text-amber-400 font-bold',
+          accentText: 'text-primary font-bold',
           headingText: 'text-white font-black',
           progressBg: 'bg-black/40 border border-white/5',
-          progressFill: 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-md shadow-[0_0_12px_var(--primary-glow)]',
-          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/20'
+          progressFill: 'bg-primary shadow-md shadow-[0_0_12px_var(--primary-glow)]',
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-primary/30'
         };
       case 'dark':
       default:
         return {
           wrapper: 'bg-black text-slate-100 border-zinc-900',
           sidebar: 'bg-black border-r border-zinc-800/80 text-slate-400',
-          activeTab: 'bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-md shadow-[0_0_12px_var(--primary-glow)]',
+          activeTab: 'bg-primary/20 text-primary border border-primary/40 shadow-md shadow-[0_0_12px_var(--primary-glow)]',
           inactiveTab: 'text-slate-400 hover:bg-zinc-800/50 hover:text-white',
           card: 'bg-[#0d1117]/95 backdrop-blur-sm border border-white/10 shadow-xl rounded-3xl text-slate-100 overflow-hidden',
           innerCard: 'bg-[#080a0f] border border-white/[0.08] text-white rounded-2xl overflow-hidden',
           subBox: 'bg-black/60 border border-white/10 text-white rounded-xl',
-          badge: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+          badge: 'bg-primary/15 text-primary border border-primary/30',
           mutedText: 'text-zinc-400 font-medium',
-          accentText: 'text-amber-400 font-bold',
+          accentText: 'text-primary font-bold',
           headingText: 'text-white font-black',
           progressBg: 'bg-black/50 border border-zinc-700/40',
-          progressFill: 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 shadow-[0_0_12px_var(--primary-glow)]',
-          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-amber-500/30'
+          progressFill: 'bg-primary shadow-[0_0_12px_var(--primary-glow)]',
+          glow: 'shadow-[0_0_15px_var(--primary-glow)] border-primary/30'
         };
     }
   };
 
-  const c = getThemeClasses();
+  // Official Music App Logos
+  const renderSourceLogo = (sourceName?: string, size = 18) => {
+    const s = (sourceName || '').toLowerCase();
+    if (s.includes('spotify')) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="shrink-0 drop-shadow-sm" title="Spotify">
+          <circle cx="12" cy="12" r="11" fill="#1DB954" />
+          <path d="M17.5 15.5c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.4.1-.7-.1-.8-.5-.1-.4.1-.7.5-.8 4.1-1 7.6-.5 10.3 1.2.3.2.4.6.2.9zm1.2-2.7c-.2.4-.7.5-1.1.3-2.9-1.8-7.3-2.3-10.7-1.3-.4.1-.9-.1-1-.6-.1-.4.1-.9.6-1 3.9-1.2 8.7-.6 12 1.4.3.2.4.8.2 1.2zm.1-2.8C15.3 7.9 9.5 7.7 6.1 8.7c-.5.2-1.1-.1-1.2-.6-.2-.5.1-1.1.6-1.2 4-1.2 10.4-1 14.3 1.3.5.3.6.9.3 1.4-.3.4-.9.6-1.3.4z" fill="#000" />
+        </svg>
+      );
+    }
+    if (s.includes('youtube')) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="shrink-0 drop-shadow-sm" title="YouTube">
+          <rect x="2" y="5" width="20" height="14" rx="4" fill="#FF0000" />
+          <path d="M10 9l5 3-5 3V9z" fill="#FFFFFF" />
+        </svg>
+      );
+    }
+    if (s.includes('apple')) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className="shrink-0 drop-shadow-sm" title="Apple Music">
+          <rect x="2" y="2" width="20" height="20" rx="5" fill="#FA243C" />
+          <path d="M15 6v7.5a2.5 2.5 0 11-2-2.45V8l-5 1.5v6a2.5 2.5 0 11-2-2.45V8.5a1 1 0 01.7-.95l7-2.1A1 1 0 0115 6z" fill="#FFFFFF" />
+        </svg>
+      );
+    }
+    if (s.includes('radio')) {
+      return (
+        <div className="flex items-center justify-center rounded-md bg-emerald-500/20 text-emerald-400 p-0.5 shrink-0" title="Live-Radio">
+          <Radio size={Math.max(12, size - 4)} className="text-emerald-400 stroke-[2.4]" />
+        </div>
+      );
+    }
+    if (s.includes('lokal') || s.includes('local')) {
+      return (
+        <div className="flex items-center justify-center rounded-md bg-indigo-500/20 text-indigo-400 p-0.5 shrink-0" title="Lokale Musik">
+          <ListMusic size={Math.max(12, size - 4)} className="text-indigo-400 stroke-[2.4]" />
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center justify-center rounded-md bg-white/10 text-white p-0.5 shrink-0">
+        <Music size={Math.max(12, size - 4)} className="stroke-[2.2]" />
+      </div>
+    );
+  };
+
+  // Clean corrupted Unicode characters (e.g., replacement diamond �)
+  const cleanMediaString = (val?: string) => {
+    if (!val) return '';
+    return val.replace(/\uFFFD/g, 'ü');
+  };
+
+  // Dynamic Cover Brightness Detection (white text on dark cover, black text on bright cover - without dark plaque)
+  const [coverIsDark, setCoverIsDark] = useState<boolean>(true);
+  useEffect(() => {
+    if (!albumArtSrc) {
+      setCoverIsDark(!isLight);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 12;
+        canvas.height = 12;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 12, 12);
+        const data = ctx.getImageData(0, 0, 12, 12).data;
+        let totalBrightness = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          totalBrightness += (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
+        }
+        const avg = totalBrightness / (data.length / 4);
+        setCoverIsDark(avg < 135);
+      } catch (e) {
+        setCoverIsDark(!isLight);
+      }
+    };
+    img.onerror = () => setCoverIsDark(!isLight);
+    img.src = albumArtSrc;
+  }, [albumArtSrc, isLight]);
+
+  // Listen for storage & window focus to sync customBgImage changes immediately across windows
+  const [bgSyncTick, setBgSyncTick] = useState(0);
+  const [directBgImage, setDirectBgImage] = useState<string>('');
+
+  useEffect(() => {
+    let unmounted = false;
+    const onSync = () => setBgSyncTick(t => t + 1);
+
+    try {
+      const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+      if (electron?.ipcRenderer) {
+        electron.ipcRenderer.invoke('get-app-appearance').then((data: any) => {
+          if (!unmounted && data?.customBgImage) {
+            setDirectBgImage(data.customBgImage);
+          }
+        }).catch(() => {});
+
+        const onAppAppearanceUpdated = (_: any, data: any) => {
+          if (!unmounted && data?.customBgImage) {
+            setDirectBgImage(data.customBgImage);
+          }
+          setBgSyncTick(t => t + 1);
+        };
+        electron.ipcRenderer.on('app-appearance-updated', onAppAppearanceUpdated);
+
+        window.addEventListener('focus', onSync);
+        window.addEventListener('storage', onSync);
+        return () => {
+          unmounted = true;
+          electron.ipcRenderer.removeListener('app-appearance-updated', onAppAppearanceUpdated);
+          window.removeEventListener('focus', onSync);
+          window.removeEventListener('storage', onSync);
+        };
+      } else if (typeof window !== 'undefined') {
+        const apiPort = window.location.port === '5173' ? '8383' : (window.location.port || '8383');
+        const apiBase = `${window.location.protocol}//${window.location.hostname}:${apiPort}`;
+        fetch(`${apiBase}/api/carplay/state`)
+          .then(res => res.json())
+          .then(data => {
+            if (!unmounted && data?.appearance?.customBgImage) {
+              setDirectBgImage(data.appearance.customBgImage);
+            }
+          })
+          .catch(() => {});
+      }
+    } catch (e) {}
+
+    window.addEventListener('focus', onSync);
+    window.addEventListener('storage', onSync);
+    return () => {
+      unmounted = true;
+      window.removeEventListener('focus', onSync);
+      window.removeEventListener('storage', onSync);
+    };
+  }, []);
+
+  // Resolves the custom background image from ThemeContext or direct state
+  const effectiveBgImage = useMemo(() => {
+    if (appearance?.customBgImage && appearance.customBgImage.trim() !== '') {
+      return appearance.customBgImage.trim();
+    }
+    if (directBgImage && directBgImage.trim() !== '') {
+      return directBgImage.trim();
+    }
+    try {
+      const raw = localStorage.getItem('openpipeclub_app_appearance');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.customBgImage && parsed.customBgImage.trim() !== '') {
+          return parsed.customBgImage.trim();
+        }
+      }
+      const direct = localStorage.getItem('openpipeclub_custom_bg') || localStorage.getItem('customBgImage');
+      if (direct && direct.trim() !== '') {
+        return direct.trim();
+      }
+    } catch (e) {}
+    return '';
+  }, [appearance?.customBgImage, directBgImage, bgSyncTick]);
+
+  // CarPlay Wallpaper Renderer: uses custom app background ONLY in app raster, or atmospheric glow for other tabs
+  const renderCarPlayWallpaper = (isAppRaster = false) => {
+    if (isAppRaster && effectiveBgImage) {
+      const isDark = !isLight;
+      const userDim = (appearance?.bgDim ?? 65) / 100;
+
+      // In darkmode, noticeably darken via both CSS filter brightness and deep opacity
+      const dimOpacity = isDark
+        ? Math.min(0.94, Math.max(0.78, userDim + 0.18))
+        : Math.min(0.55, userDim * 0.6);
+
+      const brightnessVal = isDark ? 0.32 : 0.92;
+      const blurVal = appearance?.bgBlur ?? 0;
+
+      return (
+        <div
+          className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0"
+          style={{ transform: 'translateZ(0)', willChange: 'transform' }}
+        >
+          <img
+            src={effectiveBgImage}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover transition-all duration-300 pointer-events-none select-none"
+            style={{
+              filter: `${blurVal > 0 ? `blur(${blurVal}px)` : ''} brightness(${brightnessVal}) contrast(${isDark ? 1.08 : 1.0})`.trim(),
+              transform: blurVal > 0 ? 'scale(1.06)' : 'none',
+              willChange: 'filter, transform',
+            }}
+          />
+          {/* Darkmode extra dimming overlay */}
+          <div
+            className="absolute inset-0 pointer-events-none transition-colors duration-300"
+            style={{
+              backgroundColor: `rgba(0, 0, 0, ${dimOpacity})`,
+            }}
+          />
+          {/* Deep Darkmode Vignette: edges are dark, center subtle */}
+          {isDark && (
+            <div
+              className="absolute inset-0 pointer-events-none transition-opacity duration-300 bg-gradient-to-t from-black/80 via-black/20 to-black/60"
+            />
+          )}
+        </div>
+      );
+    }
+    if (isLight) {
+      return (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0 bg-gradient-to-br from-[#e8edf5] via-[#f1f5f9] to-[#e2e8f0]">
+          <div className="absolute -top-32 left-1/4 w-[500px] h-[350px] rounded-full bg-primary/10 blur-[80px]" />
+          <div className="absolute -bottom-32 right-1/4 w-[500px] h-[350px] rounded-full bg-sky-400/10 blur-[90px]" />
+        </div>
+      );
+    }
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
+        <AnimatedBackground isAbsolute={true} ignoreCustomImage={true} />
+      </div>
+    );
+  };
+
+    const c = getThemeClasses();
 
   const textScaleMap: Record<string, number> = {
     small: 0.8,
@@ -3346,6 +3869,7 @@ export default function CarPlayPage() {
       <audio
         ref={localAudioRef}
         src={localTracks[currentLocalIndex]?.url}
+        onPlay={() => connectAudioElementToVisualizer(localAudioRef.current)}
         onTimeUpdate={() => {
           if (localAudioRef.current) {
             setLocalProgress(localAudioRef.current.currentTime);
@@ -3362,6 +3886,7 @@ export default function CarPlayPage() {
       <audio
         ref={radioAudioRef}
         src={activeRadio?.url}
+        onPlay={() => connectAudioElementToVisualizer(radioAudioRef.current)}
         onError={() => {
           setIsRadioPlaying(false);
           showNotification({
@@ -3375,8 +3900,8 @@ export default function CarPlayPage() {
       />
       <style>{`
         html, body, #root {
-          background-color: #000000 !important;
-          background: #000000 !important;
+          background-color: ${isLight ? '#eef2f6' : '#000000'} !important;
+          background: ${isLight ? '#eef2f6' : '#000000'} !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
@@ -3425,11 +3950,11 @@ export default function CarPlayPage() {
         .carplay-root .text-5xl { font-size: calc(48px * var(--cp-scale)) !important; }
         .carplay-root .text-6xl { font-size: calc(60px * var(--cp-scale)) !important; }
       `}</style>
-      <div className="w-screen h-screen bg-black overflow-hidden flex items-center justify-center p-0 m-0 relative">
+      <div className={`w-screen h-screen ${isLight ? 'bg-[#eef2f6]' : 'bg-black'} overflow-hidden flex items-center justify-center p-0 m-0 relative`}>
         <div 
           data-aspect={aspectCategory}
           data-taskbar-pos={taskbarPosition}
-          className={`w-full h-full flex ${taskbarPosition === 'bottom' ? 'flex-col' : 'flex-row'} select-none font-outfit rounded-none sm:rounded-3xl overflow-hidden border-2 shadow-2xl relative ${c.wrapper} carplay-root`}
+          className={`w-full h-full flex ${taskbarPosition === 'bottom' ? 'flex-col' : 'flex-row'} select-none font-outfit rounded-none sm:rounded-3xl overflow-hidden border-2 shadow-2xl relative ${isLight ? 'carplay-light' : ''} ${c.wrapper} carplay-root`}
         >
       {/* CarPlay Alert Notification Toast Banner (Unified Apple CarPlay Dark Glass Pill Banner) */}
       <AnimatePresence>
@@ -3523,7 +4048,11 @@ export default function CarPlayPage() {
         {/* Left / Top Section: Digital Clock */}
         <div className={`flex ${taskbarPosition === 'bottom' ? 'flex-row items-center shrink-0' : 'flex-col items-center'}`}>
           <span 
-            className="font-black tracking-tight text-white bg-black/40 px-2 py-0.5 rounded-lg border border-white/10"
+            className={`font-black tracking-tight px-2 py-0.5 rounded-lg border ${
+              isLight
+                ? 'text-slate-800 bg-white/80 border-slate-300/80 shadow-sm'
+                : 'text-white bg-black/40 border-white/10'
+            }`}
             style={{ fontSize: `${13 * sidebarScale}px` }}
           >
             {timeString}
@@ -3563,22 +4092,32 @@ export default function CarPlayPage() {
           {/* Subtle separator */}
           <div className={`${taskbarPosition === 'bottom' ? 'w-px h-6 mx-0.5' : 'w-6 h-px my-0.5'} bg-white/10 rounded-full`} />
 
-          {/* 2. Top 3 Most Recent Apps (Dynamically updated) */}
+          {/* 2. Top 3 Most Recent Apps (Dynamically updated with distinct SMTC, Radio & Local Music tabs) */}
           {recentApps.slice(0, 3).map((tabId, idx) => {
-            const metaMap: Record<Tab, { icon: any; label: string }> = {
-              home: { icon: Home, label: 'Cockpit & Dashboard' },
-              map: { icon: MapIcon, label: 'Navigation & Karte' },
-              music: { icon: Music, label: 'Medien & Audio' },
-              job: { icon: Briefcase, label: 'Fracht & Auftrag' },
-              truck: { icon: Truck, label: 'LKW Diagnose' },
-              settings: { icon: Settings, label: 'Einstellungen' },
-              chat: { icon: MessageSquare, label: 'Funk & Chat' },
-              events: { icon: Calendar, label: 'Events & Konvois' },
-              apps: { icon: LayoutGrid, label: 'Apps' },
+            const metaMap: Record<RecentAppId, { icon: any; label: string; tab: Tab; subMode?: 'windows' | 'local' | 'radio' }> = {
+              home: { icon: Home, label: 'Cockpit & Dashboard', tab: 'home' },
+              map: { icon: MapIcon, label: 'Navigation & Karte', tab: 'map' },
+              music: { icon: Music, label: 'Medien & Audio', tab: 'music', subMode: 'windows' },
+              'music-windows': { icon: Music, label: 'Medienplayer / SMTC', tab: 'music', subMode: 'windows' },
+              'music-radio': { icon: Radio, label: 'Live-Radio', tab: 'music', subMode: 'radio' },
+              'music-local': { icon: ListMusic, label: 'Lokale Musik', tab: 'music', subMode: 'local' },
+              job: { icon: Briefcase, label: 'Fracht & Auftrag', tab: 'job' },
+              truck: { icon: Truck, label: 'LKW Diagnose', tab: 'truck' },
+              settings: { icon: Settings, label: 'Einstellungen', tab: 'settings' },
+              chat: { icon: MessageSquare, label: 'Funk & Chat', tab: 'chat' },
+              events: { icon: Calendar, label: 'Events & Konvois', tab: 'events' },
+              apps: { icon: LayoutGrid, label: 'Apps', tab: 'apps' },
             };
-            const meta = metaMap[tabId] || { icon: Home, label: 'App' };
+            const meta = metaMap[tabId] || { icon: Home, label: 'App', tab: 'home' };
             const Icon = meta.icon;
-            const active = activeTab === tabId;
+            const active =
+              tabId === 'music-windows'
+                ? activeTab === 'music' && musicSubTab === 'windows'
+                : tabId === 'music-radio'
+                ? activeTab === 'music' && musicSubTab === 'radio'
+                : tabId === 'music-local'
+                ? activeTab === 'music' && musicSubTab === 'local'
+                : activeTab === tabId;
             const isFocused = focusZone === 'sidebar' && sidebarIndex === idx + 1;
             const iconSize = Math.round((taskbarPosition === 'bottom' ? 19 : 20) * sidebarScale);
 
@@ -3586,7 +4125,7 @@ export default function CarPlayPage() {
               <button
                 key={tabId}
                 onClick={() => {
-                  openApp(tabId);
+                  openApp(meta.tab, meta.subMode);
                   setSidebarIndex(idx + 1);
                   setFocusZone('sidebar');
                 }}
@@ -3627,11 +4166,9 @@ export default function CarPlayPage() {
           >
             {/* --- ANDROID AUTO APP RASTER / APP DRAWER TAB --- */}
             {activeTab === 'apps' && (
-              <div className="w-full h-full flex flex-col justify-center items-center overflow-hidden p-3 sm:p-6 relative rounded-2xl sm:rounded-3xl">
+              <div className="w-full h-full flex flex-col justify-center items-center overflow-hidden p-3 sm:p-6 relative rounded-2xl sm:rounded-3xl bg-[#050608]">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper(true)}
 
                 {/* 9 App Raster Grid: Dynamic Columns & Generous Padding to Prevent Any Clipping */}
                 <div
@@ -3713,11 +4250,12 @@ export default function CarPlayPage() {
                         key={app.id}
                         data-app-focused={isFocused ? 'true' : undefined}
                         onClick={app.action}
-                        className={`group relative flex flex-col items-center justify-center p-3 sm:p-5 rounded-3xl bg-black/40 hover:bg-black/60 border border-white/10 hover:border-primary/60 hover:shadow-[0_0_25px_var(--primary-glow)] hover:z-20 backdrop-blur-xl transition-all duration-200 cursor-pointer ${
+                        className={`group relative flex flex-col items-center justify-center p-3 sm:p-5 rounded-3xl bg-black/45 hover:bg-black/65 border border-white/10 hover:border-primary/60 hover:shadow-[0_0_25px_var(--primary-glow)] hover:z-20 backdrop-blur-md transition-all duration-200 cursor-pointer ${
                           isFocused
                             ? 'ring-4 ring-inset ring-primary scale-[1.04] border-primary bg-primary/20 shadow-[0_0_30px_var(--primary-glow)] z-20'
                             : 'hover:scale-[1.03] hover:shadow-2xl'
                         }`}
+                        style={{ transform: 'translateZ(0)', willChange: 'transform' }}
                       >
                         {/* Big App Icon */}
                         <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl ${app.iconBg} flex items-center justify-center text-white shadow-xl transition-transform duration-300 group-hover:scale-110`}>
@@ -3739,21 +4277,23 @@ export default function CarPlayPage() {
             {activeTab === 'home' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
                 <div className={`grid ${aspectCategory === 'narrow' ? 'grid-cols-1' : 'grid-cols-12'} gap-2.5 sm:gap-3 h-full relative z-10 p-0.5`}>
                   {/* Left Side: Map Widget – click to open full map tab */}
                   <div
                     onClick={() => openApp('map')}
-                    className={`${aspectCategory === 'narrow' ? 'h-1/2' : aspectCategory === '4:3' ? 'col-span-6 lg:col-span-7' : 'col-span-7'} h-full flex flex-col cursor-pointer transition-all duration-300 rounded-3xl bg-black/40 hover:bg-black/50 border border-white/10 hover:border-primary/60 hover:shadow-[0_0_20px_var(--primary-glow)] hover:z-20 backdrop-blur-xl shadow-2xl overflow-hidden ${
+                    className={`${aspectCategory === 'narrow' ? 'h-1/2' : aspectCategory === '4:3' ? 'col-span-6 lg:col-span-7' : 'col-span-7'} h-full flex flex-col cursor-pointer transition-all duration-300 rounded-3xl ${
+                      isLight
+                        ? 'bg-white/80 hover:bg-white/95 border-slate-300/80 hover:border-primary/60 hover:shadow-[0_0_20px_var(--primary-glow)] shadow-lg'
+                        : 'bg-black/40 hover:bg-black/50 border-white/10 hover:border-primary/60 hover:shadow-[0_0_20px_var(--primary-glow)] shadow-2xl'
+                    } hover:z-20 backdrop-blur-xl overflow-hidden ${
                       focusZone === 'content' && contentIndex === 0
                         ? 'ring-4 ring-inset ring-primary scale-[1.01] border-primary shadow-[0_0_20px_var(--primary-glow)] z-20'
                         : 'hover:scale-[1.005]'
                     } relative`}
                   >
-                    <div ref={setMapContainerRef} className="flex-1 relative bg-black overflow-hidden rounded-[inherit]">
+                    <div ref={setMapContainerRef} className={`flex-1 relative ${isLight ? 'bg-slate-200' : 'bg-black'} overflow-hidden rounded-[inherit]`}>
                       {!maximizedWidget && (
                         <GameMapWidget
                           ref={mapWidgetRef}
@@ -3850,25 +4390,45 @@ export default function CarPlayPage() {
                     {/* Media card */}
                     <div
                       onClick={() => openApp('music', 'windows')}
-                      className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 rounded-3xl bg-black/40 hover:bg-black/50 border border-white/10 hover:border-primary/60 hover:shadow-[0_0_20px_var(--primary-glow)] backdrop-blur-xl shadow-2xl p-3.5 group overflow-hidden hover:z-20 ${
+                      className={`relative flex-1 flex flex-col justify-between cursor-pointer transition-all duration-300 rounded-3xl ${
+                        isLight
+                          ? 'bg-white/85 hover:bg-white/95 border-slate-300/80 hover:border-primary/60 shadow-lg text-slate-900'
+                          : 'bg-black/40 hover:bg-black/50 border-white/10 hover:border-primary/60 shadow-2xl text-white'
+                      } hover:shadow-[0_0_20px_var(--primary-glow)] backdrop-blur-xl p-3.5 group overflow-hidden hover:z-20 ${
                         focusZone === 'content' && contentIndex === 1
                           ? 'ring-4 ring-inset ring-primary scale-[1.01] border-primary shadow-[0_0_20px_var(--primary-glow)] z-20'
                           : 'hover:scale-[1.005]'
                       }`}
                     >
-                      {/* Full Cover Image filling 100% of the entire widget area */}
-                      {albumArtSrc ? (
-                        <div className="absolute inset-0 z-0 overflow-hidden rounded-[inherit] pointer-events-none">
-                          <img
-                            src={albumArtSrc}
-                            alt={media?.title || ''}
-                            className="w-full h-full object-cover transition-all duration-700 scale-105"
+                      {/* Full Cover Image with smooth song transition animation */}
+                      <AnimatePresence mode="wait">
+                        {albumArtSrc ? (
+                          <motion.div
+                            key={albumArtSrc}
+                            initial={{ opacity: 0, scale: 1.05 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.35, ease: 'easeOut' }}
+                            className="absolute inset-0 z-0 overflow-hidden rounded-[inherit] pointer-events-none"
+                          >
+                            <img
+                              src={albumArtSrc}
+                              alt={media?.title || ''}
+                              className="w-full h-full object-cover scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/50 pointer-events-none" />
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="no-cover"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="absolute inset-0 z-0 bg-gradient-to-br from-black/60 via-black/40 to-black/70 overflow-hidden rounded-[inherit]"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-black/50 pointer-events-none" />
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 z-0 bg-gradient-to-br from-black/60 via-black/40 to-black/70 overflow-hidden rounded-[inherit]" />
-                      )}
+                        )}
+                      </AnimatePresence>
 
                       {/* TOP ROW & ACTIVE MEDIA DISPLAY (Unified for SMTC, Local Music & ETS2 Live Radio) */}
                       {(() => {
@@ -3895,37 +4455,57 @@ export default function CarPlayPage() {
                         return (
                           <>
                             <div className="relative z-20 flex items-center justify-between pointer-events-none">
-                              <span className="text-[9.5px] font-extrabold uppercase tracking-widest text-amber-400 flex items-center gap-1.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                                <Music size={13} className="text-amber-400" /> Mediaplayer
+                              <span className={`text-[9.5px] font-extrabold uppercase tracking-widest flex items-center gap-1.5 ${
+                                coverIsDark ? 'text-primary drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]' : 'text-slate-900'
+                              }`}>
+                                <Music size={13} className={coverIsDark ? 'text-primary' : 'text-slate-900'} /> Mediaplayer
                               </span>
                               {activeTitle && (
-                                <span className="text-[8.5px] font-black uppercase tracking-widest text-amber-300 bg-black/75 border border-amber-500/30 px-2.5 py-0.5 rounded-lg font-mono backdrop-blur-md shadow-lg">
-                                  {activeSource}
-                                </span>
+                                <div className="flex items-center drop-shadow-md">
+                                  {renderSourceLogo(activeSource, 20)}
+                                </div>
                               )}
                             </div>
 
                             {/* BOTTOM ROW: Track Info, Timeline & Controls Floating Directly Over Cover */}
                             {activeTitle ? (
                               <div className="relative z-20 flex flex-col gap-2 pointer-events-none">
-                                {/* Song Title & Artist */}
-                                <div>
-                                  <h3 className="text-lg font-black text-white truncate tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
-                                    {activeTitle}
-                                  </h3>
-                                  <p className="text-xs font-extrabold text-amber-400 truncate mt-0.5 drop-shadow-[0_2px_6px_rgba(0,0,0,1)]">
-                                    {activeArtist}
-                                  </p>
-                                </div>
+                                {/* Song Title & Artist with crossfade transition on song change */}
+                                <AnimatePresence mode="wait">
+                                  <motion.div
+                                    key={`${cleanMediaString(activeTitle)}-${cleanMediaString(activeArtist)}`}
+                                    initial={{ opacity: 0, y: 7 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -7 }}
+                                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                                  >
+                                    <h3 className={`text-lg font-black truncate tracking-tight ${
+                                      coverIsDark
+                                        ? 'text-white drop-shadow-[0_2px_8px_rgba(0,0,0,1)]'
+                                        : 'text-slate-950 drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]'
+                                    }`}>
+                                      {cleanMediaString(activeTitle)}
+                                    </h3>
+                                    <p className={`text-xs font-extrabold truncate mt-0.5 ${
+                                      coverIsDark
+                                        ? 'text-zinc-200 drop-shadow-[0_2px_6px_rgba(0,0,0,1)]'
+                                        : 'text-slate-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
+                                    }`}>
+                                      {cleanMediaString(activeArtist)}
+                                    </p>
+                                  </motion.div>
+                                </AnimatePresence>
 
                                 {/* Timeline & Controls Row */}
                                 <div className="flex items-center gap-3 w-full pointer-events-auto">
                                   {/* Timeline */}
                                   <div className="flex-1 flex items-center gap-2">
-                                    <span className="text-[10px] font-mono font-black text-amber-400 shrink-0 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                                    <span className={`text-[10px] font-mono font-black shrink-0 ${
+                                      coverIsDark ? 'text-primary drop-shadow-[0_2px_4px_rgba(0,0,0,1)]' : 'text-slate-900 drop-shadow-none'
+                                    }`}>
                                       {isLocalPlaying ? formatMediaTime(localProgress) : isRadioPlaying ? 'LIVE' : formatMediaTime(media?.progress, media?.duration)}
                                     </span>
-                                    <div className="h-2 flex-1 rounded-full overflow-hidden bg-black/80 border border-white/15 relative shadow-md">
+                                    <div className={`h-2 flex-1 rounded-full overflow-hidden ${isLight ? 'bg-slate-200 border border-slate-300' : 'bg-black/80 border border-white/15'} relative shadow-md`}>
                                       <div
                                         className="h-full rounded-full transition-all duration-300 bg-primary shadow-[0_0_10px_var(--primary-glow)]"
                                         style={{
@@ -3940,7 +4520,9 @@ export default function CarPlayPage() {
                                         }}
                                       />
                                     </div>
-                                    <span className="text-[10px] font-mono font-bold text-zinc-300 shrink-0 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                                    <span className={`text-[10px] font-mono font-bold shrink-0 ${
+                                      coverIsDark ? 'text-zinc-300 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]' : 'text-slate-700 drop-shadow-none'
+                                    }`}>
                                       {isLocalPlaying ? formatMediaTime(localDuration) : isRadioPlaying ? 'STREAM' : media?.duration ? formatMediaTime(media.duration) : '--:--'}
                                     </span>
                                   </div>
@@ -3956,7 +4538,9 @@ export default function CarPlayPage() {
                                       }}
                                       className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer shadow-xl ${
                                         isAnyActive
-                                          ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 text-slate-950 shadow-yellow-400/30 border border-yellow-200'
+                                          ? 'bg-primary text-[var(--primary-foreground)] shadow-[0_0_15px_var(--primary-glow)] border border-white/30'
+                                          : isLight
+                                          ? 'bg-white/80 text-slate-800 border border-slate-300 hover:bg-white backdrop-blur-md'
                                           : 'bg-black/75 text-white border border-white/20 hover:bg-black/90 backdrop-blur-md'
                                       }`}
                                     >
@@ -3979,10 +4563,14 @@ export default function CarPlayPage() {
 
                     {/* Redesigned Streamlined Digital Cockpit Widget (Speed, Gear & RPM Only - No Popup) */}
                     <div
-                      className="p-3.5 flex-1 flex flex-col justify-between transition-all duration-300 rounded-3xl bg-black/40 hover:bg-black/50 border border-white/10 hover:border-primary/50 hover:shadow-[0_0_20px_var(--primary-glow)] backdrop-blur-xl shadow-2xl overflow-hidden relative select-none hover:z-20"
+                      className={`p-3.5 flex-1 flex flex-col justify-between transition-all duration-300 rounded-3xl ${
+                        isLight
+                          ? 'bg-white/85 hover:bg-white/95 border-slate-300/80 hover:border-primary/50 shadow-lg text-slate-900'
+                          : 'bg-black/40 hover:bg-black/50 border-white/10 hover:border-primary/50 shadow-2xl text-white'
+                      } hover:shadow-[0_0_20px_var(--primary-glow)] backdrop-blur-xl overflow-hidden relative select-none hover:z-20`}
                     >
                       {/* Header: Title, Telemetry Status & Truck Model / Limit */}
-                      <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 mb-2 z-10">
+                      <div className={`flex items-center justify-between border-b ${isLight ? 'border-slate-200' : 'border-white/[0.08]'} pb-2 mb-2 z-10`}>
                         <div className="flex items-center gap-2">
                           <span className="text-[9.5px] font-black uppercase tracking-widest text-amber-400 font-mono flex items-center gap-1.5 bg-black/40 border border-white/10 px-2.5 py-0.5 rounded-lg shadow-sm">
                             <Gauge size={13} className="text-amber-400" /> DIGITAL COCKPIT
@@ -4013,7 +4601,7 @@ export default function CarPlayPage() {
                       {/* Main Section: Geschwindigkeit & Ganganzeige Side-by-Side */}
                       <div className="grid grid-cols-12 gap-2.5 items-stretch flex-1 z-10 min-h-0 mb-2">
                         {/* Left Column: Geschwindigkeit */}
-                        <div className="col-span-7 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-lg p-3 flex flex-col justify-between relative overflow-hidden group">
+                        <div className={`col-span-7 rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 shadow-sm' : 'bg-black/40 border-white/10 shadow-lg'} backdrop-blur-xl p-3 flex flex-col justify-between relative overflow-hidden group`}>
                           <div className="flex items-center justify-between z-10">
                             <span className={`text-[9px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1`}>
                               TEMPO
@@ -4034,8 +4622,12 @@ export default function CarPlayPage() {
 
                           <div className="my-auto flex items-baseline gap-1.5 z-10">
                             <span
-                              className={`font-black font-mono tracking-tight tabular-nums leading-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
-                                isOverspeed ? 'text-rose-400 animate-pulse' : 'text-white'
+                              className={`font-black font-mono tracking-tight tabular-nums leading-none ${
+                                isOverspeed
+                                  ? 'text-rose-400 animate-pulse'
+                                  : isLight
+                                  ? 'text-slate-900 drop-shadow-none'
+                                  : 'text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]'
                               }`}
                               style={{ fontSize: 'clamp(32px, 4.2vw, 48px)' }}
                             >
@@ -4060,7 +4652,7 @@ export default function CarPlayPage() {
                         </div>
 
                         {/* Right Column: Ganganzeige */}
-                        <div className="col-span-5 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl shadow-lg p-3 flex flex-col justify-between items-center text-center relative overflow-hidden group">
+                        <div className={`col-span-5 rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 shadow-sm' : 'bg-black/40 border-white/10 shadow-lg'} backdrop-blur-xl p-3 flex flex-col justify-between items-center text-center relative overflow-hidden group`}>
                           <div className="w-full flex items-center justify-between z-10">
                             <span className={`text-[9px] font-mono font-black uppercase tracking-wider ${c.mutedText}`}>
                               GANG
@@ -4214,45 +4806,86 @@ export default function CarPlayPage() {
                             <div className="absolute inset-0 z-0 bg-gradient-to-br from-zinc-950 via-black to-zinc-900" />
                           )}
 
-                          {/* TOP RIGHT CORNER: Player Source Badge */}
-                          <div className="absolute top-3 right-3 z-30 bg-black/75 backdrop-blur-md border border-amber-500/30 px-3 py-1 rounded-xl shadow-lg">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 font-mono">
-                              {displaySource}
-                            </span>
+                          {/* TOP RIGHT CORNER: Player Source Logo */}
+                          <div className="absolute top-3 right-3 z-30 flex items-center drop-shadow-lg">
+                            {renderSourceLogo(displaySource, 24)}
                           </div>
 
-                          {/* Crisp Album Cover or Station Logo */}
+                          {/* Crisp Album Cover or Station Logo with song transition animation */}
                           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none p-0 overflow-hidden">
-                            {albumArtSrc ? (
-                              <div className="relative h-full aspect-square flex items-center justify-center">
-                                <img
-                                  src={albumArtSrc}
-                                  alt={displayTitle}
-                                  className="h-full w-full object-cover shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40 pointer-events-none" />
-                              </div>
-                            ) : isRadioPlaying && activeRadio ? (
-                              <div className="relative h-full aspect-square flex items-center justify-center p-4">
-                                <RadioLogoImage src={null} name={activeRadio.name} size="lg" />
-                              </div>
-                            ) : (
-                              <div className="h-full aspect-square bg-zinc-900 flex flex-col items-center justify-center">
-                                <Disc size={64} className="text-amber-400/60 mb-2" />
-                                <span className="text-xs font-black uppercase text-zinc-400 tracking-wider font-mono">{displaySource}</span>
-                              </div>
-                            )}
+                            <AnimatePresence mode="wait">
+                              {albumArtSrc ? (
+                                <motion.div
+                                  key={albumArtSrc}
+                                  initial={{ opacity: 0, scale: 0.94 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 1.04 }}
+                                  transition={{ duration: 0.35, ease: 'easeOut' }}
+                                  className="relative h-full aspect-square flex items-center justify-center"
+                                >
+                                  <img
+                                    src={albumArtSrc}
+                                    alt={displayTitle}
+                                    className="h-full w-full object-cover shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40 pointer-events-none" />
+                                </motion.div>
+                              ) : isRadioPlaying && activeRadio ? (
+                                <motion.div
+                                  key={activeRadio.id}
+                                  initial={{ opacity: 0, scale: 0.94 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 1.04 }}
+                                  transition={{ duration: 0.25 }}
+                                  className="relative h-full aspect-square flex items-center justify-center p-4"
+                                >
+                                  <RadioLogoImage src={null} name={activeRadio.name} size="lg" />
+                                </motion.div>
+                              ) : (
+                                <motion.div
+                                  key="placeholder"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  className="h-full aspect-square bg-zinc-900 flex flex-col items-center justify-center"
+                                >
+                                  <Disc size={64} className="text-amber-400/60 mb-2" />
+                                  <span className="text-xs font-black uppercase text-zinc-400 tracking-wider font-mono">{displaySource}</span>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
                           </div>
 
-                          {/* CENTER OVERLAY: Song Title & Artist */}
-                          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 text-center pointer-events-none mb-14">
-                            <div className="max-w-[85%]">
-                              <h2 className="text-2xl font-black text-white truncate tracking-tight drop-shadow-[0_4px_16px_rgba(0,0,0,1)]">
-                                {displayTitle}
-                              </h2>
-                              <p className="text-sm font-extrabold text-amber-400 truncate mt-1 drop-shadow-[0_2px_12px_rgba(0,0,0,1)]">
-                                {displayArtist}
-                              </p>
+                          {/* CENTER OVERLAY: Song Title & Artist shifted down with crossfade animation */}
+                          <div className="absolute inset-x-0 bottom-24 sm:bottom-28 z-20 flex flex-col items-center justify-end px-4 text-center pointer-events-none">
+                            <div className="max-w-[92%] sm:max-w-[84%] flex flex-col items-center gap-1.5 pointer-events-auto">
+                              <AnimatePresence mode="wait">
+                                <motion.div
+                                  key={`${cleanMediaString(displayTitle)}-${cleanMediaString(displayArtist)}`}
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -10 }}
+                                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                                  className="flex flex-col items-center gap-1.5 max-w-full"
+                                >
+                                  <h2 className={`text-2xl sm:text-3xl font-black truncate tracking-tight text-center max-w-full transition-colors duration-300 ${
+                                    coverIsDark
+                                      ? 'text-white drop-shadow-[0_4px_16px_rgba(0,0,0,1)]'
+                                      : 'text-slate-950 drop-shadow-[0_2px_8px_rgba(255,255,255,0.9)]'
+                                  }`}>
+                                    {cleanMediaString(displayTitle)}
+                                  </h2>
+                                  <p className={`text-sm sm:text-base font-extrabold truncate text-center max-w-full transition-colors duration-300 ${
+                                    coverIsDark
+                                      ? 'text-zinc-200 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]'
+                                      : 'text-slate-800 drop-shadow-[0_1px_4px_rgba(255,255,255,0.9)]'
+                                  }`}>
+                                    {cleanMediaString(displayArtist)}
+                                  </p>
+                                </motion.div>
+                              </AnimatePresence>
+                              {/* Live Audio Spectrum Visualizer */}
+                              <SMTCVisualizer isPlaying={Boolean(isAnyPlaying)} isDark={coverIsDark} className="w-full max-w-md mt-1" />
                             </div>
                           </div>
 
@@ -4285,7 +4918,7 @@ export default function CarPlayPage() {
                                     : ''
                                 } ${
                                   isAnyPlaying
-                                    ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-yellow-300 text-slate-950 shadow-yellow-400/40 border-2 border-yellow-200'
+                                    ? 'bg-primary text-[var(--primary-foreground)] shadow-[0_0_18px_var(--primary-glow)] border-2 border-white/30'
                                     : 'bg-black/75 text-white border-2 border-white/20 hover:bg-black/90 backdrop-blur-md'
                                 }`}
                               >
@@ -4346,21 +4979,22 @@ export default function CarPlayPage() {
                 {musicSubTab === 'local' && (
                   <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-0 flex flex-col">
                     {/* App Wallpaper Background from OPC Main App */}
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                      <AnimatedBackground />
-                    </div>
+                    {renderCarPlayWallpaper()}
 
-                    <div className="flex-1 flex flex-col p-4 sm:p-5 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
-                      {/* Header */}
+                    <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                       {/* Header */}
                       <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-white/[0.08] shrink-0 gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-xl shadow-blue-500/25 flex items-center justify-center text-white shrink-0">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                            isLight
+                              ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                              : 'bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-xl shadow-blue-500/25 text-white'
+                          }`}>
                             <Disc size={22} className="stroke-[2.2]" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">Lokaler Musik-Player</h2>
+                              <h2 className={`text-base sm:text-lg font-black tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>Lokaler Musik-Player</h2>
                               <span className="text-[10px] font-mono font-bold text-blue-300 bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-full shrink-0">
                                 {localTracks.length} Songs
                               </span>
@@ -4498,7 +5132,7 @@ export default function CarPlayPage() {
                                 </button>
                                 <button
                                   onClick={togglePlayLocal}
-                                  className="w-16 h-13 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black flex items-center justify-center transition-all cursor-pointer shadow-xl shadow-amber-500/35"
+                                  className="w-16 h-13 rounded-2xl bg-primary hover:bg-primary/90 active:scale-95 text-[var(--primary-foreground)] font-black flex items-center justify-center transition-all cursor-pointer shadow-xl shadow-[var(--primary-glow)]"
                                   title={isLocalPlaying ? "Pausieren" : "Abspielen"}
                                 >
                                   {isLocalPlaying ? <Pause size={22} className="stroke-[2.5]" /> : <Play size={22} className="ml-1 stroke-[2.5]" />}
@@ -4555,20 +5189,22 @@ export default function CarPlayPage() {
                 {musicSubTab === 'radio' && (
                   <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-0 flex flex-col">
                     {/* App Wallpaper Background from OPC Main App */}
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                      <AnimatedBackground />
-                    </div>
+                    {renderCarPlayWallpaper()}
 
-                    <div className="flex-1 flex flex-col p-4 sm:p-5 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
+                    <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                       {/* Header */}
                       <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-white/[0.08] shrink-0 gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/25 flex items-center justify-center text-white shrink-0">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                            isLight
+                              ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                              : 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/25 text-white'
+                          }`}>
                             <Radio size={22} className="stroke-[2.2]" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">ETS2 Live-Radio</h2>
+                              <h2 className={`text-base sm:text-lg font-black tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>ETS2 Live-Radio</h2>
                               <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
                                 {filteredRadioStations.length} Sender
                               </span>
@@ -4636,11 +5272,13 @@ export default function CarPlayPage() {
                               key={st.id}
                               onClick={() => togglePlayRadio(st)}
                               data-item-focused={isItemFocused ? "true" : undefined}
-                              className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all duration-200 cursor-pointer shadow-md select-none ${
+                              className={`group p-3 rounded-2xl border text-left flex flex-col justify-between transition-all duration-200 cursor-pointer shadow-md select-none ${
                                 isItemFocused
                                   ? 'ring-4 ring-emerald-400 scale-[1.02] border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.5)] z-20 bg-emerald-500/25 text-white font-bold'
                                   : isCurrent && isRadioPlaying
                                   ? 'bg-emerald-500/20 border-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-1 ring-emerald-400'
+                                  : isLight
+                                  ? 'bg-white/90 border-slate-250 hover:border-emerald-500/50 hover:bg-slate-100 text-slate-900 shadow-sm'
                                   : 'bg-black/50 border-white/10 hover:border-emerald-500/40 hover:bg-white/[0.06]'
                               }`}
                             >
@@ -4650,9 +5288,9 @@ export default function CarPlayPage() {
                                     src={stLogo}
                                     name={st.name}
                                     size="sm"
-                                    className="w-6 h-6 rounded-lg object-contain bg-black/60 p-0.5 border border-white/10 shrink-0"
+                                    className={`w-6 h-6 rounded-lg object-contain ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-black/60 border-white/10'} p-0.5 border shrink-0`}
                                   />
-                                  <span className="text-xs font-black truncate text-white">{st.name}</span>
+                                  <span className={`text-xs font-black truncate ${isLight && !(isItemFocused || (isCurrent && isRadioPlaying)) ? 'text-slate-900 group-hover:text-slate-900' : 'text-white'}`}>{st.name}</span>
                                 </div>
                                 {st.favorite && (
                                   <span className="text-[9px] bg-amber-500/20 border border-amber-500/40 text-amber-400 px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0">
@@ -4660,9 +5298,9 @@ export default function CarPlayPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center justify-between text-[9.5px] font-mono text-zinc-400 mt-2">
+                              <div className={`flex items-center justify-between text-[9.5px] font-mono ${isLight && !(isItemFocused || (isCurrent && isRadioPlaying)) ? 'text-slate-600' : 'text-zinc-400'} mt-2`}>
                                 <span className="truncate max-w-[120px]">{st.genre}</span>
-                                <span className="font-bold text-amber-400">{st.bitrate} kbps</span>
+                                <span className={`font-bold ${isLight ? 'text-primary' : 'text-amber-400'}`}>{st.bitrate} kbps</span>
                               </div>
                             </button>
                           );
@@ -4670,14 +5308,16 @@ export default function CarPlayPage() {
                       </div>
 
                       {/* Bottom Active Stream Deck */}
-                      {activeRadio && (
-                        <div className="mt-3 p-3.5 rounded-2xl bg-black/60 border border-white/15 backdrop-blur-xl flex items-center justify-between shrink-0 shadow-2xl">
+                      {activeRadio && (() => {
+                        const deckStart = 3 + filteredRadioStations.length;
+                        return (
+                        <div className={`mt-3 p-3.5 rounded-2xl ${isLight ? 'bg-white/90 border-slate-250 text-slate-900 shadow-xl' : 'bg-black/60 border-white/15 text-white shadow-2xl'} backdrop-blur-xl flex items-center justify-between shrink-0`}>
                           <div className="flex items-center gap-3.5 min-w-0">
                             <RadioLogoImage
                               src={getRadioLogoUrl(activeRadio)}
                               name={activeRadio.name}
                               size="md"
-                              className="w-12 h-12 rounded-xl object-contain bg-black/70 p-1 border border-white/10 shrink-0 shadow-md"
+                              className={`w-12 h-12 rounded-xl object-contain ${isLight ? 'bg-slate-100 border-slate-250' : 'bg-black/70 border-white/10'} p-1 border shrink-0 shadow-md`}
                             />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
@@ -4686,53 +5326,101 @@ export default function CarPlayPage() {
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
                                     : 'bg-white/10 text-zinc-400 border border-white/10'
                                 }`}>
-                                  {isRadioPlaying ? (radioSongTitle ? '🎵 LIVE TRACK' : 'LIVE ON AIR') : 'PAUSIERT'}
+                                  {isRadioPlaying ? (radioSongTitle ? 'LIVE TRACK' : 'LIVE ON AIR') : 'PAUSIERT'}
                                 </span>
-                                <span className="text-[9px] font-mono text-zinc-400 font-bold">{activeRadio.bitrate} kbps</span>
+                                <span className={`text-[9px] font-mono font-bold ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>{activeRadio.bitrate} kbps</span>
                               </div>
-                              <h4 className="text-sm font-black text-white truncate mt-1">
+                              <h4 className={`text-sm font-black truncate mt-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                                 {radioSongTitle || activeRadio.name}
                               </h4>
                               {radioSongTitle && (
-                                <p className="text-[10px] text-amber-400 font-bold truncate mt-0.5 font-mono">
+                                <p className="text-[10px] text-emerald-500 font-bold truncate mt-0.5 font-mono">
                                   Sender: {activeRadio.name}
                                 </p>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 w-32 bg-black/50 border border-white/10 px-2.5 py-1.5 rounded-xl">
-                              <Volume2 size={14} className="text-amber-400 shrink-0" />
-                              <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.05"
-                                value={radioVolume}
-                                onChange={(e) => {
-                                  const v = parseFloat(e.target.value);
-                                  setRadioVolume(v);
-                                  if (radioAudioRef.current) radioAudioRef.current.volume = v;
-                                }}
-                                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
-                              />
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 0 ? "true" : undefined}
+                              onClick={playPrevRadioStation}
+                              className={`w-10 h-10 rounded-xl active:scale-95 border flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-800'
+                                  : 'bg-white/[0.06] hover:bg-white/[0.14] border-white/10 text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 0
+                                  ? 'ring-2 ring-emerald-400 scale-105 bg-emerald-500/30 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)] z-10'
+                                  : ''
+                              }`}
+                              title="Vorheriger Sender (⏮)"
+                            >
+                              <SkipBack size={16} />
+                            </button>
 
                             <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 1 ? "true" : undefined}
                               onClick={() => togglePlayRadio()}
-                              className={`w-12 h-12 rounded-xl flex items-center justify-center font-black transition-all cursor-pointer shadow-lg active:scale-95 ${
+                              className={`px-4 h-11 rounded-xl flex items-center justify-center font-black transition-all cursor-pointer shadow-lg active:scale-95 ${
+                                focusZone === 'content' && contentIndex === deckStart + 1
+                                  ? 'ring-4 ring-emerald-400 scale-110 shadow-[0_0_25px_rgba(16,185,129,0.6)] z-10'
+                                  : ''
+                              } ${
                                 isRadioPlaying
-                                  ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                                  : 'bg-white/10 text-white hover:bg-white/20 border border-white/15'
+                                  ? 'bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.5)]'
+                                  : 'bg-primary hover:bg-primary/90 text-[var(--primary-foreground)] shadow-[0_0_15px_var(--primary-glow)]'
                               }`}
                               title={isRadioPlaying ? "Radio stoppen" : "Radio starten"}
                             >
                               {isRadioPlaying ? <Pause size={20} className="stroke-[2.5]" /> : <Play size={20} className="ml-0.5 stroke-[2.5]" />}
                             </button>
+
+                            <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 2 ? "true" : undefined}
+                              onClick={playNextRadioStation}
+                              className={`w-10 h-10 rounded-xl active:scale-95 border flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-800'
+                                  : 'bg-white/[0.06] hover:bg-white/[0.14] border-white/10 text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 2
+                                  ? 'ring-2 ring-emerald-400 scale-105 bg-emerald-500/30 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)] z-10'
+                                  : ''
+                              }`}
+                              title="Nächster Sender (⏭)"
+                            >
+                              <SkipForward size={16} />
+                            </button>
+
+                            <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 3 ? "true" : undefined}
+                              onClick={() => {
+                                const nextVol = radioVolume > 0 ? 0 : 0.8;
+                                setRadioVolume(nextVol);
+                                if (radioAudioRef.current) radioAudioRef.current.volume = nextVol;
+                              }}
+                              className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-700'
+                                  : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 3
+                                  ? 'ring-2 ring-emerald-400 text-white bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                                  : ''
+                              }`}
+                              title={radioVolume === 0 ? "Stummschaltung aufheben" : "Stummschalten"}
+                            >
+                              {radioVolume === 0 ? <VolumeX size={15} className="text-rose-400" /> : <Volume2 size={15} className="text-emerald-500" />}
+                            </button>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -4742,20 +5430,22 @@ export default function CarPlayPage() {
             {activeTab === 'job' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
-                <div className="flex-1 flex flex-col p-4 sm:p-5 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
+                <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Header */}
                   <div className="flex items-center justify-between mb-3.5 border-b border-white/[0.08] pb-3 shrink-0 relative z-10">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-xl shadow-sky-500/25 flex items-center justify-center text-white shrink-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                          : 'bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-xl shadow-sky-500/25 text-white'
+                      }`}>
                         <Briefcase size={22} className="stroke-[2.2] drop-shadow-md" />
                       </div>
                       <div>
-                        <h2 className="text-base font-black text-white tracking-tight font-mono">AKTIVER FRACHTBRIEF</h2>
-                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest font-mono mt-0.5">Echtzeit-Logistikdaten</p>
+                        <h2 className={`text-base font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>AKTIVER FRACHTBRIEF</h2>
+                        <p className="text-[10px] font-extrabold uppercase tracking-widest font-mono mt-0.5 text-primary">Echtzeit-Logistikdaten</p>
                       </div>
                     </div>
                     {data.income > 0 && (
@@ -4772,13 +5462,13 @@ export default function CarPlayPage() {
                     <div className="flex-1 flex flex-col gap-3 min-h-0 relative z-10">
                       {/* Frachtgut + Reststrecke */}
                       <div className="grid grid-cols-12 gap-3 shrink-0">
-                        <div className="col-span-7 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl">
-                          <span className="text-[9px] font-black font-mono text-amber-400 uppercase tracking-widest block mb-1">FRACHTGUT</span>
-                          <p className="text-2xl font-black text-white leading-tight truncate drop-shadow-md">{data.cargo}</p>
+                        <div className={`col-span-7 rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 text-slate-900' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl`}>
+                          <span className="text-[9px] font-black font-mono text-primary uppercase tracking-widest block mb-1">FRACHTGUT</span>
+                          <p className={`text-2xl font-black leading-tight truncate drop-shadow-md ${isLight ? 'text-slate-900' : 'text-white'}`}>{data.cargo}</p>
                           {data.cargoMass > 0 && (
                             <div className="mt-2.5">
-                              <span className="text-xs text-white font-mono font-bold inline-flex items-center gap-1.5 bg-black/60 px-3 py-1.5 rounded-xl border border-white/10 shadow-inner">
-                                ⚖️ <span className="text-amber-400 font-black">{data.cargoMass.toFixed(1)}</span> Tonnen
+                              <span className={`text-xs font-mono font-bold inline-flex items-center gap-1.5 ${isLight ? 'bg-slate-200/80 text-slate-800 border-slate-300' : 'bg-black/60 text-white border-white/10'} px-3 py-1.5 rounded-xl border shadow-inner`}>
+                                ⚖️ <span className="text-primary font-black">{data.cargoMass.toFixed(1)}</span> Tonnen
                               </span>
                             </div>
                           )}
@@ -4786,29 +5476,33 @@ export default function CarPlayPage() {
 
                         <div className="col-span-5 flex flex-col gap-3">
                           {data.navDistance > 0 && (
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3.5 flex-1 flex items-center gap-3.5 shadow-xl">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-blue-500/25 flex items-center justify-center shrink-0 text-white shadow-md">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 text-slate-900' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-3.5 flex-1 flex items-center gap-3.5 shadow-xl`}>
+                              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
+                                isLight ? 'bg-slate-200 border border-slate-300 text-blue-600' : 'bg-gradient-to-tr from-blue-600 to-indigo-500 text-white shadow-blue-500/25'
+                              }`}>
                                 <Navigation size={20} />
                               </div>
                               <div className="min-w-0">
-                                <span className="text-[9px] font-black font-mono text-sky-400 uppercase tracking-widest">VERBLEIBEND</span>
-                                <p className="text-xl font-black text-white leading-tight font-mono mt-0.5">
+                                <span className={`text-[9px] font-black font-mono ${isLight ? 'text-sky-600' : 'text-sky-400'} uppercase tracking-widest`}>VERBLEIBEND</span>
+                                <p className={`text-xl font-black leading-tight font-mono mt-0.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                                   {formatDistance(data.navDistance)}
                                 </p>
                                 {getRemainingSeconds() ? (
-                                  <span className="text-[10px] font-bold text-zinc-400 font-mono">noch {formatRemainingTime(getRemainingSeconds()!)}</span>
+                                  <span className={`text-[10px] font-bold ${isLight ? 'text-slate-500' : 'text-zinc-400'} font-mono`}>noch {formatRemainingTime(getRemainingSeconds()!)}</span>
                                 ) : null}
                               </div>
                             </div>
                           )}
                           {data.plannedDistance && data.plannedDistance > 0 && (
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3.5 flex-1 flex items-center gap-3.5 shadow-xl">
-                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-zinc-700 to-zinc-600 shadow-zinc-600/25 flex items-center justify-center shrink-0 text-zinc-200 shadow-md">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 text-slate-900' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-3.5 flex-1 flex items-center gap-3.5 shadow-xl`}>
+                              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
+                                isLight ? 'bg-slate-200 border border-slate-300 text-slate-700' : 'bg-gradient-to-tr from-zinc-700 to-zinc-600 text-zinc-200 shadow-zinc-600/25'
+                              }`}>
                                 <MapPin size={20} />
                               </div>
                               <div className="min-w-0">
-                                <span className="text-[9px] font-black font-mono text-zinc-400 uppercase tracking-widest">GEPLANTE STRECKE</span>
-                                <p className="text-xl font-black text-white leading-tight font-mono mt-0.5">
+                                <span className={`text-[9px] font-black font-mono ${isLight ? 'text-slate-500' : 'text-zinc-400'} uppercase tracking-widest`}>GEPLANTE STRECKE</span>
+                                <p className={`text-xl font-black leading-tight font-mono mt-0.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                                   {formatDistance(data.plannedDistance, true)}
                                 </p>
                               </div>
@@ -4819,41 +5513,45 @@ export default function CarPlayPage() {
 
                       {/* Absender/Empfänger + Start/Ziel */}
                       <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
-                        <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 space-y-2.5 shadow-xl flex flex-col justify-center">
+                        <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 text-slate-900' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 space-y-2.5 shadow-xl flex flex-col justify-center`}>
                           {data.source_company && (
                             <div className="flex items-center justify-between">
-                              <span className="text-[9.5px] font-black font-mono text-zinc-400 uppercase tracking-wider">Absender</span>
-                              <p className="text-xs font-black text-white truncate max-w-[160px] bg-black/50 px-2.5 py-1 rounded-xl border border-white/10">{data.source_company}</p>
+                              <span className={`text-[9.5px] font-black font-mono ${isLight ? 'text-slate-500' : 'text-zinc-400'} uppercase tracking-wider`}>Absender</span>
+                              <p className={`text-xs font-black truncate max-w-[160px] ${isLight ? 'bg-slate-200/80 text-slate-900 border-slate-300' : 'bg-black/50 text-white border-white/10'} px-2.5 py-1 rounded-xl border`}>{data.source_company}</p>
                             </div>
                           )}
                           {data.dest_company && (
                             <div className="flex items-center justify-between">
-                              <span className="text-[9.5px] font-black font-mono text-amber-400 uppercase tracking-wider">Empfänger</span>
-                              <p className="text-xs font-black text-amber-300 truncate max-w-[160px] bg-amber-500/15 px-2.5 py-1 rounded-xl border border-amber-500/30">{data.dest_company}</p>
+                              <span className="text-[9.5px] font-black font-mono text-primary uppercase tracking-wider">Empfänger</span>
+                              <p className={`text-xs font-black truncate max-w-[160px] ${isLight ? 'bg-primary/10 text-primary border-primary/30' : 'bg-primary/15 text-primary border-primary/30'} px-2.5 py-1 rounded-xl border`}>{data.dest_company}</p>
                             </div>
                           )}
                           {!data.source_company && !data.dest_company && (
-                            <p className="text-xs text-zinc-500 font-bold text-center font-mono">Keine Firmendaten verfügbar</p>
+                            <p className={`text-xs ${isLight ? 'text-slate-400' : 'text-zinc-500'} font-bold text-center font-mono`}>Keine Firmendaten verfügbar</p>
                           )}
                         </div>
 
-                        <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-center gap-3 shadow-xl">
+                        <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-250 text-slate-900' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-center gap-3 shadow-xl`}>
                           <div className="flex items-center gap-3.5">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-500/25 flex items-center justify-center shrink-0 text-white shadow-md">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
+                              isLight ? 'bg-slate-200 border border-slate-300 text-emerald-600' : 'bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-emerald-500/25'
+                            }`}>
                               <MapPin size={18} />
                             </div>
                             <div className="min-w-0">
-                              <span className="text-[9px] font-black font-mono text-emerald-400 uppercase tracking-widest">STARTORT</span>
-                              <p className="text-base font-black text-white leading-tight truncate mt-0.5">{data.source || '—'}</p>
+                              <span className={`text-[9px] font-black font-mono ${isLight ? 'text-emerald-600' : 'text-emerald-400'} uppercase tracking-widest`}>STARTORT</span>
+                              <p className={`text-base font-black leading-tight truncate mt-0.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>{data.source || '—'}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-3.5">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-600 to-orange-500 shadow-orange-500/25 flex items-center justify-center shrink-0 text-white shadow-md">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md ${
+                              isLight ? 'bg-slate-200 border border-slate-300 text-amber-600' : 'bg-gradient-to-tr from-amber-600 to-orange-500 text-white shadow-orange-500/25'
+                            }`}>
                               <Navigation size={18} />
                             </div>
                             <div className="min-w-0">
-                              <span className="text-[9px] font-black font-mono text-amber-400 uppercase tracking-widest">ZIELORT</span>
-                              <p className="text-base font-black text-white leading-tight truncate mt-0.5">{data.dest || '—'}</p>
+                              <span className="text-[9px] font-black font-mono text-primary uppercase tracking-widest">ZIELORT</span>
+                              <p className={`text-base font-black leading-tight truncate mt-0.5 ${isLight ? 'text-slate-900' : 'text-white'}`}>{data.dest || '—'}</p>
                             </div>
                           </div>
                         </div>
@@ -4861,11 +5559,11 @@ export default function CarPlayPage() {
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative z-10">
-                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-2xl shadow-sky-500/30 flex items-center justify-center mb-3.5 text-white">
+                      <div className={`w-20 h-20 rounded-3xl ${isLight ? 'bg-slate-100 border border-slate-200 text-sky-600 shadow-md' : 'bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-2xl shadow-sky-500/30 text-white'} flex items-center justify-center mb-3.5`}>
                         <Briefcase size={38} className="drop-shadow-md animate-pulse" />
                       </div>
-                      <h3 className="text-lg font-black text-white font-mono uppercase tracking-wider mb-1">Kein aktiver Auftrag</h3>
-                      <p className="text-xs max-w-[300px] leading-relaxed text-zinc-400 font-medium">
+                      <h3 className={`text-lg font-black font-mono uppercase tracking-wider mb-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>Kein aktiver Auftrag</h3>
+                      <p className={`text-xs max-w-[300px] leading-relaxed font-medium ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
                         Nimm am LKW-Terminal einen Auftrag an, um Frachtbrief und Routenverlauf hier live einzusehen.
                       </p>
                     </div>
@@ -4878,11 +5576,9 @@ export default function CarPlayPage() {
             {activeTab === 'truck' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
-                <div className="flex-1 flex flex-col p-4 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative select-none z-10 m-0.5">
+                <div className={`flex-1 flex flex-col p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative select-none z-10 m-0.5`}>
                   {/* Background Aura Glows */}
                   <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
@@ -4890,12 +5586,16 @@ export default function CarPlayPage() {
                   {/* Header: Title, Page Switcher and LKW Status */}
                   <div className="flex items-center justify-between mb-3 border-b border-white/[0.08] pb-2.5 shrink-0 relative z-20">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-orange-500 shadow-xl shadow-orange-500/25 flex items-center justify-center text-white shrink-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                          : 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-xl shadow-orange-500/25 text-white'
+                      }`}>
                         <Truck size={22} className="stroke-[2.2] drop-shadow-md" />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h2 className="text-sm font-black text-white tracking-tight font-mono">
+                          <h2 className={`text-sm font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
                             {telemetry.connected ? `${data.brand || 'LKW'} ${data.model || ''}` : 'FAHRZEUG-TELEMETRIE'}
                           </h2>
                           {telemetry.connected ? (
@@ -4908,7 +5608,7 @@ export default function CarPlayPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest font-mono">
+                        <p className="text-[10px] font-extrabold uppercase tracking-widest font-mono text-primary">
                           {telemetry.connected
                             ? `${data.odometer ? `${Math.round(data.odometer).toLocaleString('de-DE')} KM` : 'LKW BEREIT'} • TANK: ${Math.round(data.fuel || 0)}L • ZUSTAND: ${(100 - (data.wearTruck || 0)).toFixed(0)}%`
                             : 'FAHRZEUG IM STANDBY'}
@@ -4917,7 +5617,7 @@ export default function CarPlayPage() {
                     </div>
 
                     {/* Integrated Automotive Cluster Dock Page Switcher */}
-                    <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-md border border-white/10 p-1.5 rounded-2xl shadow-2xl">
+                    <div className={`flex items-center gap-1.5 ${isLight ? 'bg-slate-100/90 border-slate-250 shadow-md text-slate-800' : 'bg-black/50 border-white/10 shadow-2xl text-white'} backdrop-blur-md border p-1.5 rounded-2xl`}>
                       {/* Prev Arrow */}
                       <button
                         onClick={() => setTruckPage(prev => (prev - 1 + 3) % 3)}
@@ -4969,11 +5669,11 @@ export default function CarPlayPage() {
 
                   {!telemetry.connected ? (
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative z-10">
-                      <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-3 shadow-2xl backdrop-blur-xl">
-                        <Truck size={32} className="text-amber-400/80 animate-pulse" />
+                      <div className={`w-16 h-16 rounded-2xl ${isLight ? 'bg-slate-100 border-slate-250 text-primary' : 'bg-white/[0.04] border-white/10 text-primary'} border flex items-center justify-center mb-3 shadow-lg backdrop-blur-xl`}>
+                        <Truck size={32} className="text-primary animate-pulse" />
                       </div>
-                      <h3 className="text-base font-black text-white font-mono uppercase tracking-wider mb-1">Keine Telemetrie-Verbindung</h3>
-                      <p className="text-xs max-w-[340px] leading-relaxed text-zinc-400 font-medium">
+                      <h3 className={`text-base font-black font-mono uppercase tracking-wider mb-1 ${isLight ? 'text-slate-900' : 'text-white'}`}>Keine Telemetrie-Verbindung</h3>
+                      <p className={`text-xs max-w-[340px] leading-relaxed font-medium ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
                         Starte Euro Truck Simulator 2 oder American Truck Simulator mit dem Telemetrie-Plugin, um Fahrzeug-Diagnose in Echtzeit anzuzeigen.
                       </p>
                     </div>
@@ -4998,7 +5698,7 @@ export default function CarPlayPage() {
                               {/* Top Bar: Limit Badge & Tempomat */}
                               <div className="flex items-center justify-between z-10 border-b border-white/[0.08] pb-2">
                                 <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
-                                  <Gauge size={13} className="text-amber-400" /> GESCHWINDIGKEIT & LIMIT
+                                  <Gauge size={13} className="text-primary" /> GESCHWINDIGKEIT & LIMIT
                                 </span>
                                 {data.speedLimit && data.speedLimit > 0 ? (
                                   <div className="flex items-center gap-2">
@@ -5028,7 +5728,7 @@ export default function CarPlayPage() {
                                   >
                                     {Math.round(data.speed || 0)}
                                   </span>
-                                  <span className="text-xl font-black uppercase font-mono tracking-widest text-amber-400">
+                                  <span className="text-xl font-black uppercase font-mono tracking-widest text-primary">
                                     KM/H
                                   </span>
                                 </div>
@@ -5074,11 +5774,11 @@ export default function CarPlayPage() {
                               <div className="flex flex-col justify-between border-b border-white/[0.08] pb-3 z-10">
                                 <div className="flex items-center justify-between mb-1">
                                   <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
-                                    <Settings size={13} className="text-amber-400" /> GETRIEBE & FAHRSTUFE
+                                    <Settings size={13} className="text-primary" /> GETRIEBE & FAHRSTUFE
                                   </span>
                                   <span className={`text-[9px] font-mono font-black uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
                                     (data.gear || 0) > 0
-                                      ? 'text-amber-300 bg-amber-500/15 border-amber-500/35'
+                                      ? 'text-primary bg-primary/15 border-primary/35'
                                       : (data.gear || 0) < 0
                                       ? 'text-rose-300 bg-rose-500/20 border-rose-500/40'
                                       : 'text-emerald-300 bg-emerald-500/15 border-emerald-500/35'
@@ -5107,7 +5807,7 @@ export default function CarPlayPage() {
                               <div className="flex flex-col gap-2 pt-2 z-10">
                                 <div className="flex items-center justify-between">
                                   <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
-                                    <Zap size={13} className="text-amber-400" /> MOTORDREHZAHL
+                                    <Zap size={13} className="text-primary" /> MOTORDREHZAHL
                                   </span>
                                   <div className="flex items-center gap-2">
                                     <span className={`text-[8.5px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-md border ${
@@ -5115,12 +5815,12 @@ export default function CarPlayPage() {
                                         ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
                                         : (data.rpm || 0) >= 900 && (data.rpm || 0) <= 1500
                                         ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
-                                        : 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                        : 'text-primary bg-primary/10 border-primary/20'
                                     }`}>
                                       {(data.rpm || 0) > 1800 ? 'HIGH RPM' : (data.rpm || 0) >= 900 && (data.rpm || 0) <= 1500 ? 'ECO ZONE' : 'POWER'}
                                     </span>
                                     <span className="text-2xl font-black font-mono text-white tabular-nums">
-                                      {Math.round(data.rpm || 0)} <span className="text-xs text-amber-400">U/MIN</span>
+                                      {Math.round(data.rpm || 0)} <span className="text-xs text-primary">U/MIN</span>
                                     </span>
                                   </div>
                                 </div>
@@ -5173,7 +5873,7 @@ export default function CarPlayPage() {
                             className="flex-1 grid grid-cols-2 gap-3.5 min-h-0 items-stretch"
                           >
                             {/* Card 1: Tankstand */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                               <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                 <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
                                   <Fuel size={14} className="text-amber-400" /> KRAFTSTOFFTANK
@@ -5188,10 +5888,10 @@ export default function CarPlayPage() {
                               </div>
 
                               <div className="my-auto flex items-baseline gap-2 z-10">
-                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                <span style={{ fontSize: '52px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tabular-nums tracking-tight`}>
                                   {Math.round(data.fuel || 0)}
                                 </span>
-                                <span className="text-lg font-black font-mono text-amber-400">
+                                <span className="text-lg font-black font-mono text-primary">
                                   LITER
                                 </span>
                               </div>
@@ -5223,7 +5923,7 @@ export default function CarPlayPage() {
                             </div>
 
                             {/* Card 2: Restreichweite */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                               <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                 <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
                                   <Navigation size={14} className="text-sky-400" /> RESTREICHWEITE
@@ -5234,7 +5934,7 @@ export default function CarPlayPage() {
                               </div>
 
                               <div className="my-auto flex items-baseline gap-2 z-10">
-                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                <span style={{ fontSize: '52px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tabular-nums tracking-tight`}>
                                   {Math.round(data.fuelRange || 0)}
                                 </span>
                                 <span className="text-lg font-black font-mono text-sky-400">
@@ -5256,7 +5956,7 @@ export default function CarPlayPage() {
                             </div>
 
                             {/* Card 3: Ø Kraftstoffverbrauch */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                               <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                 <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
                                   <Activity size={14} className="text-emerald-400" /> Ø VERBRAUCH
@@ -5267,7 +5967,7 @@ export default function CarPlayPage() {
                               </div>
 
                               <div className="my-auto flex items-baseline gap-2 z-10">
-                                <span style={{ fontSize: '52px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                <span style={{ fontSize: '52px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tabular-nums tracking-tight`}>
                                   {data.avgConsumption && data.avgConsumption > 0 ? (data.avgConsumption * 100).toFixed(1) : '—'}
                                 </span>
                                 <span className="text-lg font-black font-mono text-emerald-400">
@@ -5281,7 +5981,7 @@ export default function CarPlayPage() {
                             </div>
 
                             {/* Card 4: Rest-Lenkzeit & Pause */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                            <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                               <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                 <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
                                   <Clock size={14} className="text-purple-400" /> LENKZEIT & PAUSE
@@ -5289,14 +5989,14 @@ export default function CarPlayPage() {
                                 <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
                                   (data.nextRest || 0) > 60
                                     ? 'text-purple-300 bg-purple-500/15 border-purple-500/30'
-                                    : 'text-amber-300 bg-amber-500/20 border-amber-500/40 animate-pulse'
+                                    : 'text-primary bg-primary/20 border-primary/40 animate-pulse'
                                 }`}>
                                   {(data.nextRest || 0) > 60 ? 'LENKZEIT OK' : 'PAUSE ERFORDERLICH'}
                                 </span>
                               </div>
 
                               <div className="my-auto flex items-baseline gap-2 z-10">
-                                <span style={{ fontSize: '38px' }} className="font-mono font-black text-white leading-none tracking-tight">
+                                <span style={{ fontSize: '38px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tracking-tight`}>
                                   {data.nextRest && data.nextRest > 0 ? formatRemainingTime(data.nextRest * 60) : 'KEINE PAUSE'}
                                 </span>
                               </div>
@@ -5323,16 +6023,16 @@ export default function CarPlayPage() {
                             {/* Top Row: 2 Big Damage / Health Cards */}
                             <div className="grid grid-cols-2 gap-3.5 flex-1 min-h-0">
                               {/* Card 1: LKW-Zustand */}
-                              <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                              <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                   <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
-                                    <Wrench size={14} className="text-amber-400" /> LKW-VERSCHLEISS & CHASSIS
+                                    <Wrench size={14} className="text-primary" /> LKW-VERSCHLEISS & CHASSIS
                                   </span>
                                   <span className={`text-[8.5px] font-mono font-black uppercase px-2 py-0.5 rounded-lg border ${
                                     (data.wearTruck || 0) > 15
                                       ? 'text-rose-400 bg-rose-500/20 border-rose-500/40 animate-pulse'
                                       : (data.wearTruck || 0) > 5
-                                      ? 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+                                      ? 'text-primary bg-primary/15 border-primary/30'
                                       : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
                                   }`}>
                                     {(data.wearTruck || 0) > 15 ? '⚠️ REPARATUR NÖTIG' : (data.wearTruck || 0) > 5 ? '🟡 LEICHTER VERSCHLEISS' : '🟢 TOP-ZUSTAND'}
@@ -5340,7 +6040,7 @@ export default function CarPlayPage() {
                                 </div>
 
                                 <div className="my-auto flex items-baseline gap-2 z-10">
-                                  <span style={{ fontSize: '48px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                  <span style={{ fontSize: '48px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tabular-nums tracking-tight`}>
                                     {(100 - (data.wearTruck || 0)).toFixed(1)}%
                                   </span>
                                   <span className="text-lg font-black font-mono text-emerald-400">
@@ -5368,7 +6068,7 @@ export default function CarPlayPage() {
                               </div>
 
                               {/* Card 2: Frachtschaden */}
-                              <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                              <div className={`rounded-2xl ${isLight ? 'bg-slate-100/90 border-slate-200/90 text-slate-800' : 'bg-black/40 border-white/10 text-white'} backdrop-blur-xl p-4 flex flex-col justify-between shadow-xl relative overflow-hidden group`}>
                                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-2 z-10">
                                   <span className={`text-[10px] font-mono font-black uppercase tracking-wider ${c.mutedText} flex items-center gap-1.5`}>
                                     <Briefcase size={14} className="text-purple-400" /> FRACHTSICHERHEIT & LADUNG
@@ -5384,7 +6084,7 @@ export default function CarPlayPage() {
 
                                 <div className="my-auto flex flex-col justify-center z-10">
                                   <div className="flex items-baseline gap-2">
-                                    <span style={{ fontSize: '48px' }} className="font-mono font-black text-white leading-none tabular-nums tracking-tight">
+                                    <span style={{ fontSize: '48px' }} className={`font-mono font-black ${isLight ? 'text-slate-900' : 'text-white'} leading-none tabular-nums tracking-tight`}>
                                       {(data.wearCargo || 0).toFixed(1)}%
                                     </span>
                                     <span className="text-lg font-black font-mono text-rose-400">
@@ -5430,23 +6130,25 @@ export default function CarPlayPage() {
                                     className={`p-3 rounded-2xl border transition-all flex flex-col justify-between ${
                                       sensor.warn
                                         ? 'bg-rose-950/40 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.3)] animate-pulse'
+                                        : isLight
+                                        ? 'bg-slate-100/90 border-slate-200/90 hover:border-slate-300 shadow-sm'
                                         : 'bg-black/40 border-white/10 hover:border-white/20 backdrop-blur-xl shadow-md'
                                     }`}
                                   >
                                     <div className="flex items-center justify-between mb-2">
-                                      <IconComp size={16} className={sensor.warn ? 'text-rose-400' : sensor.isPark ? 'text-amber-400' : 'text-emerald-400'} />
+                                      <IconComp size={16} className={sensor.warn ? 'text-rose-400' : sensor.isPark ? 'text-primary' : 'text-emerald-400'} />
                                       <span className={`text-[8px] font-mono font-black px-1.5 py-0.5 rounded-md ${
                                         sensor.warn
                                           ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40'
                                           : sensor.isPark
-                                          ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40'
+                                          ? 'bg-primary/25 text-primary border-primary/40'
                                           : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                                       }`}>
                                         {sensor.status}
                                       </span>
                                     </div>
                                     <div>
-                                      <div className="text-[10px] font-black font-mono text-white tracking-tight">{sensor.label}</div>
+                                      <div className={`text-[10px] font-black font-mono tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>{sensor.label}</div>
                                       <div className="text-[8px] font-mono text-zinc-400 mt-0.5">{sensor.desc}</div>
                                     </div>
                                   </div>
@@ -5505,63 +6207,64 @@ export default function CarPlayPage() {
             {activeTab === 'settings' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
-                <div className="flex-1 flex flex-col p-4 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
+                <div className={`flex-1 flex flex-col p-2.5 sm:p-3 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/45 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Settings Header with Segmented Page Switcher Dock */}
-                  <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-3 shrink-0 relative z-10 gap-3">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-zinc-600 to-slate-500 shadow-xl shadow-zinc-500/25 flex items-center justify-center text-white shrink-0">
-                        <Settings size={22} className="drop-shadow-md" />
+                  <div className="flex items-center justify-between mb-2 border-b border-white/10 pb-2 shrink-0 relative z-10 gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0 shrink-0">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                          : 'bg-gradient-to-tr from-zinc-700 to-slate-600 shadow-md text-white'
+                      }`}>
+                        <Settings size={16} className="drop-shadow-sm" />
                       </div>
-                      <div className="min-w-0">
-                        <h2 className="text-base font-black text-white tracking-tight flex items-center gap-2">
-                          <span>CarPlay Einstellungen</span>
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md">
-                            Seite {settingsPage + 1}/3
-                          </span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h2 className={`text-sm sm:text-base font-black tracking-tight whitespace-nowrap ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                          Einstellungen
                         </h2>
-                        <p className="text-[10px] text-zinc-400 font-extrabold uppercase tracking-widest mt-0.5 truncate font-mono">
-                          {settingsPage === 0 && 'DESIGN, THEMES & BILDSCHIRM-FORMAT'}
-                          {settingsPage === 1 && 'SICHERHEIT & FAHRT-WARNUNGEN (COCKPIT ALERTS)'}
-                          {settingsPage === 2 && 'MELDUNGEN, COMMUNITY & SYSTEM-STATUS'}
-                        </p>
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 px-1.5 py-0.5 rounded shrink-0">
+                          {settingsPage + 1}/3
+                        </span>
                       </div>
                     </div>
 
-                    {/* Segmented Page Switcher (wie Truck Tab) */}
-                    <div className="flex items-center gap-1.5 bg-black/50 border border-white/10 p-1 rounded-2xl backdrop-blur-xl shrink-0">
+                    {/* Segmented Page Switcher */}
+                    <div className="flex items-center gap-1 bg-black/60 border border-white/10 p-0.5 sm:p-1 rounded-xl backdrop-blur-xl shrink-0">
                       <button
                         onClick={() => setSettingsPage(prev => (prev - 1 + 3) % 3)}
-                        className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group"
+                        className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group shrink-0"
                         title="Vorherige Seite (←)"
                       >
-                        <ChevronLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+                        <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
                       </button>
 
                       <div className="flex items-center gap-1">
                         {[
-                          { id: 0, label: 'Design & Display', num: '01', icon: Monitor },
-                          { id: 1, label: 'Fahrt-Warnungen', num: '02', icon: AlertTriangle },
-                          { id: 2, label: 'Meldungen & System', num: '03', icon: Activity },
+                          { id: 0, label: 'Design', num: '01', icon: Monitor },
+                          { id: 1, label: 'Warnungen', num: '02', icon: AlertTriangle },
+                          { id: 2, label: 'System', num: '03', icon: Activity },
                         ].map(tab => {
                           const Icon = tab.icon;
                           const isActive = settingsPage === tab.id;
+                          const isTabFocused = focusZone === 'content' && contentIndex === -1 && isActive;
                           return (
                             <button
                               key={tab.id}
-                              onClick={() => setSettingsPage(tab.id)}
-                              className={`px-3 py-1.5 rounded-xl font-mono text-xs transition-all duration-200 cursor-pointer flex items-center gap-2 select-none ${
-                                isActive
-                                  ? 'bg-primary text-[var(--primary-foreground)] font-black shadow-[0_0_18px_var(--primary-glow)] scale-[1.02]'
+                              data-item-focused={isTabFocused ? "true" : undefined}
+                              onClick={() => { setSettingsPage(tab.id); setContentIndex(0); }}
+                              className={`px-2 sm:px-2.5 py-1 rounded-lg font-mono text-xs transition-all duration-200 cursor-pointer flex items-center gap-1.5 select-none shrink-0 ${
+                                isTabFocused
+                                  ? 'ring-2 ring-primary ring-offset-2 ring-offset-black bg-primary text-[var(--primary-foreground)] font-black shadow-[0_0_18px_var(--primary-glow)] scale-105'
+                                  : isActive
+                                  ? 'bg-primary text-[var(--primary-foreground)] font-black shadow-[0_0_15px_var(--primary-glow)] scale-[1.02]'
                                   : 'text-zinc-400 hover:text-white hover:bg-white/[0.08] border border-transparent'
                               }`}
                             >
-                              <Icon size={14} className={isActive ? 'text-[var(--primary-foreground)] stroke-[2.4]' : 'text-zinc-400'} />
-                              <span className="font-black tracking-tight hidden sm:inline">{tab.label}</span>
-                              <span className={`text-[8.5px] px-1 py-0.2 rounded font-mono font-bold ${isActive ? 'bg-black/25 text-[var(--primary-foreground)]' : 'bg-white/10 text-zinc-400'}`}>
+                              <Icon size={13} className={isActive ? 'text-[var(--primary-foreground)] stroke-[2.4]' : 'text-zinc-400'} />
+                              <span className="font-black tracking-tight">{tab.label}</span>
+                              <span className={`text-[8px] px-1 py-0.2 rounded font-mono font-bold ${isActive ? 'bg-black/25 text-[var(--primary-foreground)]' : 'bg-white/10 text-zinc-400'}`}>
                                 {tab.num}
                               </span>
                             </button>
@@ -5571,19 +6274,19 @@ export default function CarPlayPage() {
 
                       <button
                         onClick={() => setSettingsPage(prev => (prev + 1) % 3)}
-                        className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group"
+                        className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group shrink-0"
                         title="Nächste Seite (→)"
                       >
-                        <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+                        <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Multi-Page Content Area with AnimatePresence */}
+                  {/* Multi-Page Content Area with AnimatePresence (Strict Overflow-Hidden, No Scrollbars) */}
                   <div className="flex-1 flex flex-col min-h-0 relative z-10 overflow-hidden">
                     <AnimatePresence mode="wait">
                       {/* ============================================================ */}
-                      {/* SEITE 1: DESIGN, THEME & BILDSCHIRM-FORMAT */}
+                      {/* SEITE 1: DESIGN, THEMES & ANZEIGE */}
                       {/* ============================================================ */}
                       {settingsPage === 0 && (
                         <motion.div
@@ -5592,276 +6295,216 @@ export default function CarPlayPage() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -20 }}
                           transition={{ duration: 0.18 }}
-                          className="grid grid-cols-2 gap-3.5 flex-1 min-h-0 overflow-y-auto no-scrollbar"
+                          className="flex flex-col justify-between flex-1 min-h-0 overflow-hidden gap-2"
                         >
-                          {/* Box 1: CarPlay Theme */}
-                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
-                            <div>
-                              <span className="text-[10px] font-mono font-black text-amber-400 uppercase tracking-widest block mb-1">
+                          {/* Upper 2x2 Grid for the 4 Option Boxes */}
+                          <div className="grid grid-cols-2 gap-2 flex-1 min-h-0 overflow-hidden">
+                            {/* Box 1: CarPlay Theme */}
+                            <div className="rounded-xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-md flex flex-col justify-between min-h-0 overflow-hidden">
+                              <span className="text-[9.5px] font-mono font-black text-amber-400 uppercase tracking-widest block truncate mb-1">
                                 🎨 CARPLAY-FARBDESIGN
                               </span>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
-                                Wähle das visuelle Farbschema der Benutzeroberfläche.
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[
-                                { id: 'dark', label: 'Dunkel', desc: 'Schatten & Nacht', icon: '🌙' },
-                                { id: 'light', label: 'Hell', desc: 'Tag-Modus', icon: '☀️' },
-                                { id: 'auto', label: 'Automatisch', desc: 'Abblendlicht steuert', icon: '🌗' }
-                              ].map((theme) => {
-                                const isActive = settings.carPlayTheme === theme.id;
-                                return (
-                                  <button
-                                    key={theme.id}
-                                    type="button"
-                                    onClick={() => updateSetting('carPlayTheme', theme.id as any)}
-                                    className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between h-20 ${
-                                      isActive
-                                        ? 'border-primary bg-primary/20 shadow-[0_0_15px_var(--primary-glow)] ring-1 ring-inset ring-primary'
-                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-lg">{theme.icon}</span>
-                                      {isActive && <Check size={14} className="text-amber-400" />}
-                                    </div>
-                                    <div>
-                                      <span className={`text-xs font-black uppercase tracking-wider block ${isActive ? 'text-amber-400' : 'text-white'}`}>
+                              <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
+                                {[
+                                  { id: 'dark', label: 'Dunkel', desc: 'Nacht', icon: '🌙' },
+                                  { id: 'light', label: 'Hell', desc: 'Tag', icon: '☀️' },
+                                  { id: 'auto', label: 'Auto', desc: 'Licht', icon: '🌗' }
+                                ].map((theme, themeIdx) => {
+                                  const isActive = settings.carPlayTheme === theme.id;
+                                  const isItemFocused = focusZone === 'content' && contentIndex === themeIdx;
+                                  return (
+                                    <button
+                                      key={theme.id}
+                                      type="button"
+                                      data-item-focused={isItemFocused ? "true" : undefined}
+                                      onClick={() => updateSetting('carPlayTheme', theme.id as any)}
+                                      className={`p-1.5 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-full min-h-0 ${
+                                        isItemFocused
+                                          ? 'ring-2 ring-primary bg-primary/30 border-primary shadow-[0_0_15px_var(--primary-glow)] scale-[1.02] z-10'
+                                          : isActive
+                                          ? 'border-primary bg-primary/20 shadow-[0_0_12px_var(--primary-glow)] ring-1 ring-inset ring-primary'
+                                          : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
+                                      }`}
+                                    >
+                                      <span className="text-base sm:text-lg mb-0.5">{theme.icon}</span>
+                                      <span className={`text-[10px] sm:text-xs font-black uppercase tracking-wider block truncate w-full ${isActive ? 'text-primary' : 'text-white'}`}>
                                         {theme.label}
                                       </span>
-                                      <span className="text-[9px] font-medium text-zinc-400 block truncate">
+                                      <span className="text-[8px] font-medium text-zinc-400 block truncate w-full hidden sm:block">
                                         {theme.desc}
                                       </span>
-                                    </div>
-                                  </button>
-                                );
-                              })}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Box 2: Map Theme */}
-                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
-                            <div>
-                              <span className="text-[10px] font-mono font-black text-blue-400 uppercase tracking-widest block mb-1">
-                                🗺️ KARTEN-DESIGN (MAP MODE)
+                            {/* Box 2: Map Theme */}
+                            <div className="rounded-xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-md flex flex-col justify-between min-h-0 overflow-hidden">
+                              <span className="text-[9.5px] font-mono font-black text-blue-400 uppercase tracking-widest block truncate mb-1">
+                                🗺️ KARTEN-DESIGN
                               </span>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
-                                Farbkontrast der GPS-Navigationskarte für Tag- und Nachtfahrten.
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[
-                                { id: 'dark', label: 'Dunkel', desc: 'Dunkle Vektorkarte', icon: '🌑' },
-                                { id: 'light', label: 'Hell', desc: 'Helle Tageskarte', icon: '🌕' },
-                                { id: 'auto', label: 'Automatisch', desc: 'Sensor-gesteuert', icon: '🔄' }
-                              ].map((mapTheme) => {
-                                const isActive = (settings.carPlayMapTheme || 'auto') === mapTheme.id;
-                                return (
-                                  <button
-                                    key={mapTheme.id}
-                                    type="button"
-                                    onClick={() => updateSetting('carPlayMapTheme', mapTheme.id as any)}
-                                    className={`p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between h-20 ${
-                                      isActive
-                                        ? 'border-blue-500 bg-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.35)] ring-1 ring-inset ring-blue-500'
-                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-lg">{mapTheme.icon}</span>
-                                      {isActive && <Check size={14} className="text-blue-400" />}
-                                    </div>
-                                    <div>
-                                      <span className={`text-xs font-black uppercase tracking-wider block ${isActive ? 'text-blue-300' : 'text-white'}`}>
+                              <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
+                                {[
+                                  { id: 'dark', label: 'Dunkel', desc: 'Vektor', icon: '🌑' },
+                                  { id: 'light', label: 'Hell', desc: 'Tageskarte', icon: '🌕' },
+                                  { id: 'auto', label: 'Auto', desc: 'Sensor', icon: '🔄' }
+                                ].map((mapTheme, mapIdx) => {
+                                  const isActive = (settings.carPlayMapTheme || 'auto') === mapTheme.id;
+                                  const isItemFocused = focusZone === 'content' && contentIndex === 3 + mapIdx;
+                                  return (
+                                    <button
+                                      key={mapTheme.id}
+                                      type="button"
+                                      data-item-focused={isItemFocused ? "true" : undefined}
+                                      onClick={() => updateSetting('carPlayMapTheme', mapTheme.id as any)}
+                                      className={`p-1.5 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-full min-h-0 ${
+                                        isItemFocused
+                                          ? 'ring-2 ring-blue-400 bg-blue-500/30 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.5)] scale-[1.02] z-10'
+                                          : isActive
+                                          ? 'border-blue-500 bg-blue-500/20 shadow-[0_0_12px_rgba(59,130,246,0.35)] ring-1 ring-inset ring-blue-500'
+                                          : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
+                                      }`}
+                                    >
+                                      <span className="text-base sm:text-lg mb-0.5">{mapTheme.icon}</span>
+                                      <span className={`text-[10px] sm:text-xs font-black uppercase tracking-wider block truncate w-full ${isActive ? 'text-blue-300' : 'text-white'}`}>
                                         {mapTheme.label}
                                       </span>
-                                      <span className="text-[9px] font-medium text-zinc-400 block truncate">
+                                      <span className="text-[8px] font-medium text-zinc-400 block truncate w-full hidden sm:block">
                                         {mapTheme.desc}
                                       </span>
-                                    </div>
-                                  </button>
-                                );
-                              })}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Box: Multiplayer HQ Overlay */}
-                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
-                            <div>
-                              <span className="text-[10px] font-mono font-black text-amber-400 uppercase tracking-widest block mb-1">
+                            {/* Box 3: Multiplayer HQ Overlay */}
+                            <div className="rounded-xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-md flex flex-col justify-between min-h-0 overflow-hidden">
+                              <span className="text-[9.5px] font-mono font-black text-amber-400 uppercase tracking-widest block truncate mb-1">
                                 🏢 MULTIPLAYER HQ OVERLAY
                               </span>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
-                                Wähle das Hauptquartier passend zu deinem aktuellen Multiplayer-Server.
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-4 gap-2">
-                              {[
-                                { id: 'truckline', label: 'Truckline HQ', desc: 'Dillenburg (B255)', icon: '🚚' },
-                                { id: 'truckersmp', label: 'TruckersMP HQ', desc: 'Wrocław (Polen)', icon: '🚛' },
-                                { id: 'all', label: 'Beide HQs', desc: 'Alle Overlays', icon: '🏢' },
-                                { id: 'none', label: 'Keins', desc: 'Vanilla ETS2', icon: '🌐' }
-                              ].map((item) => {
-                                const isActive = (settings.carPlayHqOverlay || 'truckline') === item.id;
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => updateSetting('carPlayHqOverlay', item.id as any)}
-                                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between h-20 ${
-                                      isActive
-                                        ? 'border-amber-500 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.35)] ring-1 ring-amber-500'
-                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-base">{item.icon}</span>
-                                      {isActive && <Check size={14} className="text-amber-400" />}
-                                    </div>
-                                    <div>
-                                      <span className={`text-[10px] font-black uppercase tracking-wider block ${isActive ? 'text-amber-300' : 'text-white'}`}>
+                              <div className="grid grid-cols-4 gap-1.5 flex-1 min-h-0">
+                                {[
+                                  { id: 'truckline', label: 'Truckline', desc: 'Dillenburg', icon: '🚚' },
+                                  { id: 'truckersmp', label: 'TMP HQ', desc: 'Wrocław', icon: '🚛' },
+                                  { id: 'all', label: 'Beide', desc: 'Alle HQs', icon: '🏢' },
+                                  { id: 'none', label: 'Keins', desc: 'Vanilla', icon: '🌐' }
+                                ].map((item, hqIdx) => {
+                                  const isActive = (settings.carPlayHqOverlay || 'truckline') === item.id;
+                                  const isItemFocused = focusZone === 'content' && contentIndex === 6 + hqIdx;
+                                  return (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      data-item-focused={isItemFocused ? "true" : undefined}
+                                      onClick={() => updateSetting('carPlayHqOverlay', item.id as any)}
+                                      className={`p-1 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-full min-h-0 ${
+                                        isItemFocused
+                                          ? 'ring-2 ring-amber-400 bg-amber-500/30 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-[1.02] z-10'
+                                          : isActive
+                                          ? 'border-amber-500 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.35)] ring-1 ring-amber-500'
+                                          : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
+                                      }`}
+                                    >
+                                      <span className="text-base sm:text-lg mb-0.5">{item.icon}</span>
+                                      <span className={`text-[9.5px] sm:text-[10.5px] font-black uppercase tracking-tight block truncate w-full ${isActive ? 'text-amber-300' : 'text-white'}`}>
                                         {item.label}
                                       </span>
-                                      <span className="text-[8px] font-medium text-zinc-400 block truncate">
+                                      <span className="text-[7.5px] font-medium text-zinc-400 block truncate w-full hidden sm:block">
                                         {item.desc}
                                       </span>
-                                    </div>
-                                  </button>
-                                );
-                              })}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Box 3: Text Scale */}
-                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
-                            <div>
-                              <span className="text-[10px] font-mono font-black text-amber-400 uppercase tracking-widest block mb-1">
+                            {/* Box 4: Cockpit Textgröße */}
+                            <div className="rounded-xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-md flex flex-col justify-between min-h-0 overflow-hidden">
+                              <span className="text-[9.5px] font-mono font-black text-primary uppercase tracking-widest block truncate mb-1">
                                 🔤 COCKPIT TEXTGRÖSSE
                               </span>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
-                                Skalierung der Typografie für optimale Lesbarkeit aus Fahrer-Distanz.
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[
-                                { id: 'small', label: 'Klein', desc: 'Kompakte Ansicht' },
-                                { id: 'medium', label: 'Normal', desc: 'Standard Cockpit' },
-                                { id: 'large', label: 'Groß', desc: 'Beste Lesbarkeit' }
-                              ].map((scale) => {
-                                const isActive = settings.carPlayTextScale === scale.id;
-                                return (
-                                  <button
-                                    key={scale.id}
-                                    type="button"
-                                    onClick={() => updateSetting('carPlayTextScale', scale.id as any)}
-                                    className={`p-3 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-18 ${
-                                      isActive
-                                        ? 'border-primary bg-primary/20 shadow-[0_0_15px_var(--primary-glow)] ring-1 ring-inset ring-primary'
-                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
-                                    }`}
-                                  >
-                                    <span className={`text-xs font-black uppercase tracking-wider block ${isActive ? 'text-amber-400' : 'text-white'}`}>
-                                      {scale.label}
-                                    </span>
-                                    <span className="text-[9px] text-zinc-400 font-mono mt-0.5">
-                                      {scale.desc}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Box 4: Aspect Ratio */}
-                          <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 shadow-xl flex flex-col justify-between">
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-mono font-black text-emerald-400 uppercase tracking-widest block">
-                                  🖥️ BILDSCHIRM-FORMAT
-                                </span>
-                                <span className="text-[9.5px] font-mono text-zinc-400 font-bold uppercase bg-black/50 px-2 py-0.5 rounded border border-white/10">
-                                  {settings.carPlayAspectRatio || '16:9'}
-                                </span>
+                              <div className="grid grid-cols-3 gap-1.5 flex-1 min-h-0">
+                                {[
+                                  { id: 'small', label: 'Klein', desc: 'Kompakt' },
+                                  { id: 'medium', label: 'Normal', desc: 'Standard' },
+                                  { id: 'large', label: 'Groß', desc: 'Lesbarkeit' }
+                                ].map((scale, scaleIdx) => {
+                                  const isActive = settings.carPlayTextScale === scale.id;
+                                  const isItemFocused = focusZone === 'content' && contentIndex === 10 + scaleIdx;
+                                  return (
+                                    <button
+                                      key={scale.id}
+                                      type="button"
+                                      data-item-focused={isItemFocused ? "true" : undefined}
+                                      onClick={() => updateSetting('carPlayTextScale', scale.id as any)}
+                                      className={`p-1.5 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-full min-h-0 ${
+                                        isItemFocused
+                                          ? 'ring-2 ring-primary bg-primary/30 border-primary shadow-[0_0_15px_var(--primary-glow)] scale-[1.02] z-10'
+                                          : isActive
+                                          ? 'border-primary bg-primary/20 shadow-[0_0_12px_var(--primary-glow)] ring-1 ring-inset ring-primary'
+                                          : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
+                                      }`}
+                                    >
+                                      <span className={`text-[10px] sm:text-xs font-black uppercase tracking-wider block truncate w-full ${isActive ? 'text-primary' : 'text-white'}`}>
+                                        {scale.label}
+                                      </span>
+                                      <span className="text-[8px] text-zinc-400 font-mono block truncate w-full hidden sm:block">
+                                        {scale.desc}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
                               </div>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-3">
-                                Seitenverhältnis bestimmt auch die Taskbar-Position (unten vs. links).
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-5 gap-1.5">
-                              {[
-                                { id: '16:9', label: '16:9', desc: 'Standard' },
-                                { id: '4:3', label: '4:3', desc: 'iPad/LKW' },
-                                { id: '16:10', label: '16:10', desc: 'Laptop' },
-                                { id: '21:9', label: '21:9', desc: 'Ultrawide' },
-                                { id: 'free', label: 'Frei', desc: 'Dynamisch' }
-                              ].map((ratio) => {
-                                const isActive = (settings.carPlayAspectRatio || '16:9') === ratio.id;
-                                return (
-                                  <button
-                                    key={ratio.id}
-                                    type="button"
-                                    onClick={() => updateSetting('carPlayAspectRatio', ratio.id as any)}
-                                    className={`p-2 rounded-xl text-center border transition-all cursor-pointer flex flex-col justify-center items-center h-18 ${
-                                      isActive
-                                        ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.35)] ring-1 ring-emerald-500'
-                                        : 'bg-black/50 border-white/10 hover:bg-white/[0.08]'
-                                    }`}
-                                  >
-                                    <span className={`text-xs font-black uppercase tracking-wider block ${isActive ? 'text-emerald-300' : 'text-white'}`}>
-                                      {ratio.label}
-                                    </span>
-                                    <span className="text-[8px] font-bold text-zinc-400 block truncate mt-0.5">
-                                      {ratio.desc}
-                                    </span>
-                                  </button>
-                                );
-                              })}
                             </div>
                           </div>
 
-                          {/* Box 5: Zündungs-Automatik (Display-Standby) */}
+                          {/* Bottom Standby Bar (Box 5: Zündungs-Automatik) */}
                           <div
+                            data-item-focused={focusZone === 'content' && contentIndex === 13 ? "true" : undefined}
                             onClick={() => updateSetting('carPlayIgnitionSleep', !settings.carPlayIgnitionSleep)}
-                            className={`col-span-2 rounded-2xl border p-3.5 shadow-xl backdrop-blur-xl flex items-center justify-between transition-all cursor-pointer select-none ${
-                              settings.carPlayIgnitionSleep
-                                ? 'bg-amber-500/15 border-amber-500/40 hover:bg-amber-500/20'
+                            className={`rounded-xl border p-2 sm:p-2.5 shadow-lg backdrop-blur-xl flex items-center justify-between transition-all cursor-pointer select-none shrink-0 ${
+                              focusZone === 'content' && contentIndex === 13
+                                ? 'ring-2 ring-primary bg-primary/25 border-primary shadow-[0_0_18px_var(--primary-glow)] scale-[1.01] z-10'
+                                : settings.carPlayIgnitionSleep
+                                ? 'bg-primary/15 border-primary/40 hover:bg-primary/20'
                                 : 'bg-black/40 border-white/10 opacity-75 hover:opacity-100 hover:border-white/20'
                             }`}
                           >
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-md ${
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 shadow-sm ${
                                 settings.carPlayIgnitionSleep
-                                  ? 'bg-amber-500 text-slate-950 font-black shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                                  ? 'bg-primary text-[var(--primary-foreground)] font-black shadow-[0_0_12px_var(--primary-glow)]'
                                   : 'bg-white/[0.06] border border-white/10 text-zinc-400'
                               }`}>
                                 ⚡
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs sm:text-sm font-black font-mono text-white tracking-tight">
+                                  <span className="text-xs font-black font-mono text-white tracking-tight truncate">
                                     Zündungs-Automatik (Display-Standby)
                                   </span>
-                                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                                  <span className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
                                     settings.carPlayIgnitionSleep
-                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                      ? 'bg-primary/20 text-primary border border-primary/40'
                                       : 'bg-white/10 text-zinc-400 border border-white/10'
                                   }`}>
                                     {settings.carPlayIgnitionSleep ? 'STANDBY BEI MOTOR AUS' : 'DAUERHAFT AN'}
                                   </span>
                                 </div>
-                                <p className="text-[11px] text-zinc-400 font-medium mt-0.5 truncate">
-                                  Schaltet das Display & die Benutzeroberfläche automatisch in den Ruhezustand, sobald Zündung und Motor aus sind.
+                                <p className="text-[10px] text-zinc-400 font-medium truncate mt-0.5 hidden sm:block">
+                                  Schaltet das Display & Cockpit automatisch in Ruhezustand, sobald Zündung und Motor aus sind.
                                 </p>
                               </div>
                             </div>
 
                             {/* Toggle Switch */}
-                            <div className={`w-14 h-8 rounded-full p-1 transition-colors duration-200 shrink-0 ${
-                              settings.carPlayIgnitionSleep ? 'bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-white/20'
+                            <div className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-200 shrink-0 ml-2 ${
+                              settings.carPlayIgnitionSleep ? 'bg-primary shadow-[0_0_12px_var(--primary-glow)]' : 'bg-white/20'
                             }`}>
-                              <div className={`w-6 h-6 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                                settings.carPlayIgnitionSleep ? 'translate-x-6' : 'translate-x-0'
+                              <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                                settings.carPlayIgnitionSleep ? 'translate-x-5' : 'translate-x-0'
                               }`} />
                             </div>
                           </div>
@@ -5878,75 +6521,81 @@ export default function CarPlayPage() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -20 }}
                           transition={{ duration: 0.18 }}
-                          className="grid grid-cols-2 gap-3 flex-1 min-h-0 overflow-y-auto no-scrollbar"
+                          className="grid grid-cols-2 gap-2 flex-1 min-h-0 overflow-hidden"
                         >
                           {[
                             {
                               key: 'carPlayShowNavInstructions',
                               label: 'Navigations-Hinweise',
-                              desc: 'Abbiege-Pfeile, Spuren und Distanzen im oberen Navigations-HUD',
+                              desc: 'Abbiege-Pfeile, Spuren und Distanzen im HUD',
                               icon: '🧭',
                               color: 'text-sky-400'
                             },
                             {
                               key: 'carPlayNotifySpeed',
                               label: 'Tempolimit-Warnung',
-                              desc: 'Optischer Alarm bei Überschreitung des erlaubten Tempolimits',
+                              desc: 'Optischer Alarm bei Geschwindigkeitsübertretung',
                               icon: '⚠️',
                               color: 'text-rose-400'
                             },
                             {
                               key: 'carPlayNotifyFuel',
                               label: 'Kraftstoff-Reserve',
-                              desc: 'Rechtzeitige Benachrichtigung bei kritischem Tank-Füllstand',
+                              desc: 'Alarmierung bei kritischem Tankfüllstand',
                               icon: '⛽',
                               color: 'text-amber-400'
                             },
                             {
                               key: 'carPlayNotifyRest',
                               label: 'Lenkzeit & Ruhepause',
-                              desc: 'Müdigkeitswarnung vor Erreichen der gesetzlichen Fahrzeitgrenze',
+                              desc: 'Müdigkeitswarnung vor Fahrzeitüberschreitung',
                               icon: '🕐',
                               color: 'text-blue-400'
                             },
                             {
                               key: 'carPlayNotifyDamage',
                               label: 'LKW- & Frachtschaden',
-                              desc: 'Alarmierung bei Verschleiß oder Unfallschaden über 5%',
+                              desc: 'Alarm bei Verschleiß oder Unfallschaden > 5%',
                               icon: '🔧',
                               color: 'text-rose-400'
                             }
-                          ].map((item) => {
+                          ].map((item, idx) => {
                             const isChecked = settings[item.key as keyof OverlaySettings] !== false;
+                            const isItemFocused = focusZone === 'content' && contentIndex === idx;
 
                             return (
                               <div
                                 key={item.key}
+                                data-item-focused={isItemFocused ? "true" : undefined}
                                 onClick={() => updateSetting(item.key as any, !isChecked)}
-                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 shadow-lg select-none backdrop-blur-xl ${
-                                  isChecked
+                                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 shadow-md select-none backdrop-blur-xl min-h-0 ${
+                                  idx === 4 ? 'col-span-2' : ''
+                                } ${
+                                  isItemFocused
+                                    ? 'ring-2 ring-primary bg-primary/25 border-primary shadow-[0_0_15px_var(--primary-glow)] scale-[1.01] z-10'
+                                    : isChecked
                                     ? 'bg-black/50 border-white/20 hover:border-white/30'
                                     : 'bg-black/30 border-white/5 opacity-70 hover:opacity-100'
                                 }`}
                               >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-11 h-11 rounded-2xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-xl shrink-0 shadow-md">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/10 flex items-center justify-center text-base shrink-0 shadow-sm">
                                     {item.icon}
                                   </div>
                                   <div className="min-w-0">
-                                    <div className="text-xs sm:text-sm font-black font-mono text-white tracking-tight truncate">
+                                    <div className="text-xs font-black font-mono text-white tracking-tight truncate">
                                       {item.label}
                                     </div>
-                                    <div className="text-[10px] text-zinc-400 font-medium truncate mt-0.5">
+                                    <div className="text-[9px] text-zinc-400 font-medium truncate mt-0.5 hidden sm:block">
                                       {item.desc}
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* Large Touch Switch */}
+                                {/* Touch Switch */}
                                 <div className="relative shrink-0 flex items-center ml-2">
-                                  <div className={`w-12 h-6.5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-primary shadow-[0_0_12px_var(--primary-glow)]' : 'bg-zinc-800 border border-white/10'}`}>
-                                    <div className={`w-5.5 h-5.5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-md ${isChecked ? 'left-[22px]' : 'left-0.5'}`} />
+                                  <div className={`w-10 h-5.5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-primary shadow-[0_0_10px_var(--primary-glow)]' : 'bg-zinc-800 border border-white/10'}`}>
+                                    <div className={`w-4.5 h-4.5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-md ${isChecked ? 'left-[19px]' : 'left-0.5'}`} />
                                   </div>
                                 </div>
                               </div>
@@ -5965,48 +6614,52 @@ export default function CarPlayPage() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -20 }}
                           transition={{ duration: 0.18 }}
-                          className="grid grid-cols-12 gap-3.5 flex-1 min-h-0 overflow-hidden"
+                          className="grid grid-cols-12 gap-2.5 flex-1 min-h-0 overflow-hidden"
                         >
                           {/* Left Column (7 Cols): Media & Community Notifications */}
-                          <div className="col-span-7 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3.5 shadow-xl flex flex-col justify-between overflow-hidden">
+                          <div className="col-span-7 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-xl flex flex-col justify-between overflow-hidden">
                             <div>
-                              <span className="text-[10px] font-mono font-black text-purple-400 uppercase tracking-widest block mb-1">
+                              <span className="text-[9.5px] font-mono font-black text-purple-400 uppercase tracking-widest block mb-0.5">
                                 🔔 MELDUNGEN & BENACHRICHTIGUNGEN
                               </span>
-                              <p className="text-[11px] text-zinc-400 font-medium mb-2.5">
+                              <p className="text-[10px] text-zinc-400 font-medium mb-1.5">
                                 Pop-up Einblendungen während der Fahrt anpassen.
                               </p>
                             </div>
 
-                            <div className="space-y-2 overflow-y-auto no-scrollbar flex-1 pr-1">
+                            <div className="space-y-1.5 overflow-hidden flex-1">
                               {[
                                 { key: 'carPlayNotifyCargo', label: 'Auftragswarnung', desc: 'Fracht- & Liefertermine', icon: '📦' },
                                 { key: 'carPlayNotifyMusic', label: 'Songwechsel', desc: 'Titel-Popup bei Trackwechsel', icon: '🎵' },
                                 { key: 'carPlayNotifyChat', label: 'Chat- & Funknachrichten', desc: 'Live-Meldungen im Team-Funk', icon: '💬' },
                                 { key: 'carPlayNotifyNews', label: 'Firmen-News', desc: 'VTC-Ankündigungen & Neuigkeiten', icon: '📰' },
                                 { key: 'carPlayNotifyEvent', label: 'Speditionsevents', desc: 'Erinnerungen an Konvois & Touren', icon: '📅' }
-                              ].map((item) => {
+                              ].map((item, idx) => {
                                 const isChecked = settings[item.key as keyof OverlaySettings] !== false;
+                                const isItemFocused = focusZone === 'content' && contentIndex === idx;
                                 return (
                                   <div
                                     key={item.key}
+                                    data-item-focused={isItemFocused ? "true" : undefined}
                                     onClick={() => updateSetting(item.key as any, !isChecked)}
-                                    className={`px-3 py-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                                      isChecked
+                                    className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                                      isItemFocused
+                                        ? 'ring-2 ring-primary bg-primary/25 border-primary shadow-[0_0_12px_var(--primary-glow)] scale-[1.01] z-10'
+                                        : isChecked
                                         ? 'bg-black/50 border-white/15'
                                         : 'bg-black/30 border-white/5 opacity-60'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                      <span className="text-base shrink-0">{item.icon}</span>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-sm shrink-0">{item.icon}</span>
                                       <div className="min-w-0">
                                         <div className="text-xs font-bold text-white truncate">{item.label}</div>
-                                        <div className="text-[9.5px] text-zinc-400 truncate">{item.desc}</div>
+                                        <div className="text-[9px] text-zinc-400 truncate">{item.desc}</div>
                                       </div>
                                     </div>
                                     <div className="relative shrink-0 flex items-center">
-                                      <div className={`w-9 h-5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]' : 'bg-zinc-800 border border-white/10'}`}>
-                                        <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm ${isChecked ? 'left-[17px]' : 'left-0.5'}`} />
+                                      <div className={`w-8 h-4.5 rounded-full transition-all duration-300 relative ${isChecked ? 'bg-primary shadow-[0_0_8px_var(--primary-glow)]' : 'bg-zinc-800 border border-white/10'}`}>
+                                        <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.5 transition-all duration-300 shadow-sm ${isChecked ? 'left-[15px]' : 'left-0.5'}`} />
                                       </div>
                                     </div>
                                   </div>
@@ -6016,44 +6669,27 @@ export default function CarPlayPage() {
                           </div>
 
                           {/* Right Column (5 Cols): System Status & Driving Tips */}
-                          <div className="col-span-5 flex flex-col justify-between gap-3 min-h-0">
+                          <div className="col-span-5 flex flex-col justify-between gap-2 min-h-0">
                             {/* System Status Card */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3.5 shadow-xl flex-1 flex flex-col justify-between">
-                              <span className="text-[10px] font-mono font-black text-emerald-400 uppercase tracking-widest block mb-2">
+                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-2.5 shadow-xl flex-1 flex flex-col justify-between">
+                              <span className="text-[9.5px] font-mono font-black text-emerald-400 uppercase tracking-widest block mb-1">
                                 ℹ️ SYSTEM & TELEMETRIE
                               </span>
-                              <div className="space-y-2 font-mono text-xs">
-                                <div className="bg-black/50 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
-                                  <span className="text-zinc-400 text-[10px]">TELEMETRIE</span>
-                                  <span className={`text-[10px] font-bold flex items-center gap-1.5 ${telemetry.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                                    <span className={`w-2 h-2 rounded-full ${telemetry.connected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
-                                    {telemetry.connected ? 'VERBUNDEN' : 'GETRENNT'}
+                              <div className="space-y-1.5 font-mono text-xs">
+                                <div className="bg-black/50 border border-white/10 rounded-xl p-2 flex items-center justify-between">
+                                  <span className="text-zinc-400 text-[9.5px]">TELEMETRIE</span>
+                                  <span className={`text-[9.5px] font-bold flex items-center gap-1.5 ${telemetry.connected ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${telemetry.connected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+                                    {telemetry.connected ? 'VERBUNDEN' : 'STANDBY'}
                                   </span>
                                 </div>
-                                <div className="bg-black/50 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
-                                  <span className="text-zinc-400 text-[10px]">EDITION</span>
-                                  <span className="text-[10px] font-bold text-white">OPC CARPLAY 1.8</span>
+                                <div className="bg-black/50 border border-white/10 rounded-xl p-2 flex items-center justify-between">
+                                  <span className="text-zinc-400 text-[9.5px]">OPC CLIENT</span>
+                                  <span className="text-[9.5px] text-white font-bold">V1.7.90</span>
                                 </div>
-                                <div className="bg-black/50 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
-                                  <span className="text-zinc-400 text-[10px]">DISPLAY RATIO</span>
-                                  <span className="text-[10px] font-bold text-amber-400">{settings.carPlayAspectRatio || '16:9'}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* D-Pad Controller Guide */}
-                            <div className="rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3 shadow-xl">
-                              <span className="text-[9.5px] font-mono font-black text-amber-400 uppercase tracking-widest block mb-1.5">
-                                🎮 BEDIENUNG WÄHREND DER FAHRT
-                              </span>
-                              <div className="text-[10px] font-mono text-zinc-300 space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="bg-black/60 px-1.5 py-0.5 rounded border border-white/10 text-amber-400 font-bold">← / →</span>
-                                  <span className="text-zinc-400">Seiten wechseln</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="bg-black/60 px-1.5 py-0.5 rounded border border-white/10 text-amber-400 font-bold">ENTER</span>
-                                  <span className="text-zinc-400">Nächste Seite</span>
+                                <div className="bg-black/50 border border-white/10 rounded-xl p-2 flex items-center justify-between">
+                                  <span className="text-zinc-400 text-[9.5px]">OVERLAY HUD</span>
+                                  <span className="text-[9.5px] font-bold text-primary">AKTIV</span>
                                 </div>
                               </div>
                             </div>
@@ -6065,7 +6701,6 @@ export default function CarPlayPage() {
                 </div>
               </div>
             )}
-
             {/* --- MAP TAB --- */}
             {activeTab === 'map' && (
               <div className={`w-full h-full relative overflow-hidden rounded-2xl bg-neutral-950 ${c.card}`}>
@@ -6277,33 +6912,35 @@ export default function CarPlayPage() {
             {activeTab === 'chat' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
                 {/* App Wallpaper Background from OPC Main App */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
-                <div className="flex-1 flex flex-col p-3 sm:p-4 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
+                <div className={`flex-1 flex flex-col p-3 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Header: Title, Driver Callsign & Top Channel Switcher */}
                   <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 shrink-0 relative z-10 gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-xl shadow-purple-500/25 flex items-center justify-center text-white shrink-0">
-                        <Radio size={24} className="drop-shadow-md" />
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                          : 'bg-primary text-[var(--primary-foreground)] shadow-xl shadow-primary/25'
+                      }`}>
+                        <MessageSquare size={24} className="drop-shadow-md" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-base font-black text-white tracking-tight">Funk & Team-Chat</h2>
+                          <h2 className={`text-base font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Funk & Team-Chat</h2>
                           {activeChatChannel && (
-                            <span className="text-[10px] font-mono font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-mono font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full">
                               #{activeChatChannel.name || 'allgemein'}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest font-mono">
+                          <span className="text-[10px] text-primary font-extrabold uppercase tracking-widest font-mono">
                             CB-FUNK
                           </span>
                           <span className="text-zinc-600">•</span>
                           <span className="text-[10px] font-mono text-zinc-300 font-bold truncate">
-                            Rufname: <strong className="text-white">{user?.username || 'OPC Driver'}</strong>
+                            Rufname: <strong className={`${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.username || 'OPC Driver'}</strong>
                           </span>
                           <span className="text-zinc-600">•</span>
                           <span className="text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
@@ -6317,8 +6954,8 @@ export default function CarPlayPage() {
                     {/* Header Right: Active Channel Badge & Refresh */}
                     <div className="flex items-center gap-2 shrink-0">
                       {activeChatChannel && (
-                        <span className="text-xs font-mono font-black text-purple-300 bg-purple-500/20 border border-purple-500/40 px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                        <span className="text-xs font-mono font-black text-primary bg-primary/15 border border-primary/40 px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                           Kanal: #{activeChatChannel.name || activeChatChannel.id}
                         </span>
                       )}
@@ -6330,7 +6967,7 @@ export default function CarPlayPage() {
                         data-item-focused={focusZone === 'content' && contentIndex === chatChannels.length + 3 ? 'true' : undefined}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer shadow-sm active:scale-95 ${
                           focusZone === 'content' && contentIndex === chatChannels.length + 3
-                            ? 'bg-purple-600/40 border-purple-400 text-white ring-2 ring-purple-400 scale-[1.02] shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                            ? 'bg-primary/40 border-primary text-white ring-2 ring-primary scale-[1.02] shadow-[0_0_15px_var(--primary-glow)]'
                             : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/15 text-zinc-300 hover:text-white'
                         }`}
                         title="Kanäle & Nachrichten aktualisieren"
@@ -6347,8 +6984,8 @@ export default function CarPlayPage() {
                     <div className="col-span-4 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-3 flex flex-col justify-between min-h-0 shadow-xl overflow-hidden">
                       <div className="mb-2.5 shrink-0">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-black uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
-                            <Radio size={13} className="text-purple-400" /> CB-FUNK KANÄLE
+                          <span className="text-[10px] font-mono font-black uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <MessageSquare size={13} className="text-primary" /> CB-FUNK KANÄLE
                           </span>
                           <span className="text-[9px] font-mono text-zinc-400 font-bold bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
                             {chatChannels.length} Kanäle
@@ -6376,19 +7013,19 @@ export default function CarPlayPage() {
                                 data-item-focused={isFocused ? 'true' : undefined}
                                 className={`w-full p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex items-center justify-between gap-2.5 shadow-md select-none ${
                                   isFocused
-                                    ? 'bg-purple-600/40 border-purple-400 ring-2 ring-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.45)] scale-[1.02]'
+                                    ? 'bg-primary/30 border-primary ring-2 ring-primary shadow-[0_0_20px_var(--primary-glow)] scale-[1.02]'
                                     : isActive
-                                    ? 'bg-purple-600/30 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.35)] ring-1 ring-purple-400/60 scale-[1.01]'
-                                    : 'bg-black/50 border-white/10 hover:border-purple-500/40 hover:bg-white/[0.06] active:scale-98'
+                                    ? 'bg-primary/20 border-primary shadow-[0_0_20px_var(--primary-glow)] ring-1 ring-primary/60 scale-[1.01]'
+                                    : 'bg-black/50 border-white/10 hover:border-primary/40 hover:bg-white/[0.06] active:scale-98'
                                 }`}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
-                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-mono font-black text-xs shrink-0 ${
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                                     isFocused || isActive
-                                      ? 'bg-purple-500 text-white shadow-md'
+                                      ? 'bg-primary text-[var(--primary-foreground)] shadow-md'
                                       : 'bg-white/[0.06] border border-white/10 text-zinc-300'
                                   }`}>
-                                    CH {idx + 1}
+                                    <MessageSquare size={17} />
                                   </div>
                                   <div className="min-w-0">
                                     <span className={`text-xs sm:text-sm font-black font-mono block truncate ${
@@ -6415,7 +7052,7 @@ export default function CarPlayPage() {
                           })
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center text-center p-4 text-zinc-400">
-                            <Radio size={24} className="text-zinc-500 mb-2" />
+                            <MessageSquare size={24} className="text-zinc-500 mb-2" />
                             <p className="text-xs font-mono">Keine Kanäle gefunden</p>
                             <button
                               type="button"
@@ -6423,8 +7060,8 @@ export default function CarPlayPage() {
                               data-item-focused={focusZone === 'content' && contentIndex === 0 ? 'true' : undefined}
                               className={`mt-3 px-3 py-1.5 rounded-xl border text-white text-xs font-mono font-bold transition-all ${
                                 focusZone === 'content' && contentIndex === 0
-                                  ? 'bg-purple-600/50 border-purple-400 ring-2 ring-purple-400 scale-[1.03] shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                                  : 'bg-purple-600/30 border-purple-400/40 hover:bg-purple-600/40'
+                                  ? 'bg-primary/50 border-primary ring-2 ring-primary scale-[1.03] shadow-[0_0_15px_var(--primary-glow)]'
+                                  : 'bg-primary/30 border-primary/40 hover:bg-primary/40'
                               }`}
                             >
                               Kanäle laden
@@ -6437,7 +7074,7 @@ export default function CarPlayPage() {
                       <div className="mt-2.5 pt-2.5 border-t border-white/10 shrink-0">
                         <div className="p-3 rounded-2xl bg-black/60 border border-white/10 flex items-center justify-between">
                           <div className="min-w-0">
-                            <span className="text-[8.5px] font-mono font-black uppercase tracking-wider text-amber-400 block">
+                            <span className="text-[8.5px] font-mono font-black uppercase tracking-wider text-primary block">
                               RUFNAME
                             </span>
                             <span className="text-xs font-black font-mono text-white truncate block">
@@ -6462,8 +7099,8 @@ export default function CarPlayPage() {
                       <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 p-1 min-h-0">
                         {chatMessages.length === 0 ? (
                           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400">
-                            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-2">
-                              <Radio size={24} />
+                            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-2">
+                              <MessageSquare size={24} />
                             </div>
                             <p className="text-sm font-bold font-mono text-white">Noch keine Funksprüche im Kanal #{activeChatChannel?.name || 'allgemein'}</p>
                             <p className="text-xs text-zinc-400 mt-1 max-w-xs">Wähle links einen CB-Kanal aus oder nutze die Tastatur!</p>
@@ -6482,7 +7119,8 @@ export default function CarPlayPage() {
                                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-fade-in`}
                               >
                                 <div className="flex items-center gap-1.5 mb-0.5 px-1">
-                                  <span className={`text-[10px] font-mono font-bold ${isMe ? 'text-purple-300' : 'text-amber-400'}`}>
+                                  <MessageSquare size={11} className="text-primary shrink-0 opacity-80" />
+                                  <span className={`text-[10px] font-mono font-bold ${isMe ? 'text-primary' : 'text-primary'}`}>
                                     {senderName}
                                   </span>
                                   {timeStr && <span className="text-[9px] text-zinc-500 font-mono">{timeStr}</span>}
@@ -6490,7 +7128,7 @@ export default function CarPlayPage() {
                                 <div
                                   className={`max-w-[85%] px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words shadow-md ${
                                     isMe
-                                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-xs border border-purple-400/30'
+                                      ? 'bg-primary text-[var(--primary-foreground)] rounded-br-xs border border-primary/40'
                                       : 'bg-black/60 text-zinc-100 rounded-bl-xs border border-white/10'
                                   }`}
                                 >
@@ -6511,11 +7149,11 @@ export default function CarPlayPage() {
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.96, y: 15 }}
                             transition={{ duration: 0.18, ease: 'easeOut' }}
-                            className="absolute inset-x-3 bottom-[64px] z-30 bg-[#090b11]/95 border border-purple-500/40 rounded-2xl p-3 shadow-2xl backdrop-blur-xl flex flex-col gap-2 max-h-[82%]"
+                            className="absolute inset-x-3 bottom-[64px] z-30 bg-[#090b11]/95 border border-primary/40 rounded-2xl p-3 shadow-2xl backdrop-blur-xl flex flex-col gap-2 max-h-[82%]"
                           >
                             <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
                               <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                                <div className="w-6 h-6 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center text-primary">
                                   <Zap size={14} />
                                 </div>
                                 <div>
@@ -6552,8 +7190,8 @@ export default function CarPlayPage() {
                                     data-item-focused={isFocused ? 'true' : undefined}
                                     className={`p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-all cursor-pointer select-none active:scale-98 ${
                                       isFocused
-                                        ? 'bg-purple-600/40 border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)] scale-[1.01]'
-                                        : 'bg-black/50 border-white/10 hover:border-purple-400/50 hover:bg-white/[0.08]'
+                                        ? 'bg-primary/40 border-primary ring-2 ring-primary shadow-[0_0_15px_var(--primary-glow)] scale-[1.01]'
+                                        : 'bg-black/50 border-white/10 hover:border-primary/50 hover:bg-white/[0.08]'
                                     }`}
                                   >
                                     <div className="flex items-center gap-2 min-w-0">
@@ -6567,7 +7205,7 @@ export default function CarPlayPage() {
                                         </span>
                                       </div>
                                     </div>
-                                    <Send size={12} className="text-purple-400 shrink-0 opacity-70" />
+                                    <Send size={12} className="text-primary shrink-0 opacity-70" />
                                   </button>
                                 );
                               })}
@@ -6595,10 +7233,10 @@ export default function CarPlayPage() {
                           data-item-focused={focusZone === 'content' && !showChatTemplates && contentIndex === chatChannels.length ? 'true' : undefined}
                           className={`h-11 px-3.5 rounded-xl border flex items-center gap-2 text-xs font-mono font-black transition-all cursor-pointer shadow-md shrink-0 active:scale-95 ${
                             showChatTemplates
-                              ? 'bg-amber-500/35 border-amber-400 text-white ring-2 ring-amber-400 scale-[1.02] shadow-[0_0_18px_rgba(245,158,11,0.5)]'
+                              ? 'bg-primary/35 border-primary text-white ring-2 ring-primary scale-[1.02] shadow-[0_0_18px_var(--primary-glow)]'
                               : focusZone === 'content' && contentIndex === chatChannels.length
-                              ? 'bg-amber-500/40 border-amber-400 text-white ring-2 ring-amber-400 scale-[1.03] shadow-[0_0_18px_rgba(245,158,11,0.5)]'
-                              : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                              ? 'bg-primary/40 border-primary text-white ring-2 ring-primary scale-[1.03] shadow-[0_0_18px_var(--primary-glow)]'
+                              : 'bg-primary/20 hover:bg-primary/30 border-primary/40 text-primary'
                           }`}
                         >
                           <Zap size={18} className="text-amber-400" />
@@ -6615,8 +7253,8 @@ export default function CarPlayPage() {
                           data-item-focused={focusZone === 'content' && contentIndex === chatChannels.length + 1 ? 'true' : undefined}
                           className={`flex-1 h-11 bg-black/60 border rounded-xl px-3.5 text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none transition-all shadow-inner font-mono cursor-pointer ${
                             focusZone === 'content' && contentIndex === chatChannels.length + 1
-                              ? 'border-purple-400 ring-2 ring-purple-400 bg-purple-950/25 shadow-[0_0_15px_rgba(168,85,247,0.35)]'
-                              : 'border-white/15 focus:border-purple-500'
+                              ? 'border-primary ring-2 ring-primary bg-primary/10 shadow-[0_0_15px_var(--primary-glow)]'
+                              : 'border-white/15 focus:border-primary'
                           }`}
                         />
 
@@ -6626,8 +7264,8 @@ export default function CarPlayPage() {
                           data-item-focused={focusZone === 'content' && contentIndex === chatChannels.length + 2 ? 'true' : undefined}
                           className={`h-11 px-4 rounded-xl font-mono font-black text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0 active:scale-95 ${
                             focusZone === 'content' && contentIndex === chatChannels.length + 2
-                              ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white ring-2 ring-purple-300 shadow-[0_0_20px_rgba(168,85,247,0.6)] scale-[1.03]'
-                              : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-[0_0_15px_rgba(147,51,234,0.35)]'
+                              ? 'bg-primary text-[var(--primary-foreground)] ring-2 ring-primary shadow-[0_0_20px_var(--primary-glow)] scale-[1.03]'
+                              : 'bg-primary text-[var(--primary-foreground)] hover:brightness-110 shadow-[0_0_15px_var(--primary-glow)]'
                           }`}
                         >
                           <Send size={15} />
@@ -6644,11 +7282,9 @@ export default function CarPlayPage() {
             {activeTab === 'events' && (
               <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
                 {/* Background Wallpaper matching App Raster */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-[inherit] z-0">
-                  <AnimatedBackground />
-                </div>
+                {renderCarPlayWallpaper()}
 
-                <div className="flex-1 flex flex-col p-4 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl overflow-hidden justify-between relative z-10 m-0.5">
+                <div className={`flex-1 flex flex-col p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Atmospheric Glow */}
                   <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -6656,17 +7292,21 @@ export default function CarPlayPage() {
                   {/* Header: Title, Count, Refresh */}
                   <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 shrink-0 relative z-10">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-xl shadow-teal-500/25 flex items-center justify-center text-white shrink-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
+                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-xl shadow-teal-500/25 text-white'
+                      }`}>
                         <Calendar size={24} />
                       </div>
                       <div>
-                        <h2 className="text-base font-black text-white tracking-tight flex items-center gap-2">
+                        <h2 className={`text-base font-black tracking-tight flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
                           <span>Events & Konvois</span>
                           <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md">
                             {carPlayEvents.length} Anstehend
                           </span>
                         </h2>
-                        <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest mt-0.5 font-mono">
+                        <p className={`text-[10px] font-extrabold uppercase tracking-widest mt-0.5 font-mono ${isLight ? 'text-primary' : 'text-amber-400'}`}>
                           OFFIZIELLE VTC-FAHRTEN & COMMUNITY-TOUREN
                         </p>
                       </div>

@@ -100,17 +100,85 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance));
     } catch (e) {
-      console.warn('Failed to persist appearance settings:', e);
+      try {
+        // If 6.5MB image exceeds localStorage quota (5MB limit in Chromium), save without image
+        const safeData = { ...appearance, customBgImage: '' };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(safeData));
+      } catch (e2) {}
     }
   }, [appearance]);
 
-  // Synchronize appearance changes across multiple windows (CarPlay, Overlay, Main)
+  // Synchronize appearance changes across Electron processes and web windows
   useEffect(() => {
+    try {
+      const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+      if (electron?.ipcRenderer) {
+        electron.ipcRenderer.invoke('get-app-appearance').then((data: any) => {
+          if (data && typeof data === 'object' && (data.customBgImage || data.accentColor)) {
+            setAppearance(prev => ({
+              ...prev,
+              ...data,
+              customBgImage: data.customBgImage || prev.customBgImage,
+            }));
+            applyThemeCssVariables({ ...DEFAULT_APPEARANCE, ...data });
+          }
+        }).catch(() => {});
+
+        const listener = (_: any, data: any) => {
+          if (data && typeof data === 'object') {
+            setAppearance(prev => {
+              const nextBg = data.customBgImage || prev.customBgImage;
+              if (
+                prev.customBgImage === nextBg &&
+                prev.accentColor === data.accentColor &&
+                prev.bgBlur === data.bgBlur &&
+                prev.bgDim === data.bgDim &&
+                prev.backgroundType === data.backgroundType &&
+                prev.glowColor === data.glowColor &&
+                prev.glowIntensity === data.glowIntensity
+              ) {
+                return prev;
+              }
+              return { ...prev, ...data, customBgImage: nextBg };
+            });
+            applyThemeCssVariables({ ...DEFAULT_APPEARANCE, ...data });
+          }
+        };
+        electron.ipcRenderer.on('app-appearance-updated', listener);
+        return () => {
+          electron.ipcRenderer.removeListener('app-appearance-updated', listener);
+        };
+      } else if (typeof window !== 'undefined') {
+        // Web mode fallback: fetch appearance from server state
+        const apiPort = window.location.port === '5173' ? '8383' : (window.location.port || '8383');
+        const apiBase = `${window.location.protocol}//${window.location.hostname}:${apiPort}`;
+        fetch(`${apiBase}/api/carplay/state`)
+          .then(res => res.json())
+          .then(data => {
+            if (data?.appearance && typeof data.appearance === 'object') {
+              setAppearance(prev => ({
+                ...prev,
+                ...data.appearance,
+                customBgImage: data.appearance.customBgImage || prev.customBgImage,
+              }));
+              applyThemeCssVariables({ ...DEFAULT_APPEARANCE, ...data.appearance });
+            }
+          })
+          .catch(() => {});
+      }
+    } catch (err) {}
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          setAppearance(prev => ({ ...prev, ...parsed }));
+          // Never erase an existing custom background in memory when localStorage has safeData without the heavy image
+          setAppearance(prev => {
+            const nextBg = (parsed.customBgImage && parsed.customBgImage.trim() !== '')
+              ? parsed.customBgImage
+              : prev.customBgImage;
+            return { ...prev, ...parsed, customBgImage: nextBg };
+          });
           applyThemeCssVariables({ ...DEFAULT_APPEARANCE, ...parsed });
         } catch (err) {}
       }
@@ -125,6 +193,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (updates.accentColor && next.syncGlowWithAccent) {
         next.glowColor = updates.accentColor;
       }
+      try {
+        const electron = typeof window !== 'undefined' && (window as any).require ? (window as any).require('electron') : null;
+        if (electron?.ipcRenderer) {
+          electron.ipcRenderer.send('save-app-appearance', next);
+        }
+      } catch (err) {}
       return next;
     });
   };

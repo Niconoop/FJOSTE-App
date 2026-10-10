@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell, net as electronNet, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, shell, net as electronNet, nativeImage, session, desktopCapturer } from 'electron'
 import { exec, execSync, spawn } from 'node:child_process'
 import net from 'node:net'
 import DiscordRPC from 'discord-rpc'
@@ -40,8 +40,8 @@ writeToLog('Globale Failsafes (uncaughtException, unhandledRejection) sind aktiv
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Optimize Electron RAM footprint
-// V8: heap ceiling set to 128MB with aggressive GC & optimize-for-size
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128 --optimize-for-size --expose-gc');
+// V8: heap ceiling set to 1024MB with expose-gc
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=1024 --expose-gc');
 // Coalesce same-origin windows into a single shared renderer process
 app.commandLine.appendSwitch('process-per-site');
 app.commandLine.appendSwitch('disable-site-isolation-trials');
@@ -116,14 +116,18 @@ if (isCarPlayMode && parentPid) {
 
 
 function safeSend(winInstance: BrowserWindow | null, channel: string, ...args: any[]) {
-  if (winInstance && !winInstance.isDestroyed() && winInstance.webContents && !winInstance.webContents.isDestroyed()) {
-    try {
-      if (!winInstance.webContents.isLoadingMainFrame()) {
-        winInstance.webContents.send(channel, ...args);
-      }
-    } catch (e: any) {
-      // Ignoriere Fehler wenn Frame gerade neu geladen oder geschlossen wurde
-    }
+  if (!winInstance || winInstance.isDestroyed() || (winInstance as any).__isClosing) return;
+  const wc = winInstance.webContents;
+  if (!wc || wc.isDestroyed()) return;
+
+  try {
+    if (wc.isCrashed() || wc.isLoadingMainFrame()) return;
+    const mf = wc.mainFrame;
+    if (!mf || (typeof (mf as any).isDestroyed === 'function' && (mf as any).isDestroyed())) return;
+    if (typeof mf.processId === 'number' && mf.processId <= 0) return;
+    wc.send(channel, ...args);
+  } catch (e: any) {
+    // Ignoriere Fehler wenn Frame gerade neu geladen oder geschlossen wurde
   }
 }
 
@@ -176,6 +180,13 @@ let overlaySettings: any = {
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'overlay-settings.json');
 const ACTIVE_JOB_PATH = path.join(app.getPath('userData'), 'active-job.json');
 const OFFLINE_QUEUE_PATH = path.join(app.getPath('userData'), 'offline-job-queue.json');
+const APPEARANCE_PATH = path.join(app.getPath('userData'), 'appearance.json');
+let savedAppearance: any = null;
+try {
+  if (fs.existsSync(APPEARANCE_PATH)) {
+    savedAppearance = JSON.parse(fs.readFileSync(APPEARANCE_PATH, 'utf8'));
+  }
+} catch (e) {}
 
 export interface ActiveJobSession {
   jobId: string;
@@ -946,6 +957,10 @@ function createWindow() {
 
   win.on('minimize', () => {
     setTimeout(trimAppMemory, 300);
+  });
+
+  win.on('close', () => {
+    if (win) (win as any).__isClosing = true;
   });
 
   win.on('closed', () => {
@@ -3081,12 +3096,16 @@ function createSingleOverlayWindow() {
       if (cachedRouteWaypoints && Array.isArray(cachedRouteWaypoints) && cachedRouteWaypoints.length > 0 && !telemetryData.routeWaypoints) {
         telemetryData.routeWaypoints = cachedRouteWaypoints;
       }
-      overlayWin?.webContents.send('telemetry-update', telemetryData);
+      safeSend(overlayWin, 'telemetry-update', telemetryData);
     }
   });
 
   overlayWin.once('ready-to-show', () => {
     updateOverlayWindowVisibility(telemetryData);
+  });
+
+  overlayWin.on('close', () => {
+    if (overlayWin) (overlayWin as any).__isClosing = true;
   });
 
   overlayWin.on('closed', () => {
@@ -3412,6 +3431,9 @@ function createCarPlayWindow() {
       safeSend(carplayWin, 'telemetry-update', telemetryData);
     }
     safeSend(carplayWin, 'overlay-settings-updated', overlaySettings);
+    if (savedAppearance) {
+      safeSend(carplayWin, 'app-appearance-updated', savedAppearance);
+    }
     carplayWin.showInactive();
     carplayWin.center();
   });
@@ -3419,6 +3441,10 @@ function createCarPlayWindow() {
   carplayWin.once('ready-to-show', () => {
     carplayWin.showInactive();
     carplayWin.center();
+  });
+
+  carplayWin.on('close', () => {
+    if (carplayWin) (carplayWin as any).__isClosing = true;
   });
 
   carplayWin.on('closed', () => {
@@ -3438,6 +3464,40 @@ function closeCarPlayWindow() {
   }
   carplayWin = null;
 }
+
+ipcMain.handle('get-app-appearance', () => {
+  return savedAppearance;
+});
+
+ipcMain.on('save-app-appearance', (event, data) => {
+  if (!data || typeof data !== 'object') return;
+  // Guard against redundant saves and infinite echo loops
+  if (
+    savedAppearance &&
+    savedAppearance.customBgImage === data.customBgImage &&
+    savedAppearance.accentColor === data.accentColor &&
+    savedAppearance.bgBlur === data.bgBlur &&
+    savedAppearance.bgDim === data.bgDim &&
+    savedAppearance.backgroundType === data.backgroundType &&
+    savedAppearance.glowColor === data.glowColor &&
+    savedAppearance.glowIntensity === data.glowIntensity
+  ) {
+    return;
+  }
+  savedAppearance = data;
+  try {
+    fs.writeFileSync(APPEARANCE_PATH, JSON.stringify(data));
+  } catch (e) {}
+
+  // Broadcast only to other windows (never echo back to the sender window)
+  if (win && !win.isDestroyed() && win.webContents !== event.sender) {
+    safeSend(win, 'app-appearance-updated', data);
+  }
+  if (carplayWin && !carplayWin.isDestroyed() && carplayWin.webContents !== event.sender) {
+    safeSend(carplayWin, 'app-appearance-updated', data);
+  }
+  broadcastCarPlaySse('app-appearance-updated', data);
+});
 
 ipcMain.on('carplay-media-control', (_, action) => {
   if (action === 'play-pause') {
@@ -3555,6 +3615,9 @@ function getFriendlyAppName(sourceAppId: string, fallback: string): string {
 }
 
 const smtcScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 $source = @'
 using System;
 using System.IO;
@@ -3715,7 +3778,7 @@ let lastSmtcData: any = null;
 function startSmtcBridge() {
   if (smtcProcess) return;
 
-  try { fs.writeFileSync(smtcTempPath, smtcScript, 'utf8'); } catch (e) { }
+  try { fs.writeFileSync(smtcTempPath, '\ufeff' + smtcScript, 'utf8'); } catch (e) { }
 
   smtcProcess = spawn('powershell', [
     '-NoProfile',
@@ -4239,6 +4302,7 @@ function handleCarPlayHttpRequest(req: http.IncomingMessage, res: http.ServerRes
       settings: overlaySettings,
       telemetry: telemetryData,
       media: lastSmtcData,
+      appearance: savedAppearance,
     })}\n\n`);
     carplaySseClients.add(res);
     req.on('close', () => {
@@ -4254,6 +4318,7 @@ function handleCarPlayHttpRequest(req: http.IncomingMessage, res: http.ServerRes
       settings: overlaySettings,
       telemetry: telemetryData,
       media: lastSmtcData,
+      appearance: savedAppearance,
     }));
     return;
   }
@@ -5367,6 +5432,18 @@ ipcMain.on('install-app-update', async (event) => {
 });
 
 app.whenReady().then(async () => {
+  try {
+    session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+      desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+        if (sources.length > 0) {
+          callback({ video: sources[0], audio: 'loopback' });
+        } else {
+          callback({});
+        }
+      }).catch(() => callback({}));
+    });
+  } catch (e) {}
+
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.openpipeclub.app.main');
   }
