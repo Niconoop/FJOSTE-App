@@ -43,6 +43,17 @@ html, body, #root, .carplay-root {
   background: rgba(245, 158, 11, 0.9);
 }
 
+/* CarPlay Hover Glow & Focus Rings Safeguards — prevents clipping by parent containers or siblings */
+.carplay-root [class*="ring-"] {
+  --tw-ring-inset: inset !important;
+}
+.carplay-root .hover-glow:hover,
+.carplay-root [class*="hover:border-"]:hover,
+.carplay-root [class*="hover:shadow-"]:hover {
+  z-index: 20 !important;
+  position: relative;
+}
+
 /* Custom toast styling for job notifications & app popups */
 .custom-toast,
 [data-sonner-toast] {

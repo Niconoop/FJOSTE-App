@@ -4,9 +4,11 @@ import { Toaster } from 'sonner'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider, DEFAULT_APPEARANCE, applyThemeCssVariables } from './context/ThemeContext'
 import './index.css'
-import App from './App.tsx'
-import OverlayPage from './pages/Overlay'
-import CarPlayPage from './pages/CarPlay'
+
+// Route-level code splitting: Isolate massive CarPlay & App bundles per Electron window
+const App = React.lazy(() => import('./App.tsx'))
+const OverlayPage = React.lazy(() => import('./pages/Overlay'))
+const CarPlayPage = React.lazy(() => import('./pages/CarPlay'))
 
 // Apply saved theme immediately to documentElement to avoid any color flicker
 try {
@@ -102,7 +104,9 @@ function MainApp() {
       <AuthProvider>
         <ThemeProvider>
           <ErrorBoundary>
-            <CarPlayPage />
+            <React.Suspense fallback={<div className="w-screen h-screen bg-black" />}>
+              <CarPlayPage />
+            </React.Suspense>
           </ErrorBoundary>
         </ThemeProvider>
       </AuthProvider>
@@ -112,7 +116,9 @@ function MainApp() {
   if (route === 'overlay') {
     return (
       <ThemeProvider>
-        <OverlayPage />
+        <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
+          <OverlayPage />
+        </React.Suspense>
       </ThemeProvider>
     );
   }
@@ -120,7 +126,9 @@ function MainApp() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <App />
+        <React.Suspense fallback={<div className="w-screen h-screen bg-[#07090e]" />}>
+          <App />
+        </React.Suspense>
         <Toaster
           position="top-center"
           toastOptions={{

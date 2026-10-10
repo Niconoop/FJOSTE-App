@@ -1,7 +1,7 @@
 {
   "name": "open-pipe-club-app",
   "private": true,
-  "version": "1.8.8",
+  "version": "1.8.9",
   "description": "Open Pipe Club App",
   "author": "Open Pipe Club",
   "type": "module",
@@ -44,7 +44,18 @@
       "shortcutName": "Open Pipe Club App",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "${productName} Setup.${ext}"
+      "artifactName": "${productName} Setup.${ext}",
+      "installerIcon": "public/logo.ico",
+      "uninstallerIcon": "public/logo.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerHeaderIcon": "public/logo.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerLanguages": [
+        "de_DE"
+      ],
+      "language": "1031",
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "${productName}.${ext}"
