@@ -115,6 +115,207 @@ function closestPointOnSegment(
   return [projX, projY, distSq];
 }
 
+function createHqGroundLayers(sourceId: string, prefix: string) {
+  return [
+    {
+      id: `${prefix}-areas`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea'], ['!=', ['get', 'hidden'], true]],
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads-casing`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel' },
+      paint: {
+        'line-color': '#1e293b',
+        'line-gap-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          8, 1.5, 11, 2.5, 14, 4.0, 16, 6.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs-base`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-prefabs`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      paint: {
+        'fill-color': '#475569',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-roads`,
+      type: 'line',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'LineString'],
+        ['==', ['get', 'type'], 'road'],
+        ['!=', ['get', 'hidden'], true],
+        ['!=', ['get', 'roadType'], 'train'],
+        ['!=', ['get', 'roadType'], 'tram'],
+      ],
+      layout: { 'line-cap': 'round', 'line-join': 'bevel' },
+      paint: {
+        'line-color': [
+          'match', ['get', 'roadType'],
+          'freeway', '#3b82f6',
+          'divided', '#cbd5e1',
+          'local', '#475569',
+          '#475569',
+        ],
+        'line-width': [
+          'interpolate', ['exponential', 1.4], ['zoom'],
+          3, 1.5, 7, 5.0, 10, 16.0, 12, 32.0, 14, 52.0, 16, 220.0,
+        ],
+        'line-opacity': 0.95,
+      },
+    },
+    {
+      id: `${prefix}-footprints`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
+      },
+    },
+    {
+      id: `${prefix}-extrusions`,
+      type: 'fill-extrusion',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      paint: {
+        'fill-extrusion-color': '#2b3648',
+        'fill-extrusion-height': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          9,
+          ['*', 10, ['get', 'height']],
+          13,
+          ['*', 20, ['get', 'height']],
+        ],
+        'fill-extrusion-opacity': 0.8,
+        'fill-extrusion-vertical-gradient': true,
+      },
+    },
+  ];
+}
+
+function createHqSymbolLayers(sourceId: string, prefix: string) {
+  return [
+    {
+      id: `${prefix}-traffic`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2',
+      minzoom: 10,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['==', ['get', 'type'], 'traffic'],
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': false,
+        'icon-ignore-placement': false,
+        'symbol-sort-key': [
+          'match', ['get', 'sprite'],
+          'railcrossing', 1,
+          'roadwork', 2,
+          'trafficlight', 3,
+          10
+        ],
+        'icon-padding': 2,
+        'icon-size': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 0.55,
+          12, 0.85,
+          14, 1.2,
+        ],
+      },
+    },
+    {
+      id: `${prefix}-pois`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8,
+      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi'], ['!=', ['get', 'poiType'], 'company']],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.65, 11, 1.0, 14, 1.4],
+      },
+    },
+    {
+      id: `${prefix}-companies`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['any', ['==', ['get', 'type'], 'company'], ['==', ['get', 'poiType'], 'company']]
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.7, 11, 1.1, 14, 1.5],
+      },
+    },
+  ];
+}
+
+function createHqLayers(sourceId: string, prefix: string) {
+  return [
+    ...createHqGroundLayers(sourceId, prefix),
+    ...createHqSymbolLayers(sourceId, prefix),
+  ];
+}
+
 function createRoutePlannerStyle(): maplibregl.StyleSpecification {
   const tileRoot = `${API_URL}/map/proxy`;
 
@@ -144,6 +345,16 @@ function createRoutePlannerStyle(): maplibregl.StyleSpecification {
       footprints: {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-footprints.pmtiles`,
+      },
+      'truckline-hq': {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-truckline-hq.pmtiles`,
+        maxzoom: 15,
+      },
+      'truckersmp-hq': {
+        type: 'vector',
+        url: `pmtiles://${tileRoot}/ets2-truckersmp-hq.pmtiles`,
+        maxzoom: 15,
       },
     },
     terrain: {
@@ -234,6 +445,9 @@ function createRoutePlannerStyle(): maplibregl.StyleSpecification {
           'line-opacity': 0.6,
         },
       },
+      // HQ Ground Layers (Areas, Prefabs, 3D Buildings & Roads)
+      ...createHqGroundLayers('truckline-hq', 'tl'),
+      ...createHqGroundLayers('truckersmp-hq', 'tmp'),
       {
         id: 'ets2-cities-points',
         type: 'circle',
@@ -283,6 +497,9 @@ function createRoutePlannerStyle(): maplibregl.StyleSpecification {
           'text-halo-width': 2.2,
         },
       },
+      // HQ Symbol Layers (Traffic, POIs, Companies)
+      ...createHqSymbolLayers('truckline-hq', 'tl'),
+      ...createHqSymbolLayers('truckersmp-hq', 'tmp'),
     ],
   };
 }

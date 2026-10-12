@@ -7,7 +7,7 @@ interface AnimatedBackgroundProps {
   ignoreCustomImage?: boolean;
 }
 
-export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
+export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = React.memo(({
   activePage,
   isAbsolute = false,
   ignoreCustomImage = false,
@@ -115,4 +115,4 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
       />
     </div>
   );
-};
+});

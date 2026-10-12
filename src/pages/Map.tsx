@@ -38,7 +38,20 @@ function addPmTilesProtocol() {
   pmTilesProtocolAdded = true;
 }
 
-function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visibility: 'visible' | 'none' = 'visible') {
+const HQ_LAYER_SUFFIXES = [
+  'areas',
+  'prefabs-base',
+  'prefabs',
+  'footprints',
+  'extrusions',
+  'roads-casing',
+  'roads',
+  'traffic',
+  'pois',
+  'companies',
+];
+
+function createHqGroundLayers(sourceId: string, prefix: string, isLight: boolean, visibility: 'visible' | 'none' = 'visible') {
   return [
     {
       id: `${prefix}-areas`,
@@ -47,18 +60,6 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
       'source-layer': 'ets2',
       filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea'], ['!=', ['get', 'hidden'], true]],
       layout: { 'fill-sort-key': ['get', 'zIndex'], visibility },
-      paint: {
-        'fill-color': isLight ? '#cbd5e1' : '#1e293b',
-        'fill-opacity': 0.95,
-      },
-    },
-    {
-      id: `${prefix}-prefabs-base`,
-      type: 'fill',
-      source: sourceId,
-      'source-layer': 'ets2',
-      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
-      layout: { visibility },
       paint: {
         'fill-color': isLight ? '#cbd5e1' : '#1e293b',
         'fill-opacity': 0.95,
@@ -76,7 +77,6 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
         ['!=', ['get', 'hidden'], true],
         ['!=', ['get', 'roadType'], 'train'],
         ['!=', ['get', 'roadType'], 'tram'],
-        ['!=', ['get', 'roadType'], 'unknown'],
       ],
       layout: { 'line-cap': 'round', 'line-join': 'bevel', visibility },
       paint: {
@@ -93,6 +93,18 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
       },
     },
     {
+      id: `${prefix}-prefabs-base`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { visibility },
+      paint: {
+        'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
       id: `${prefix}-prefabs`,
       type: 'fill',
       source: sourceId,
@@ -100,7 +112,7 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
       filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
       layout: { visibility },
       paint: {
-        'fill-color': isLight ? '#8e9aa8' : '#475569',
+        'fill-color': isLight ? '#94a3b8' : '#475569',
         'fill-opacity': 0.95,
       },
     },
@@ -116,7 +128,6 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
         ['!=', ['get', 'hidden'], true],
         ['!=', ['get', 'roadType'], 'train'],
         ['!=', ['get', 'roadType'], 'tram'],
-        ['!=', ['get', 'roadType'], 'unknown'],
       ],
       layout: { 'line-cap': 'round', 'line-join': 'bevel', visibility },
       paint: {
@@ -143,12 +154,85 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
       },
     },
     {
-      id: `${prefix}-pois`,
+      id: `${prefix}-footprints`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      layout: { visibility },
+      paint: {
+        'fill-color': isLight ? '#cbd5e1' : '#1e293b',
+        'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
+      },
+    },
+    {
+      id: `${prefix}-extrusions`,
+      type: 'fill-extrusion',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      layout: { visibility },
+      paint: {
+        'fill-extrusion-color': isLight ? '#94a3b8' : '#2b3648',
+        'fill-extrusion-height': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          9,
+          ['*', 10, ['get', 'height']],
+          13,
+          ['*', 20, ['get', 'height']],
+        ],
+        'fill-extrusion-opacity': isLight ? 0.45 : 0.8,
+        'fill-extrusion-vertical-gradient': true,
+      },
+    },
+  ];
+}
+
+function createHqSymbolLayers(sourceId: string, prefix: string, isLight: boolean, visibility: 'visible' | 'none' = 'visible') {
+  return [
+    {
+      id: `${prefix}-traffic`,
       type: 'symbol',
       source: sourceId,
       'source-layer': 'ets2',
+      minzoom: 10,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['==', ['get', 'type'], 'traffic'],
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': false,
+        'icon-ignore-placement': false,
+        'symbol-sort-key': [
+          'match', ['get', 'sprite'],
+          'railcrossing', 1,
+          'roadwork', 2,
+          'trafficlight', 3,
+          10
+        ],
+        'icon-padding': 2,
+        'icon-size': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 0.55,
+          12, 0.85,
+          14, 1.2,
+        ],
+        visibility,
+      },
+    },
+    {
+      id: `${prefix}-pois`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
       minzoom: 8,
-      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi']],
+      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi'], ['!=', ['get', 'poiType'], 'company']],
       layout: {
         'icon-image': '{sprite}',
         'icon-allow-overlap': true,
@@ -156,6 +240,31 @@ function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visi
         visibility,
       },
     },
+    {
+      id: `${prefix}-companies`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['any', ['==', ['get', 'type'], 'company'], ['==', ['get', 'poiType'], 'company']]
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.7, 11, 1.1, 14, 1.5],
+        visibility,
+      },
+    },
+  ];
+}
+
+function createHqLayers(sourceId: string, prefix: string, isLight: boolean, visibility: 'visible' | 'none' = 'visible') {
+  return [
+    ...createHqGroundLayers(sourceId, prefix, isLight, visibility),
+    ...createHqSymbolLayers(sourceId, prefix, isLight, visibility),
   ];
 }
 
@@ -193,10 +302,12 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
       'truckline-hq': {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-truckline-hq.pmtiles`,
+        maxzoom: 16,
       },
       'truckersmp-hq': {
         type: 'vector',
         url: `pmtiles://${tileRoot}/ets2-truckersmp-hq.pmtiles`,
+        maxzoom: 16,
       },
     },
 
@@ -477,6 +588,10 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
         },
       },
 
+      // HQ Ground Layers (Areas, Prefabs, 3D Buildings & Roads - rendered BEFORE POIs so roads never cover icons)
+      ...createHqGroundLayers('truckline-hq', 'tl', isLight, 'visible'),
+      ...createHqGroundLayers('truckersmp-hq', 'tmp', isLight, 'visible'),
+
       // POI Icons (gas stations, services, dealers, recruitment, parking, garages, toll booths, viewpoints)
       {
         id: 'ets2-pois',
@@ -525,6 +640,11 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
           ]
         }
       },
+
+      // HQ Symbol Layers (Traffic, POIs, Companies - rendered alongside base map POIs/companies)
+      ...createHqSymbolLayers('truckline-hq', 'tl', isLight, 'visible'),
+      ...createHqSymbolLayers('truckersmp-hq', 'tmp', isLight, 'visible'),
+
       // Traffic Features (Ampeln / Traffic Lights, Baustellen, Bahnübergänge)
       {
         id: 'ets2-traffic',
@@ -578,8 +698,6 @@ function createEts2Style(isLight: boolean): maplibregl.StyleSpecification {
           'text-halo-width': 1.5,
         },
       },
-      ...createHqLayers('truckline-hq', 'tl', isLight, 'visible'),
-      ...createHqLayers('truckersmp-hq', 'tmp', isLight, 'visible'),
     ],
   } as any;
 }
@@ -773,6 +891,115 @@ const createRailcrossingImage = (map: any) => {
     const imgData = ctx.getImageData(0, 0, size, size);
     if (imgData) {
       map.addImage('railcrossing', imgData, { pixelRatio: s });
+    }
+  }
+};
+
+const createTrafficlightImage = (map: any) => {
+  if (map.hasImage('trafficlight')) return;
+
+  const s = 2;
+  const w = 24 * s;
+  const h = 48 * s;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 4 * s;
+
+    // Dark housing background with rounded edges
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.roundRect(3 * s, 3 * s, 18 * s, 42 * s, 9 * s);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 * s;
+    ctx.stroke();
+
+    const r = 4 * s;
+    const cx = 12 * s;
+
+    // Red light (top)
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(cx, 11 * s, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Yellow / Amber light (middle)
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(cx, 24 * s, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Green light (bottom)
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.arc(cx, 37 * s, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    if (imgData) {
+      map.addImage('trafficlight', imgData, { pixelRatio: s });
+    }
+  }
+};
+
+const createRoadworkImage = (map: any) => {
+  if (map.hasImage('roadwork')) return;
+
+  const s = 2;
+  const size = 40 * s;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, size, size);
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 4 * s;
+
+    const h = 32 * s;
+    const topY = 4 * s;
+    const bottomY = topY + h;
+    const cx = size / 2;
+    const halfBase = 18 * s;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, topY);
+    ctx.lineTo(cx + halfBase, bottomY);
+    ctx.lineTo(cx - halfBase, bottomY);
+    ctx.closePath();
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 3.5 * s;
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.2 * s;
+    ctx.stroke();
+
+    ctx.fillStyle = '#18181b';
+    ctx.beginPath();
+    ctx.roundRect(cx - (1.8 * s), 13 * s, 3.6 * s, 11 * s, 1.5 * s);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, 28 * s, 2.2 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    const imgData = ctx.getImageData(0, 0, size, size);
+    if (imgData) {
+      map.addImage('roadwork', imgData, { pixelRatio: s });
     }
   }
 };
@@ -1402,7 +1629,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
       center: [12, 51],
       zoom: 4.5,
       minZoom: 4.5,
-      maxZoom: 14,
+      maxZoom: 16,
       pitch: is3DMode ? 58 : 0,
       maxPitch: 80,
       dragRotate: true,
@@ -1417,6 +1644,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     map.on('load', () => {
       try {
         createRailcrossingImage(map);
+        createTrafficlightImage(map);
+        createRoadworkImage(map);
         setupSpeedcamsLayer(map);
         map.setTerrain({ source: 'terrain', exaggeration: 2.2 });
       } catch (err) {
@@ -1425,7 +1654,7 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
     });
 
     map.setMinZoom(4.5);
-    map.setMaxZoom(14);
+    map.setMaxZoom(16);
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), "bottom-left");
 
     const handleZoom = () => setMapZoom(map.getZoom());
@@ -1450,6 +1679,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
         mapRef.current.once('style.load', () => {
           try {
             createRailcrossingImage(mapRef.current);
+            createTrafficlightImage(mapRef.current);
+            createRoadworkImage(mapRef.current);
             setupSpeedcamsLayer(mapRef.current);
             if (showTerrain3D) {
               mapRef.current?.setTerrain({ source: 'terrain', exaggeration: 2.2 });
@@ -2012,7 +2243,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                           const next = !showTrucklineHq;
                           setShowTrucklineHq(next);
                           const vis = next ? 'visible' : 'none';
-                          ['tl-areas', 'tl-prefabs-base', 'tl-roads-casing', 'tl-prefabs', 'tl-roads', 'tl-pois'].forEach(id => {
+                          HQ_LAYER_SUFFIXES.forEach(suffix => {
+                            const id = `tl-${suffix}`;
                             if (mapRef.current?.getLayer(id)) mapRef.current.setLayoutProperty(id, 'visibility', vis);
                           });
                         }}
@@ -2044,7 +2276,8 @@ const Map = ({ onViewProfile, initialSelectedId, onClearInitialId, theme }: { on
                           const next = !showTruckersmpHq;
                           setShowTruckersmpHq(next);
                           const vis = next ? 'visible' : 'none';
-                          ['tmp-areas', 'tmp-prefabs-base', 'tmp-roads-casing', 'tmp-prefabs', 'tmp-roads', 'tmp-pois'].forEach(id => {
+                          HQ_LAYER_SUFFIXES.forEach(suffix => {
+                            const id = `tmp-${suffix}`;
                             if (mapRef.current?.getLayer(id)) mapRef.current.setLayoutProperty(id, 'visibility', vis);
                           });
                         }}

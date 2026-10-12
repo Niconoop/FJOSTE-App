@@ -2,6 +2,509 @@
  
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
  
+## [1.7.121] - 2026-10-12
+
+### 📱 CarPlay: Überlappende HQ-Textbeschriftungen auf der Navigationskarte entfernt
+  - **Entfernung überlappender POI-Texte ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - Der Symbol-Text-Layer `hq-pois-labels` wurde vollständig aus dem CarPlay-Kartenwidget entfernt.
+    - Zuvor wurden die Labels von Truckline HQ („Truckline HQ \n Dillenburg (B255/A45)“), Werkstatt („Truckline Werkstatt \n Service“) und Tankstelle („Truckline Tankstelle \n Fuel“) an nah beieinander liegenden Koordinaten mit `text-allow-overlap: true` gerendert, was zu einem unleserlichen Textblock unter dem Firmen-Icon führte.
+    - Die Standorte und POIs werden nun wie auf der Hauptkarte und im Original-ETS2-Stil als saubere, moderne Icons ohne störende Text-Überlappungen dargestellt.
+
+## [1.7.120] - 2026-10-11
+
+### 🛠️ Werkstatt- & Garagensymbole hinzugefügt & Straßenführung auf Firmengeländen korrigiert
+  - **Ergänzung aller wichtigen POI-Symbole ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts), [Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Werkstatt / Service (`service_ico`)**:
+      - Truckline HQ (Dillenburg): Offizielle Werkstatt am Truckline-Areal (`[-6249.4, -1396.3]` / WGS84 `[8.53035, 50.79962]`).
+      - TruckersMP HQ (Wrocław): Werkstätten am TMP-Depot (`[20967.6, -865.9]`) und in Wrocław-Süd (`[23471.3, -1876.7]`).
+    - **Große Garage (`garage_large_ico`)**:
+      - Truckline HQ: Hauptdepot / Firmenzentrale in Dillenburg (`[-5911.0, -1160.0]`).
+      - TruckersMP HQ: Hauptgarage bei Wrocław (`[23682.4, -1678.7]`).
+    - **Weitere Einrichtungen**: Tankstellen (`gas_ico`), LKW-Händler (`dealer_ico`), Rastplätze (`parking_ico`) und Arbeitsagenturen (`recruitment_ico`) wurden aus den Prefab-Spawnpoints extrahiert und in den Layer `ets2_hq` integriert.
+    - **Frontend-Anbindung**: Die Symbol-Ebene `${prefix}-pois` liest nun direkt den Layer `ets2_hq` aus, sodass alle Einrichtungen zuverlässig auf der Karte gerendert werden.
+  - **Behebung der Straßenverläufe über Firmengelände & durch 3D-Baukörper**:
+    - **Ursachenanalyse**: Bisher wurden die Straßen-Ebenen (`roads-casing` und `roads`) *nach* den Firmengeländen (`prefabs`), Footprints und 3D-Extrusionen gezeichnet. Dadurch schnitten dicke 2D-Straßenlinien samt dunklem Rahmen sichtbar quer über die Asphaltflächen der Firmengrundstücke und mitten durch dreidimensionale Gebäude hindurch.
+    - **Karten-Ebenen-Neuordnung**: Die Render-Reihenfolge in `createHqGroundLayers` wurde korrigiert:
+      1. `areas` (Grundflächen / Terrain)
+      2. `roads-casing` (Straßenränder)
+      3. `prefabs-base` (Hof- & Kreuzungsuntergrund)
+      4. `prefabs` (Asphaltflächen der Firmengelände – verdeckt Straßenränder im Hof)
+      5. `roads` (Straßenbänder)
+      6. `footprints` (Gebäudegrundrisse)
+      7. `extrusions` (3D-Baukörper stehen sauber oben auf, ohne von Straßen durchschnitten zu werden)
+  - **PMTiles neu generiert**:
+    - `ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles` und `ets2-hq.pmtiles` mit allen Werkstatt-, Garagen- und Firmen-POIs erzeugt, lokal in `uploads/map_cache/` synchronisiert und zu Cloudflare R2 hochgeladen.
+
+## [1.7.119] - 2026-10-11
+
+### 🏡 Präzise 3D-Extrusion echter Häuser & Ausschluss von Verkehrspylonen
+  - **Wiederherstellung aller realen Wohnhäuser & Baukörper ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts))**:
+    - **Differenzierung zwischen Häusern und Pylonen**: Früher wurden Baustellen-Pylonen/Leitkegel (310x `de_3j002`) über willkürliche Dummy-Dimensionen als riesige Klötze extrudiert. Beim ersten Bereinigungsversuch wurden fälschlicherweise auch echte Wohnhäuser und Cottages entfernt.
+    - **Reale Häuser & Gebäude wieder da**: Alle echten Wohngebäude (`cottage_01_de`, `cottage_02_de`, `village_close_01` bis `06_de`, `flats_close`), Büros, Hotels, Werkstätten und Lagerhallen werden nun sauber dreidimensional dargestellt – mit ihren echten Mesh-Bounding-Boxen und Höhen aus ETS2:
+      - **Truckline HQ-Areal**: 147 echte Häuser und Hallen im Umkreis (Dillenburg und Umgebung).
+      - **TruckersMP HQ-Areal**: 279 echte Häuser, Stadtgebäude und Hallen.
+    - **Strikter Ausschluss von Nicht-Gebäuden**: Verkehrspylonen, Leitkegel (`de_3j002`), Poller, Laternen, Schilderbrücken, Zäune, Leitplanken, Klärbecken, Waschrampen und Bushaltestellen werden zuverlässig ignoriert.
+  - **PMTiles neu erzeugt & synchronisiert**:
+    - `ets2-truckline-hq.pmtiles` (208 Kacheln), `ets2-truckersmp-hq.pmtiles` (245 Kacheln) und `ets2-hq.pmtiles` (452 Kacheln) neu erstellt und auf Cloudflare R2 aktualisiert.
+
+## [1.7.118] - 2026-10-11
+
+### 🏢 Bereinigung von Nicht-Gebäuden, Firmenlogo-Schriftzügen & Entfernung von Truckline Logistik
+  - **Firmenlogos ohne Textbeschriftung ([Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Namens-Beschriftungen (`text-field`, Halo-Paint) unter den Firmenabzeichen im Layer `${prefix}-companies` wurden vollständig entfernt.
+    - Die Firmenlogos werden nun wie im Original-ETS2-Kartenstil als reine, elegante Icons dargestellt.
+  - **Entfernung von Truckline Logistik ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts))**:
+    - Der POI-Eintrag `Truckline Logistik` wurde restlos aus den Vektorkacheln und der Kartengenerierung entfernt.
+    - Verbleibende Firmen im Truckline HQ-Gebiet: `Sanbuilders Baustelle`, `EuroAcres`, `IKA Bohag`, `Sanbuilders Halle` und `Sanbuilders Zementwerk`.
+  - **Strikte Filterung auf 100% genuine Baukörper ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts))**:
+    - **Ausschluss von Klärbecken & Zäunen**: Klärwerks-Rundbecken (`dlc_it_102`), Zaun-/Leitelemente (`blkw_0v012`, `blkw_2900h`) und Schilderbrücken/Masten (`mod_ger_3`, `mod_ger_4`, `mod_ger_5`) wurden eliminiert.
+    - **Ausschluss von ländlichen Fremdobjekten**: Cottages (`cottage_01/02_de`), Scheunen, Waldhütten, WCs und Parkplatzkioske wurden aus der 3D-Extrusion verbannt.
+    - **Reine Industrie- & Logistikbauten**: Nur noch echte Verwaltungsgebäude, Lagerhallen, Torhäuser und Werkstätten mit realen PMD-Dimensionen werden dargestellt (14 Gebäude im Truckline-Areal, 116 im TruckersMP-Areal).
+  - **PMTiles neu erzeugt & synchronisiert**:
+    - `ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles` und `ets2-hq.pmtiles` wurden neu generiert, in `uploads/map_cache/` hinterlegt und auf Cloudflare R2 aktualisiert.
+
+## [1.7.117] - 2026-10-11
+
+### 🏢 Bereinigung von Fake-Gebäuden & Vollständige Firmen-Erfassung in den HQs
+  - **Filterung echter Gebäude ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts))**:
+    - **Ausschluss von Nicht-Gebäuden**: Bisher wurden Pfosten, Poller (176x `de_3j002`), Lärmschutzwände (`wa_50`), Bushaltestellen, Waschrampen, Treppen, Schornsteine und Dach-Klimaanlagen fälschlicherweise als 3D-Baukörper extrudiert. Diese wurden vollständig herausgefiltert.
+    - **Fokus auf reale Baukörper**: Nur noch echte Gebäude (Verwaltungsgebäude, Logistikhallen, Lager, Werkstätten, Hotels und Firmengebäude) im Umkreis der HQ- und Firmenstandorte werden dreidimensional dargestellt.
+  - **Vollständige Firmen-Markierung**:
+    - **Truckline HQ (Dillenburg & Umgebung)**: Alle 6 Firmen sind nun mit Logo und beschriftetem Text-Halo auf der Karte erfasst:
+      - `Truckline Logistik` (Hauptdepot)
+      - `Sanbuilders Baustelle` (`sanbuild_bas`)
+      - `EuroAcres` (`euroacres`, Dillenburg)
+      - `IKA Bohag` (`ika_bohag`, Dillenburg)
+      - `Sanbuilders Halle` (`sanbuild_hal`)
+      - `Sanbuilders Zementwerk` (`sanbuild_cem`)
+    - **TruckersMP HQ (Wrocław)**: Alle 9 Firmen sind nun auf der Karte markiert (`Subse`, `ACC`, `Cargotras`, `Kaarfor`, `Trameri`, `Stokes`, `Steinbruch`, `EuroAcres`, `EuroGoodies`).
+  - **PMTiles aktualisiert & hochgeladen**:
+    - `ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles` und `ets2-hq.pmtiles` wurden neu erstellt, im Cache hinterlegt und auf Cloudflare R2 synchronisiert.
+
+## [1.7.116] - 2026-10-11
+
+### 🏗️ PMTiles Weg 1: 3D-Gebäude & Firmen per Layer-Merge ohne Berührung des Straßenlayouts hinzugefügt
+  - **100% geschütztes Straßenlayout (Layer-Trennung in MVT)**:
+    - **Reines Add-On-Verfahren ([merge_hq_additions.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/merge_hq_additions.ts))**: Die funktionierenden Originalkacheln aus dem 12-Uhr-Stand (`Blob 4` und `Blob 5`) mit allen Straßen, Prefabs und Autobahnanbindungen bleiben bit-für-bit unberührt im Layer `ets2`. Kein Straßen-Generator greift mehr darauf zu.
+    - **Zusätzlicher HQ-Layer `ets2_hq`**: Die 3D-Gebäude-Footprints (488 für Truckline, 291 für TruckersMP) und die Firmen (`Truckline Logistik`, `Sanbuilders Baustelle`, `Subse`, `ACC`, `Cargotras`) wurden in einen eigenständigen Vektorkachel-Layer `ets2_hq` gepackt und per Protobuf-Merge verlustfrei in die Kacheln integriert.
+  - **MapLibre-Layer-Konfiguration ([Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Straßen (`roads`, `roads-casing`, `prefabs`, `areas`) verweisen weiterhin auf `source-layer: 'ets2'`.
+    - Gebäude (`footprints`, `extrusions`) und Firmen (`companies`) verweisen nun sauber auf `source-layer: 'ets2_hq'`.
+    - Firmen-Icons werden mit hochauflösenden Badges (`truckline_logistik` etc.) und kontraststarken Beschriftungen mit Halo dargestellt.
+  - **Kompilierung & Remote-Synchronisation ([build_separate_pmtiles.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/build_separate_pmtiles.py), [upload_pmtiles_to_r2.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/upload_pmtiles_to_r2.py))**:
+    - Alle drei PMTiles (`ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles`, `ets2-hq.pmtiles`) wurden mit Dual-Layer-Definition (`ets2` + `ets2_hq`) gebaut, im lokalen Cache `uploads/map_cache/` hinterlegt und vollständig auf Cloudflare R2 hochgeladen.
+
+## [1.7.115] - 2026-10-11
+
+### ⏪ Generator-Skripte & PMTiles: Vollständiger Rollback auf den Stand von 12:00 Uhr
+  - **Generator-Skripte ([generate_separate_hqs.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_separate_hqs.ts), [build_separate_pmtiles.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/build_separate_pmtiles.py))**:
+    - `generate_separate_hqs.ts` exakt auf die Baseline-Version von heute 12:00 Uhr zurückgesetzt (reine `.base`-Sektorenverarbeitung, Original-Kachelindizierung mit Zoom 4–13).
+    - `build_separate_pmtiles.py` auf den Stand von 12:00 Uhr zurückgesetzt (Schreiben von `ets2-truckline-hq.pmtiles` und `ets2-truckersmp-hq.pmtiles` mit den ursprünglichen Bounding-Boxes).
+  - **PMTiles-Archive**:
+    - `ets2-truckline-hq.pmtiles` (126.646 Bytes, 177 Kacheln) aus dem ursprünglichen Blob 4 wiederhergestellt.
+    - `ets2-truckersmp-hq.pmtiles` (113.688 Bytes, 166 Kacheln) aus Blob 5 wiederhergestellt.
+    - `ets2-hq.pmtiles` (671.986 Bytes) aus `hq_tiles_dump.json` wiederhergestellt.
+    - Alle Archive in `maps-main/out/` und `uploads/map_cache/` aktualisiert und vollständig auf Cloudflare R2 synchronisiert.
+
+## [1.7.114] - 2026-10-11
+
+### ⏪ PMTiles: Exakter Stand der wiederhergestellten Original-Archive wieder aktiv
+  - **Vollständiger Rollback auf die bewährten Original-PMTiles**:
+    - `ets2-truckline-hq.pmtiles` (126.646 Bytes, 177 Kacheln) aus Blob 4 wiederhergestellt.
+    - `ets2-truckersmp-hq.pmtiles` (113.688 Bytes, 166 Kacheln) aus Blob 5 wiederhergestellt.
+    - `ets2-hq.pmtiles` (672.024 Bytes, 478 Kacheln) wiederhergestellt.
+    - Synchronisation zu `uploads/map_cache/` und Cloudflare R2 Remote Storage abgeschlossen.
+  - **Überlappungs-Schutz bleibt erhalten ([Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - Die Trennung von `createHqGroundLayers` und `createHqSymbolLayers` bleibt voll aktiv. Alle HQ-Straßenflächen und Polygone werden vor den POIs gerendert, sodass Basiskarten-Elemente (Parkplatz `[P]`, Tankstellen) nicht mehr verdeckt werden.
+
+## [1.7.113] - 2026-10-11
+
+### 🗺️ Karten-Layer: Überlappungs-Fix für Basiskarten-POIs & HQ-Firmen mit 3D-Gebäuden
+  - **Reparatur der Ebenen-Reihenfolge ([Map.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/Map.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx), [RoutePlanner.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/RoutePlanner.tsx))**:
+    - **Split in Boden- und Symbol-Ebenen**: Die HQ-Layer wurden in `createHqGroundLayers` (Asphaltflächen, Prefabs, 3D-Baukörper, Straßen und Straßenränder) und `createHqSymbolLayers` (Ampeln, POIs, Firmenlogos) aufgeteilt.
+    - **Keine Überdeckung von Basiskarten-Icons mehr**: Zuvor wurden alle HQ-Ebenen am Ende des MapLibre-Styles eingefügt, wodurch HQ-Straßenbeläge POIs der Basiskarte überdeckten (z. B. Parkplatz- `[P]` und Tankstellen-Symbole). Die Boden- und Straßenebenen werden nun *vor* `ets2-pois` gerendert, sodass alle POIs und Firmenlogos der Basiskarte stets scharf und unbedeckt im Vordergrund liegen.
+  - **Präzise HQ-Bbox & Ausschluss entfernter Raststätten ([generate_separate_hqs.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_separate_hqs.ts), [build_separate_pmtiles.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/build_separate_pmtiles.py))**:
+    - Die Bounding Box für Truckline HQ wurde strikt auf den eigentlichen Betriebshof und Autobahnanschluss begrenzt (`minLat: 50.73`), wodurch die 15 km entfernte A45-Raststätte (bei `lat: 50.61`, `x: -5194, y: -272`) mit ihren Parkplatz- und Tankstellen-POIs vollständig von versehentlichen Straßen-Stubs befreit wurde.
+  - **HQ-Firmen und 3D-Gebäude generiert**:
+    - **Truckline HQ (Dillenburg)**: 76 3D-Gebäude-Extrusionen (`footprint`) mit realistischen Höhen und Grundrissen sowie Firmen-POIs `Truckline Logistik` und `Sanbuilders Baustelle`.
+    - **TruckersMP HQ (Wrocław)**: 291 3D-Gebäude-Extrusionen sowie Firmen-POIs `Subse`, `ACC` und `Cargotras`.
+    - **Neues Firmenlogo `truckline_logistik` ([pack_sprites.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/pack_sprites.py))**: Eigenes 128x32px Firmen-Badge für Truckline Logistik in den Sprite-Atlas gepackt und via `upload_sprites_to_r2.py` auf Cloudflare R2 hochgeladen.
+    - Alle PMTiles (`ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles`, `ets2-hq.pmtiles`) neu kompiliert, lokal abgelegt (`uploads/map_cache/`) und auf Cloudflare R2 synchronisiert.
+
+## [1.7.112] - 2026-10-11
+
+### ⏪ PMTiles: Wiederherstellung des ursprünglichen Versionsstandes
+  - **Exakter Rollback aller HQ-Kartenarchive ([restore_pmtiles.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/restore_pmtiles.py))**:
+    - `ets2-truckline-hq.pmtiles` (126.646 Bytes, 177 Kacheln) aus dem unberührten Offline-Cache wiederhergestellt.
+    - `ets2-truckersmp-hq.pmtiles` (113.688 Bytes, 301 Kacheln) wiederhergestellt.
+    - `ets2-hq.pmtiles` (672.024 Bytes, 478 Kacheln) aus dem ursprünglichen Kachel-Dump rekompiliert.
+    - Lokaler Cache (`uploads/map_cache/`) und Cloudflare R2 Remote Storage synchronisiert.
+
+## [1.7.111] - 2026-10-11
+
+### 🗺️ Truckline HQ PMTiles: Baustellen-Ring entfernt, saubere Netzanbindung & 80 3D-Gebäude
+  - **Entfernung der unfertigen Baustellen-Schleife ([generate_separate_hqs.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/generate_separate_hqs.ts))**:
+    - **Strikter `hidden`-Filter**: Alle im Bau befindlichen Straßenabschnitte der Mod-Erweiterung (der unfertige Nord-Ring mit toten Enden) besitzen in den Sektordaten das SCS-Flag `hidden: true`. Das erzwungene Un-Hiden wurde entfernt, wodurch die Geisterschleife vollständig von der Karte verschwindet.
+    - **Nahtlose Netzanbindung an die A45**: Autobahn-Segmente (`freeway`) wurden aus dem HQ-Overlay ausgeschlossen, sodass die durchgehende Autobahn der ETS2-Basiskarte (`ets2.pmtiles`) nicht überlagert oder unterbrochen wird. Die HQ-Zufahrtsstraße dockt nun direkt und lückenlos an das Hauptstraßennetz an.
+  - **80 3D-Gebäude-Footprints (`fill-extrusion`)**:
+    - Benutzerdefinierte Model-Definitionen (`blkw_2k001`, `de_3j002`, `blkw_0v012`, `blkw_2900h`, `rus_0m00a`, `mod_ger_4`, `mod_ger_5` etc.) für alle Hallen, Sanbuilders-Depots und Bürogebäude des HQ-Geländes implementiert. 80 Gebäude erscheinen nun mit realistischer Höhe und Grundriss als 3D-Baukörper.
+  - **PMTiles-Archive & Cloudflare R2 Upload ([upload_pmtiles_to_r2.py](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/maps-main/upload_pmtiles_to_r2.py))**:
+    - `ets2-truckline-hq.pmtiles`, `ets2-truckersmp-hq.pmtiles` und `ets2-hq.pmtiles` neu generiert, in `uploads/map_cache/` hinterlegt und auf Cloudflare R2 synchronisiert.
+
+## [1.7.110] - 2026-10-11
+
+### 🚛 Trailer-Erkennung, HQ-Navigation & Multiplayer-HQ-Firmen auf der Karte
+  - **Exakte Trailer-Erkennung ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs), [TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - **SCS Shared Memory Offset korrigiert**: Offset `1564` war bisher fälschlicherweise als `trailerAttached` gemappt, ist im SCS Telemetry SDK aber lediglich `isCargoLoaded`. Bei leeren Trailern (eigener Trailer / Freeroam) war der Wert daher immer `false`.
+    - **Echte Trailer-Offsets**: `trailerAttached` liest nun direkt Offset `6080` (`trailer[0].com_b.attached`), prüft die Trailer-ID bei Offset `6920` (`trailer[0].con_s.id`), `trailerLiftAxle` bei Offset `1611` und fällt nur hilfsweise auf `isCargoLoaded` zurück.
+    - **C# Telemetry Bridge synchronisiert**: In [telemetry-bridge.cs](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/telemetry-bridge.cs) fehlte die Übertragung von `trailerAttached`, `trailerId`, `trailerLiftAxle`, `liftAxle`, `wipers` und `lightsParking` bisher vollständig. Der 60-FPS-Stream wurde aktualisiert und neu kompiliert.
+    - **TruckSideView & CarPlay**: Erkennen nun jeden angekoppelten Auflieger (auch leere oder gekaufte Trailer) zuverlässig und zeigen sofort die Trailer-Aktionen, Luftfederung und Achslift an.
+  - **Multiplayer HQ Navigation ([ets2Cities.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/data/ets2Cities.ts), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **HQ-Koordinatentabelle in `ets2Cities.ts`**: `Truckline HQ` (Dillenburg, B255/A45 Hessen: `x: -5911, z: -1160`) und `TruckersMP HQ` (Wrocław, Polen: `x: 23808, z: -2227`) wurden als vollwertige Navigationsziele hinterlegt.
+    - **Suchfunktion & Routenberechnung**: Sowohl die CarPlay-Suche als auch die Adresssuche auf der Karte finden die HQs und deren Firmen (`Truckline Logistik`, `TruckersMP HQ`) nun sofort mit Logo, Beschreibung und Entfernungsberechnung.
+    - **Routen-Kamerafokus & IPC-Routing**: Das Auswählen eines HQs übergibt nun direkt die Game-Koordinaten (`x`, `z`) an `focusDestinationByGameCoords` und berechnet über das Ingame-Straßennetzwerk die exakte Fahrstrecke zum und vom HQ.
+  - **HQ-Firmen & POIs auf der Navigationskarte ([GameMapWidget.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/GameMapWidget.tsx))**:
+    - **Sichtbarkeit behoben**: Die HQ-Vektor-Layer (`tl-*` und `tmp-*`) waren zuvor mit `visibility: 'none'` initialisiert. Sie schalten sich nun bei aktivem HQ-Overlay automatisch auf `visible`.
+    - **Firmen-, Werkstatt- & Tankstellen-Symbole**: Dedizierte GeoJSON-Ebenen (`hq-pois-icons`, `hq-pois-labels`, `tl-companies`, `tmp-companies`) blenden Firmenlogos, Service- und Tankstellensymbole sowie klare Labels ("Truckline HQ • Dillenburg", "TruckersMP HQ • Wrocław") prominent auf der Karte ein.
+
+## [1.7.109] - 2026-10-11
+
+### 🕹️ LKW-Steuerungsapp: Seitenwechsel-Navigation & SCS Input SDK Synchronisations-Fix
+  - **Seitenwechsel per Hotkeys & Tastatur ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Reiterleisten-Fokus (`navIndex === -1`)**: Genau wie in den Einstellungen wechselt die Navigation beim Drücken von `Nach oben` (aus der obersten Zeile) direkt in die Kopfzeile/Segment-Reiterleiste (`01 Übersicht`, `02 Fahrwerk`, `03 Licht & Cockpit`).
+    - **Seiten blättern mit Links/Rechts**: In der Kopfzeile blättert `Links`/`Rechts` durch die Seiten. `Nach unten` oder `Enter` wechselt direkt in die Aktionskarten der gewählten Seite.
+    - **Hotkeys `next` / `prev` & `Tab`**: Die globalen Hotkeys `next`/`prev` wechseln innerhalb der Steuerungs-App nun zuverlässig die Unterseiten (`next-tab`/`prev-tab`), anstatt die gesamte CarPlay-App zu verlassen. Zudem kann mit `Tab` / `Shift+Tab` geblättert werden.
+    - **Mausklick-Zuverlässigkeit**: Chevron-Tasten (`<`, `>`) und Tabs haben dedizierte Klick-Handler (`e.stopPropagation()`, `type="button"`, `z-30`) und reagieren sofort auf Klicks.
+  - **SCS Input SDK Multi-Input-Frame-Fix ([input_system.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/input_system.cpp))**:
+    - **Frame-Dekrementierung repariert**: Das Dekrementieren der `pulseFrames` wurde an den Frame-Beginn (`first_in_frame`) für alle aktiven Inputs gebunden. Zuvor wurden bei gleichzeitigen Aktionen (wie `susp_up`, das Front- und Heck-Fahrwerk ansteuert) nachfolgende Inputs im selben Frame nicht dekrementiert und blieben dauerhaft hängen.
+    - **Fahrwerks-Pulszeiten kalibriert**: Luftfederungs-Heben/Senken pulst nun 35 Frames (~550ms) für spürbares Heben der Faltenbälge. `engine` triggert sowohl Bordelektronik (`engineelect`) als auch Anlasser (`engine`), damit der Motor auch bei realistischer Zündungs-Simulation zuverlässig startet.
+    - **Overlapped Pipe I/O ([commandpipe.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/commandpipe.cpp))**: Named-Pipe-Lesen und -Schreiben auf dem `FILE_FLAG_OVERLAPPED`-Handle wurde auf sauberes `OVERLAPPED` mit `GetOverlappedResult` umgestellt, wodurch alle Steuerbefehle verlustfrei beim GameBridge-Plugin ankommen.
+    - `OPCGameBridge.dll` neu kompiliert und in den ETS2-Plugins-Ordner deployt.
+
+
+### 🎮 Vollständige SCS Input SDK Integration (Direktansteuerung ohne Tastaturemulation)
+  - **SCS Input SDK Semantical Device ([input_system.h](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/input_system.h), [input_system.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/input_system.cpp))**:
+    - Offizielle Anbindung an das SCS Input SDK (`scs_input_init` / `scs_input_shutdown` via `SCS_INPUT_DEVICE_TYPE_semantical`).
+    - Das Ingame-Plugin `OPCGameBridge.dll` registriert sich als vollwertiges semantisches Eingabegerät (`opc_semantical`) direkt in der ETS2/ATS-Simulations-Engine.
+    - Alle 31 Fahrzeugsteuerungs-Mixes (`light`, `hblight`, `lighthorn`, `beacon`, `flasher4way`, `parkingbrake`, `wipers`, `engine`, `liftaxle`, `liftaxlet`, `attach`, `frontsuspup`, `frontsuspdwn`, `rearsuspup`, `rearsuspdwn`, `suspreset`, `trlrsuspup`, `trlrsuspdwn`, `trlrsuspreset`, `lblinker`, `rblinker`, `horn`, `airhorn`, `cruiser` etc.) werden im Spiel direkt per nativer Engine-Event-Pipeline angesteuert.
+    - **100% Tastatur-Unabhängig**: Funktioniert auch, wenn Tasten in `controls.sii` auf der Tastatur `unbound` sind (z. B. wenn Licht oder Motor nur auf das Lenkrad `joy.b1`/`joy.b2` gelegt wurden).
+    - **Kein Fokus-Verlust & Null Latenz**: Keine Fensterfokussierung nötig, kein PowerShell, keine Tastaturemulation – Events werden frame-synchron direkt in der Ingame-Eingabeschleife verarbeitet.
+  - **OPCCommandPipe & Electron Routing ([commandpipe.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/commandpipe.cpp), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - `handleTruckAction` sendet Steuerbefehle blitzschnell über die Named Pipe an das Plugin, welches die Aktion unmittelbar im Spiel über das SCS Input SDK auslöst.
+    - Erfolgreich im Release x64-Modus kompiliert und direkt in `Euro Truck Simulator 2/bin/win_x64/plugins` bereitgestellt.
+
+## [1.7.107] - 2026-10-11
+
+### 🛠️ LKW-Steuerung: Hotkey-Navigation, App-Raster-Fix & Plugin-Direktansteuerung
+  - **App-Raster ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**: Die Launcher-Liste der Hotkey-Navigation enthielt `LKW-Steuerung` nicht (9 statt 10 Einträge) – dadurch öffnete die Auswahl ab Position 7 die falsche App (Chat). Behoben, Navigation läuft wieder über alle 10 Apps.
+  - **Hotkeys in der Steuerungs-App ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**: Pfeiltasten/Enter navigieren durch alle Karten/Buttons mit Fokus-Rahmen, `next`/`prev` wechseln die Seite, `links`/`zurück` am ersten Element verlässt die App.
+  - **Plugin-Direktansteuerung ([commandpipe.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/commandpipe.cpp), [chat_inject.cpp](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/OPCGameBridge/OPCGameBridge/chat_inject.cpp), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**: Neuer Pipe-Befehl `truck_action`; die App sendet Aktionen zuerst an das Plugin im Spielprozess (SendInput mit Scancode), nur bei Fehlschlag per PowerShell-Fallback (jetzt ebenfalls SendInput + Scancodes, korrekte Extended-Flags). Plugin neu gebaut und in den ETS2-Plugins-Ordner kopiert.
+  - **Bekannte Grenze**: Aktionen, die in `controls.sii` nicht auf der Tastatur belegt sind (z. B. Licht/Warnblinker nur auf Joystick), lassen sich nur per Tasten-Emulation nicht auslösen; dafür wäre das SCS-Input-SDK (virtuelles Gerät) nötig.
+
+## [1.7.106] - 2026-10-11
+
+### 🎨 LKW-Steuerung: Entfernung der Blueprint-Badges & Vollständiger Light Mode Support
+  - **Entfernung der Badge-Leiste im Blueprint ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Die schwebenden Badges (`SCANIA 113H STREAMLINE 6x2`, `SOLO-ZUGMASCHINE (6x2)`, `MOTOR AUS` etc.) oben links im Vektor-Blueprint wurden vollständig entfernt.
+    - Der Blueprint ist nun vollkommen frei, unbeeinträchtigt und fokussiert auf die reine 1:1 Fahrzeugdarstellung.
+  - **Lückenloser, eleganter Light Mode ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - **Blueprint-Kartenhintergrund**: In Light Mode strahlt die Karte in einem dezenten, edlen Verlauf (`bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/80`) mit hellem Gitter und kontrastreicher Fahrbahnlinie (`#cbd5e1` / `#94a3b8`) anstelle eines dunklen Navy-Tons.
+    - **Kopfzeile & Segmentiertes Dock**: Pfeil-Buttons, inaktive Reiter, Nummern-Badges und Trennlinien adaptieren sauber auf helle Farben (`bg-slate-200/70`, `text-slate-700`, `border-slate-300`).
+    - **Aktionskarten auf Seite 1, 2 und 3**: Alle Kachel-Hintergründe, Titel, Tasten-Badges, Untertitel und Schalter wechseln im Light Mode auf tiefes Schiefergrau (`text-slate-900`) und helle Schattierungen, wodurch kein Text mehr weiß auf weiß unsichtbar ist.
+
+## [1.7.105] - 2026-10-11
+
+### 🚚 1:1 Scania 113H 6x2 Blueprint & Vollständige Ingame-Telemetrie-Synchronisation
+  - **Exakter 1:1 Blueprint des Scania 113H 6x2 ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - **Originalgetreue Vektorgrafik nach der technischen Blueprint-Vorlage**:
+      - Klassische Scania-3er-Serie Kasten-Fahrerkabine im legendären Scania-Königsblau (`#4a7ab5`) mit doppelten silbernen Rallye-Zierstreifen entlang der Flanke.
+      - Charakteristisches silber gerahmtes Schlafkabinen-Seitenfenster hinter der Fahrertür.
+      - Hoher schwarzer Luftansaugschnorchel mit Pilzkopf-Filter am Kabinenheck.
+      - Ausgeprägte Sonnenblende mit **grüner Dach-Positionsleuchte** (leuchtet bei Fahrlicht synchron grün auf).
+      - Kantige Frontstoßstange mit eckigen Halogenscheinwerfern, horizontalem Scania-Kühlergrill und `SCANIA 113H` Modellbadge.
+      - Schwerlast 6x2-Offenrahmen-Chassis mit zylindrischem Dieseltank (Chrom-Spannbänder), Batteriekasten und schrägem Auspuffrohr.
+      - **Doppelte getrennte Heckkotflügel**: Zwei einzelne runde Bogie-Radabdeckungen über den beiden Hinterachsen mit Schmutzfängern (`cx=65` und `cx=125`).
+      - Klassische 10-Loch-Stahl-/Alufelgen mit Scania-Nabenkappen.
+  - **Echtzeit-Synchronisation aller Fahrzeug-Zustände mit Ingame-Telemetrie**:
+    - **Fahrlicht & Fernlicht (`lightsBeamLow` / `lightsBeamHigh`)**: Halogen-Reflektoren strahlen warmgelb (`#fef08a`), bei Fernlicht schaltet der Hauptstrahl auf Xenon-Blauweiß (`#60a5fa`) mit verlängertem Lichtkegel um.
+    - **Grüne Dach-Positionsleuchte**: Die Dachmarkierungsleuchte auf der Sonnenblende leuchtet bei aktiviertem Fahrlicht synchron im typischen Neongrün (`#22c55e`).
+    - **Blinker & Warnblinker (`blinkerLeftActive`, `blinkerRightActive`, `lightsHazard`)**: Vordere und hintere bernsteinfarbene Blinker blinken mit dynamischer Glow- und Radar-Animation.
+    - **Parkbremse / Handbremse (`parkBrake`)**: Heckleuchten leuchten intensiv rot (`#ef4444`) und das `P HANDBREMSE`-Badge wird eingeblendet.
+    - **Motor & Abgase (`engineEnabled`, `rpm`)**: Bei laufendem Motor steigen animierte Diesel-Wärmepulse aus dem Ansaugschnorchel/Auspuff auf, begleitet von der Echtzeit-Drehzahlanzeige (`MOTOR AN • {rpm} RPM`).
+    - **Liftachse (`liftAxleTruck`)**: Die Vorlauf-/Nachlaufachse der Zugmaschine hebt sich bei Betätigung physisch um 14 Pixel an (`▲ LIFT`-Badge).
+    - **Luftfederung (`truckSuspension`)**: Das Fahrwerk hebt oder senkt sich stufenlos um ±10 Pixel (+50mm / -50mm).
+    - **Auflieger-Status (`trailerAttached`)**: Erkennt automatisch, ob ein Auflieger angekoppelt ist, oder zeigt die Scania 113H als Solo-Sattelzugmaschine mit offener Sattelplatte exakt wie auf dem Vorlagebild.
+
+
+
+### 🚚 Exaktes Design-Dock (Image 1) & Scania S 4x2 mit Kofferauflieger (Image 2)
+  - **Exaktes Segmented Header-Dock wie in den Einstellungen ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Der aktive Tab (`01 Übersicht`, `02 Fahrwerk`, `03 Licht & Cockpit`) entspricht nun 1:1 dem vom Benutzer bereitgestellten Referenzbild (Image 1):
+      - Strahlend blaues `bg-primary` / `#0084ff` Pill-Badge mit `text-white font-black`.
+      - Reines weißes Icon und weißer Text.
+      - Transparenter dunkler Zähler-Badge `bg-black/25 text-white font-bold`.
+      - Pfeil-Buttons mit harmonischem `hover:text-primary` und `hover:border-primary/40`.
+  - **Scania S 4x2 Zugmaschine & 3-Achs Kofferauflieger 1:1 nach Bildvorlage ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - **3-Achs Kofferauflieger (Dry Van)**:
+      - Glatter weißer Kofferaufbau mit Aluminium-Dachleiste und Scheuerleiste.
+      - 5 orange LED-Seitenmarkierungsleuchten entlang der Unterkante.
+      - **Korrekte Achsanordnung am Heck**: Die 3 Trailerachsen befinden sich wie im Original am Heck (links), umgeben von einem durchgehenden dunklen Dreifach-Kotflügel.
+      - **Unterfahrschutz**: Heck-Unterfahrschutz hinter den Achsen mit Dockpuffern und Rückleuchten.
+      - **Palettenkasten / Seitenverkleidung**: Aerodynamischer weißer Schutzkasten mittig zwischen Achsen und Stützbeinen.
+      - **Teleskop-Stützbeine (Landing Gear)**: Vorbildgetreue Stützen mit Fußplatten und Kurbel an der Vorderseite des Aufliegers.
+    - **Scania S 4x2 Zugmaschine**:
+      - Durchgehende aerodynamische Seitenschweller in Wagenfarbe (Weiß/Metallic) mit Trittstufe und Tankdeckel.
+      - 4x2-Achsgeometrie mit Alcoa-Leichtmetallfelgen (10-Loch) und Scania-Naben.
+      - Originalgetreues Highline-Fahrerhaus mit Scania-Sonnenblende, abgesenktem Fensterschwung, SCANIA-Chromgrill und LED-Scheinwerfern.
+ 
+## [1.7.103] - 2026-10-11
+
+### 🚚 Scania S 2016 Blueprint-Redesign, ausgefüllter Aktiv-Tab & Bereinigung LKW Diagnose
+  - **Ausgefüllter aktiver Tab im Header-Dock ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Der aktive Reiter (`01 Übersicht`, `02 Fahrwerk`, `03 Licht & Cockpit`) besitzt nun eine garantierte, satte Vollflächen-Füllung in leuchtendem Cyan (`#06b6d4`), tiefdunkle Schrift (`#020617`) und einen cyanfarbenen Glow-Schatten.
+  - **Entfernung des Steuerungstabs aus der LKW Diagnose-App ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der redundante 4. Tab (`Steuerung`) in der Fahrzeug-Telemetrie/Diagnose-App wurde komplett entfernt, da die LKW- und Fahrwerkssteuerung als vollwertige eigene App im Dock existiert.
+    - Die Diagnose-App hat nun schlanke 3 Seiten (`01 Cockpit`, `02 Bordcomputer`, `03 Diagnose`) inklusive aktualisierter Pagination, Zähler (`1/3`) und Pfeil-Navigation.
+  - **Blueprint-Neudesign: Scania S 2016 Highline V8 ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Komplette Neukonstruktion der Zugmaschine als ikonischer **Scania S 2016 (Next Generation)** im 2D-Vektor-Blueprint:
+      - **Highline-Fahrerhaus**: Vorbildgetreue Aerodynamik-Silhouette, Dach-Spoilerflügel und Seiten-Leitbleche.
+      - **Scania Sonnenblende**: Markante Sonnenblende mit integrierten LED-Positionsleuchten über der Windschutzscheibe.
+      - **Scania S-Seitenfenster**: Typischer A-Säulen-Schwung mit abgesenkter Gürtellinie und Innensilhouette (Fahrersitz & Lenkrad).
+      - **Frontmaske & Kühlergrill**: Zweistufiger Scania-Wabengrill mit horizontalen Chromlamellen und SCANIA-Logo.
+      - **Next-Gen LED-Scheinwerfer**: Markante winklige Tagfahrlicht-Signatur (DRL-Blade) mit dynamischer Fernlicht-/Abblendlicht-Reaktion.
+      - **Seitenverkleidung (Aero-Skirts)**: Scharf konturierte Seitenschweller mit Chrom-Trittstufe, Tankdeckel und Auspuff-Endrohren.
+      - **Embleme**: Originalgetreues `S 730` Typenschild und rotes `V8` Wappen an der Fahrerhaustür.
+      - **Alcoa Dura-Bright Felgen**: 10-Loch Leichtmetallfelgen mit Scania-Radnaben und funktioneller Liftachse (`▲ LIFT`).
+ 
+## [1.7.102] - 2026-10-11
+
+### 📱 CarPlay: Redundante App-Titel in Kopfzeilen aller Apps entfernt
+  - **Kompakte, ablenkungsfreie Header ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - **LKW- & Fahrwerk-Steuerung**: Übergroße Überschrift `LKW- & Fahrwerk-Steuerung` und lange Untertitel entfernt. Icon auf handliche `w-9 h-9` optimiert, Seitenzähler `1/3` und `SPIEL-TASTEN AKTIV` beibehalten. Das segmentierte Dock `< [01 Übersicht] [02 Fahrwerk] [03 Licht & Cockpit] >` hat nun volle Breite ohne Umbruch oder Abschneiden.
+    - **Einstellungen**: Header-Titel `Einstellungen` und Unterzeile entfernt, durch kompaktes Icon und Seitenzähler `1/3` ersetzt.
+    - **Fahrzeug-Telemetrie (Truck)**: `Fahrzeug-Telemetrie`-Titel entfernt; LKW-Icon, Seitenanzeige (`1/4`), Live-Telemetrie-Pille und Fahrzeugmodell bleiben präsent.
+    - **Frachtbrief (Job)**: Große Überschrift `Aktiver Frachtbrief` entfernt; durch Aktenkoffer-Icon und Frachtstatus-Pille ersetzt.
+    - **Lokaler Musik-Player**: Große Überschrift `Lokaler Musik-Player` entfernt; kompaktes Icon und Song-Anzahl-Badge.
+    - **ETS2 Live-Radio**: Header-Titel `ETS2 Live-Radio` entfernt; Radio-Icon und Sender-Zähler erhalten.
+    - **Funk & Team-Chat**: Titel `Funk & Team-Chat` entfernt; Nachrichten-Icon, Kanal `#kanal`, Rufname und Geschwindigkeits-Status direkt in der Leiste platziert.
+    - **Events & Konvois**: Titel `Events & Konvois` und Subtitle entfernt; Kalender-Icon und Badge `{n} Anstehende Events` direkt neben dem Refresh-Button.
+ 
+## [1.7.101] - 2026-10-11
+
+### 🚚 LKW- & Fahrwerksteuerungs-App im Einstellungs-App Design
+  - **Multi-Page Cockpit-Struktur ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Segmentiertes Header-Dock**: Titel, Zähler (`1/3`, `2/3`, `3/3`), Subtitle und Pfeil-Navigation wie in den CarPlay-Einstellungen mit 3 Reitern (`01 Übersicht`, `02 Fahrwerk`, `03 Licht & Cockpit`).
+    - **Seite 1: Blueprint & Übersicht**: Großflächige 2D-Blueprint-Ansicht mit Beleuchtungs-Laser, Beacon-Effekt, Federweghöhe & Achslift plus 4 Schnellzugriff-Karten.
+    - **Seite 2: Fahrwerk & Pneumatik**: Exaktes 2x2 Grid + Standby-Bottom-Bar der Einstellungs-App für LKW-Pneumatik (`▲ Heben`, `● Normal`, `▼ Senken`), Trailer-Pneumatik, LKW-Liftachse, Trailer-Liftachse und Pneumatik-Schnellreset.
+    - **Seite 3: Licht & Cockpit**: Scheinwerfer mit Gedrückthalten für Fernlicht (Ladebalken), Rundumleuchte & Warnblinker, Scheibenwischer, Sattelkupplung und Motor/Handbremse.
+
+## [1.7.100] - 2026-10-11
+
+### 🛡️ Schutz vor TrucklineMP API 429 Rate-Limits & Intelligentes Caching
+  - **Ursachenbehebung für HTTP 429 "rate-limit-hit suspicious"**:
+    - Ungecachte Abfragen und Schleifen-Calls in der Fahrer- und Bewerberverwaltung führten zu zu vielen Live-Anfragen an `trucklinemp.com`.
+    - Backend-seitig wurde ein 30-minütiger Circuit Breaker aktiviert, der bei 429-Meldungen alle weiteren Requests pausiert, damit der API-Key wieder freigegeben wird.
+    - Erfolgreiche Spielerdaten werden für 24 Stunden, nicht gefundene Profile für 6 Stunden gecacht.
+
+## [1.7.99] - 2026-10-11
+
+### 🎮 Dynamisches Auslesen der Tastenbelegung aus dem Spiel (`controls.sii`)
+  - **🔍 Automatischer Profile-Parser ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - Das System liest nun dynamisch die aktuellste `controls.sii` aus den aktiven ETS2/ATS-Profilen (`steam_profiles` & `profiles`) aus.
+    - Anstatt starrer Standardtasten werden die individuellen Tastenbelegungen des Spielers für alle LKW-Funktionen ermittelt:
+      - **Scheinwerfer**: `mix light`
+      - **Fernlicht**: `mix hblight`
+      - **Lichthupe**: `mix lighthorn`
+      - **Rundumleuchte (Beacon)**: `mix beacon` (z. B. Taste `Y`)
+      - **Warnblinker**: `mix flasher4way` (Taste `F`)
+      - **Liftachse LKW**: `mix liftaxle` (Taste `U`)
+      - **Liftachse Auflieger**: `mix liftaxlet` (z. B. Taste `J`)
+      - **LKW Luftfahrwerk**: `mix frontsuspup` / `mix rearsuspup` / `mix frontsuspdwn` / `mix suspreset` (z. B. Tasten `Q` / `A` / `Home`)
+      - **Trailer Luftfahrwerk**: `mix trlrsuspup` / `mix trlrsuspdwn` / `mix trlrsuspreset` (z. B. Tasten `E` / `D` / `Home`)
+      - **Feststellbremse**: `mix parkingbrake` (Taste `Space`)
+      - **Motor**: `mix engine` (Taste `E`)
+      - **Scheibenwischer**: `mix wipers` (Taste `P`)
+      - **Auflieger an-/abkuppeln**: `mix attach` (Taste `T`)
+  - **🎯 Präzise Tastensimulation nach Spielerprofil**:
+    - Beim Klick auf eine Funktion in CarPlay wird exakt die im Spielprofil hinterlegte Taste an das Spiel gesendet. Ist eine Taste im Profil nicht belegt, greift der offizielle ETS2-Standardwert als intelligenter Fallback.
+  - **🏷️ Live-Tastenanzeige auf allen Buttons ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Alle Schaltflächen im Bedienfeld zeigen nun die tatsächlich erkannten Tasten an (z. B. `Beacon (Y)`, `TRAILER ACHSE (J)`, `LKW: Q / Home / A`, `TRAILER: E / Home / D`).
+    - Status-Badge in der Kopfzeile: `🎮 SPIEL-TASTEN AKTIV` bestätigt die erfolgreiche Synchronisation mit der Konfigurationsdatei.
+
+## [1.7.98] - 2026-10-11
+
+### 🚚 CarPlay: Neue LKW-Steuerung & Adaptive 2D-Seitenansicht (Fahrwerk, Achsen & Licht)
+  - **📐 Adaptive Blueprint-Seitenansicht ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx))**:
+    - Neue Vektor-Seitenansicht eines modernen Sattelzugs mit hochauflösender Silhouette, Sattelkupplung, Chrom-Tanks, LED-Beleuchtung und Rädern.
+    - **Adaptive Gespann-Erkennung**: Erkennt automatisch, ob ein Auflieger angekuppelt ist (`telemetry.trailerAttached` oder Frachtdaten).
+      - **Mit Auflieger**: Vollständiger europäischer 3-Achs-Auflieger mit Schiebeplane/Koffer, OPC-Schriftzug, Fracht- und Gewichtsanzeige sowie animierten Trailer-Rädern.
+      - **Solo-Fahrt (ohne Auflieger)**: Die Zugmaschine wird freistehend mit freiliegender Sattelplatte und Heck-Kotflügeln dargestellt (`SOLO-ZUGMASCHINE`).
+    - **Live-Licht- & Warnvisualisierung auf dem LKW**:
+      - Scheinwerfer leuchten bei Stand-/Abblendlicht gelb auf; bei **Fernlicht** projiziert ein kraftvoller blauer Lichtkegel nach vorne.
+      - **Rundumleuchte (Beacon)**: Dachbalken blinkt und wirft dynamische Lichtblitze.
+      - **Warnblinker**: Spiegel- und Eck-LEDs blinken synchron orange.
+      - **Bremslicht / Handbremse**: Rückleuchten leuchten bei angezogener Feststellbremse leuchtend rot auf.
+  - **🎛️ Echtes In-Game Bedienfeld & Tastensimulation ([TruckSideView.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/TruckSideView.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Scheinwerfer mit Long-Press für Fernlicht**:
+      - Kurzer Klick schaltet Stand-/Abblendlicht ein/aus (Taste `L`).
+      - **Gedrückt halten (ab 500ms)** schaltet das **Fernlicht** ein/aus (Taste `K`), inklusive optischem Ladebalken/Fortschrittskreis direkt im Button.
+      - Direkttaste für Fernlicht / Lichthupe (`K`).
+    - **Liftachsen LKW & Auflieger**:
+      - Taste `U` hebt/senkt die Liftachse an der Zugmaschine oder am Auflieger an.
+      - Visuelle Animation: Das jeweilige Rad hebt sich in der Seitenansicht um 14px vom Boden ab (`▲ LIFT`).
+    - **Luftfahrwerk / Niveauregulierung (Zugmaschine & Trailer)**:
+      - 3-Stufen-Steuerung: `▲ Heben` (PageUp), `● Normal / Reset` (Home), `▼ Senken` (PageDown).
+      - Animierte Höhenverschiebung des Chassis/Aufliegers in der 2D-Seitenansicht mit Höhenanzeige (`+50mm` / `0mm` / `-50mm`).
+    - **Weitere Fahrzeugfunktionen**:
+      - Warnblinker (`F`), Rundumleuchte (`O`), Feststellbremse (`Space`), Scheibenwischer (`P`), Motor Start/Stopp (`E`) und Auflieger an-/abkuppeln (`T`).
+    - **Desktop & Mobile/Tablet Support**:
+      - Funktioniert über Electron IPC (`truck-control-action`) sowie über den lokalen HTTP-Endpoint (`POST /api/carplay/truck-action`) für kabellose Zweitbildschirme/Tablets.
+  - **📱 Nahtlose Integration ins CarPlay-System ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Eigene vollwertige CarPlay-App **"LKW-Steuerung"** (`control`) im App-Raster mit leuchtendem Cyan/Blau-Icon.
+    - Direkte Einbindung als Seite 4 (**"Steuerung"**) im bestehenden LKW-Diagnose-Menü (`truckPage === 3`).
+    - Einheitliche Designsprache mit dynamischem Wallpaper und Glassmorphism.
+
+## [1.7.97] - 2026-10-11
+
+### ⚡ Performance & Re-Render Optimierungen (CPU, GPU & Timer Churn)
+  - **🛑 1-Sekunden Full-Tree Re-Render eliminiert (`standbyTick`) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der State `standbyTick`, der zuvor jede Sekunde (`1000ms`) die gesamte 9000-Zeilen `CarPlayPage`-Komponente neu gerendert hat (3.600 unnötige Re-Renders pro Stunde), wurde vollständig entfernt.
+    - Die digitale Uhrzeit `timeString` aktualisiert sich nur noch, wenn sich der formatierte Minuten-String tatsächlich ändert (Bail-out-Check).
+    - Die Standby-Aura und der blinkende Doppelpunkt `:` wurden durch reine GPU-beschleunigte CSS-Keyframe-Animationen (`animate-pulse`) ersetzt – 0% JavaScript-Overhead.
+  - **🗺️ ETA-Timer Churn bei Fahrzeugbewegung behoben ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die `useEffect`-Berechnung der verbleibenden Fahrzeit war zuvor an `(telemetry as any).posX` und `posZ` gebunden. Beim Fahren wurde der 1-Sekunden-Timer bei jedem Telemetrie-Frame (10–60x pro Sekunde) zerstört und neu aufgesetzt.
+    - Einführung einer synchronen `telemetryRef.current`: `calculateRemainingSeconds()` liest die Live-Koordinaten nun direkt aus dem Ref aus. Der Intervall-Timer läuft stabil und gleichmäßig mit 1 Hz, ohne ständiges `clearInterval`/`setInterval`-Churn.
+  - **📊 SMTC Canvas-Visualizer Idle-Drosselung ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - In Ruhelage (Pausierte Musik oder stille Passagen, `isResting === true`) fragt der Canvas-Loop `requestAnimationFrame` adaptiv gedrosselt mit ~10 fps (~95ms Delta) ab, anstatt unnötig mit 60–144 Hz über den Bildschirm-Refresh zu loopen.
+  - **💤 Automatisches Pausieren von Hintergrund-Pollings im Standby ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Chat-Nachrichten-Polling (3500ms) und ICY-Radio-Metadaten-Polling (7000ms) pausieren nun sofort, sobald CarPlay in den Standby-/Schlafmodus geht (`isCarPlaySleeping`), um Netzwerk- und CPU-Ressourcen zu schonen.
+  - **🎨 Memoization von AnimatedBackground ([AnimatedBackground.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/components/AnimatedBackground.tsx))**:
+    - `AnimatedBackground` wurde in `React.memo` gekapselt, um redundante Re-Evaluationen des Hintergrund-Wallpapers bei Parent-Updates zu unterbinden.
+
+## [1.7.96] - 2026-10-11
+
+### 🚗 CarPlay: Eigenständige Musikseiten & Wiederherstellung des Original-SMTC-Players
+  - **🎵 SMTC (Spotify / Windows Media) wieder im Originalzustand ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Windows SMTC / Spotify Player wurde exakt auf seinen ursprünglichen, immersiven Vollbild-Zustand zurückgesetzt:
+    - Vollflächige Medienkarte (`overflow-hidden`) mit dynamischem Ambient-Blur-Hintergrund passend zum Cover-Artwork.
+    - Vollständiger Verzicht auf einen störenden oberen Header-Balken oder Switcher-Tabs.
+    - Großes Album-Cover / Senderlogo im Zentrum, Song- und Künstleranzeige, Glasmorphism-Audio-Visualizer sowie Timeline-Slider und Playback-Buttons am unteren Rand.
+    - Überflüssige Schachtelungs-Tags sauber bereinigt.
+  - **💿 Getrennte & Eigenständige Musikseiten ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Das zwischenzeitlich eingefügte Segmented Source Switcher Dock (`[🎵 Spotify] [💿 Lokal] [📻 Radio]`) wurde aus den Headern der Unterseiten entfernt.
+    - **Lokaler Musik-Player**: Vollwertige eigene Seite mit fokussiertem Header (`+ Laden`-Button für Audio-Dateien), eigener Playlist und Player-Deck.
+    - **ETS2 Live-Radio**: Vollwertige eigene Seite mit Suche, Auto-Scan für `live_streams.sii` und Sender-Import.
+    - Alle drei Musikquellen bleiben als eigenständige Apps im CarPlay-System wählbar.
+
+## [1.7.95] - 2026-10-11
+
+### 🚗 CarPlay: Einheitliche Designsprache & Harmonisiertes Layout für alle Apps
+  - **✨ Einheitliches Chassis & Dynamisches Wallpaper über alle Seiten ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Jede einzelne Seite (`home`, `map`, `music`, `job`, `truck`, `settings`, `chat`, `events`, `apps`) folgt nun exakt derselben Designsprache:
+      - Äußere Hülle mit sanftem Rand-Padding (`p-1 sm:p-1.5 rounded-2xl sm:rounded-3xl font-['Outfit',sans-serif]`).
+      - Identisches Durchscheinen des dynamischen CarPlay-Wallpapers (`renderCarPlayWallpaper()`) an den abgerundeten Ecken.
+      - Konsistenter innerer Glassmorphism-Container (`flex-1 rounded-3xl backdrop-blur-md bg-black/40 border-white/10` bzw. im Lightmode `bg-white/90 border-slate-250 shadow-xl`).
+  - **📐 Einheitliche Header-Bars & Squircle-App-Icons ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Proportionale Squircle-Icons**: Alle App-Icons besitzen einheitlich die Abmessung `w-11 h-11 rounded-2xl` mit abgestimmten Farbverläufen (passend zu ihren App-Launcher-Kacheln) und `stroke-[2.2]` Drop-Shadow-Icons.
+    - **Einheitliche Typografie**: Alle Seitentitel nutzen konsistent `text-base sm:text-lg font-black tracking-tight` gepaart mit dem prägnanten Monospace-Subtitel `text-[10px] font-extrabold uppercase tracking-widest font-mono text-primary`.
+    - **Settings-Header angepasst**: Das zuvor kleine `w-8 h-8`-Icon in den Einstellungen wurde auf die vollwertige `w-11 h-11 rounded-2xl`-Kachel mit Zink/Slate-Gradient angeglichen.
+  - **🎵 Multi-Source Musik-Player vereinheitlicht ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Spotify / SMTC**: Verfügt nun über denselben Wallpaper-Rahmen, die Glas-Container-Einfassung und den Top-Header wie alle anderen Pages.
+    - **Segmentierte Source Switcher Dock (`[🎵 Spotify] [💿 Lokal] [📻 Radio]`)**: Direkt in den Headern aller 3 Audiomodi integriert. Nutzer können nahtlos zwischen Spotify/Windows-Medien, lokaler Musik und ETS2 Live-Radio umschalten, ohne in den App-Drawer zurückkehren zu müssen.
+    - **Lokale Musik & Live-Radio**: Unnötige Padding-Differenzen (`p-0` vs `p-1`) und doppelte Wallpaper-Bezel entfernt.
+  - **🗺️ Nahtlose Integration der Kartenansicht (`map`) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Die Navigationskarte ist nun in denselben `rounded-3xl`-Rahmen mit dynamischem Wallpaper-Glow eingefasst. Beim Umschalten zwischen Navigation und anderen Apps bleibt das Cockpit-Erscheinungsbild vollkommen ruhig und konsistent ohne Ruckler oder Kantenverschiebungen.
+
+## [1.7.94] - 2026-10-11
+
+### 🚗 CarPlay: Navigations-Suche Hotkeys, Lokale Album-Cover, Echo-Fix & Button-Design
+  - **🗺️ Hotkey- & Controller-Steuerung der Zielsuche (Hamburg, Firmen & Städte) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Reibungsloses Scrollen**: Bei geöffneter Suchergebnisliste scrollen `Runter` (`ArrowDown`), `Hoch` (`ArrowUp`), Controller D-Pad sowie die globalen `Next`/`Prev`-Hotkeys die Trefferliste flüssig durch.
+    - **Automatisches Sichtfeld (`scrollIntoView`)**: Der ausgewählte Eintrag wird immer automatisch sanft ins Blickfeld gescrollt.
+    - **Markante Selektion**: Aktiver Treffer wird mit kontrastreichem blauem Rand, Glow und Akzentleiste (`bg-blue-600/35 border-l-4 ring-2 ring-blue-400 text-white font-bold`) hervorgehoben.
+    - **Direktauswahl & Fokus auf "Route starten"**: Drücken von `Enter` auf einem Ziel schließt die Suche, zentriert die Karte und setzt den Fokus **sofort direkt auf das Feld "Route starten"**. Erneutes Drücken von `Enter` startet die Route augenblicklich.
+    - **Hotkey-Navigation zum "Route starten"-Feld**: Über `Pfeil Runter`, `Pfeil Rechts` oder `Pfeil Links` kann jederzeit direkt vom Karten-Modus auf das "Route starten"-Feld gesprungen werden. Ein leuchtend weißer Fokus-Ring hebt den Button deutlich hervor. Mit `Escape` oder Controller-`Back` kann das Ziel abgebrochen werden.
+    - **Reihenfolge der Hook-Initialisierung gefixt**: Der Auto-Scroll `useEffect` wurde hinter die Deklaration von `searchSelectedIndex` verschoben, um den `ReferenceError: Cannot access 'searchSelectedIndex' before initialization` zu beheben.
+    - **Kategorie-Filter**: Mit `Links` und `Rechts` lässt sich blitzschnell zwischen *Alle*, *Firmen* und *Städte* wechseln.
+  - **🖼️ Automatische Cover-Erkennung für Lokale Songs (MP3 & FLAC) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Integrierter ID3v2 APIC & FLAC METADATA Parser**: Eingebettete Cover-Artworks in `.mp3`- und `.flac`-Dateien werden beim Auswählen innerhalb weniger Millisekunden aus den ersten 2 MB extrahiert.
+    - **Anzeige auf allen Screens**: Cover werden im lokalen Player-Deck (mit edlem rotierendem Vinyl-Center bei Wiedergabe), in der Playlist als Thumbnail, im SMTC-Modus (inkl. ambientem Unschärfe-Hintergrund) sowie in der Standby-Lockscreen Medien-Pille angezeigt.
+  - **🔇 Beseitigung des Audio-Echos beim Pausieren / Stoppen ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Fehlerhaftes Audio-Routing behoben**: In `connectAudioElementToVisualizer` war der globale Frequenz-Analyser direkt mit `audioCtx.destination` verbunden. Dadurch wurde der zeitversetzt aufgenommene System-Audio-Loopback in die Lautsprecher zurückgespielt.
+    - **Saubere Signaltrennung**: Lokale Audioelemente werden nun isoliert an den Lautsprecher-Ausgang (`source -> destination`) und an den Analyser (`source -> analyser`) geleitet, ohne dass der Analyser in die Lautsprecher zurückführt. Das lästige Nachhallen/Echo ist vollständig beseitigt.
+  - **🎨 Button-Design & Kontrast im Lokalen Musik-Player ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der Button `+ MUSIKDATEIEN AUSWÄHLEN` besitzt nun sowohl im Light- als auch im Darkmode einen soliden Blau/Indigo-Verlauf mit garantiert leuchtend weißer Schrift und Icon.
+    - Auch der Button `+ MEHR SONGS HINZUFÜGEN` am Ende der Playlist wurde mit vollem Kontrast für den Lightmode optimiert.
+
+## [1.7.93] - 2026-10-11
+
+### 🚗 CarPlay Sidebar Marker-Synchronisation bei App-Wechsel
+  - **🎯 Automatisches Verschieben des Fokus-Markers an die 1. Position ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Synchroner Marker-Sprung**: Wenn eine App in der linken Seitenleiste angeklickt wird, rückt sie nun automatisch an die oberste Position (`recentApps[0]`). Zuvor verblieb der blaue Fokus-Marker (`sidebarIndex`) auf dem veralteten Slot-Index (z. B. Slot 3), da der Index vor der Neuordnung übergeben wurde. Der Marker springt jetzt sofort und verlässlich auf Slot 1 (`sidebarIndex = 1`), passend zur neu geöffneten App.
+    - **D-Pad & Controller-Unterstützung**: Auch beim Öffnen von Apps über die Controller-/Tastatur-Eingabe (`dir === 'enter'` in der Seitenleiste) sowie beim Navigieren zurück zur Seitenleiste aus Sub-Pages (Truck, Einstellungen) folgt der Fokus-Marker direkt der aktiven App auf Position 1.
+
+## [1.7.92] - 2026-10-11
+
+### 🚗 CarPlay In-Game ETS2 Hotkeys (Ctrl+Taste), Visualizer Container, Lightmode Fix & Standby Pure Black
+  - **⌨️ ETS2 In-Game Radio Hotkeys mit Strg (`Ctrl + <Taste>`) ([main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts), [CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Automatische Profil-Erkennung aus `controls.sii`**: Die im Euro Truck Simulator 2 festgelegten Radio-Tastenbelegungen (nächster Sender, vorheriger Sender, Radio lauter, Radio leiser) werden beim Start aus dem aktiven Profil ausgelesen und global mit vorangestelltem `Control+` registriert.
+    - **In-App & Globale Steuerung**:
+      - `Ctrl + BildAb` / `Ctrl + [` / `Ctrl + Ü`: Nächster Radiosender.
+      - `Ctrl + BildAuf` / `Ctrl + '` / `Ctrl + Ä`: Vorheriger Radiosender.
+      - `Ctrl + ]` / `Ctrl + +` / `Ctrl + NumpadAdd`: Lautstärke erhöhen (+5 %).
+      - `Ctrl + \\` / `Ctrl + #` / `Ctrl + NumpadSub`: Lautstärke verringern (-5 %).
+    - Funktioniert nahtlos sowohl global während der Fahrt als auch direkt bei fokussiertem CarPlay-Fenster.
+  - **📻 Fehlerbehebung Navigation in der Radiosender-Rasteransicht ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Reine 2-Spalten-Rasteransicht**: Der uneinheitliche Breakpoint `lg:grid-cols-3` wurde entfernt und durch ein sauberes, klares 2-Spalten-Layout ersetzt. Dadurch passen lange Sendernamen, Genre und Bitrate ohne unschöne Abkürzungen auf jede Karte.
+    - **Intelligente Cursor-Steuerung (Pfeiltasten / D-Pad)**:
+      - `Rechts`: Wechselt nun flüssig zur nächsten Karte (`0 -> 1 -> 2 -> 3...`), anstatt in der rechten Spalte hängenzubleiben.
+      - `Links`: Wechselt rückwärts zur vorherigen Karte (`3 -> 2 -> 1 -> 0`), und springt nur noch bei der allerersten Karte (`Index 0`) in die Seitenleiste. Ein versehentliches Verlassen der gesamten Liste beim Drücken von Links in der linken Spalte wurde vollständig behoben.
+      - `Runter` / `Hoch`: Springt präzise eine Zeile (+2 bzw. -2) nach unten oder oben, erreicht auch bei ungerader Senderanzahl verlässlich die letzte Karte und springt am Listenende direkt in das Player-Deck.
+    - **Live-Cursor & Auto-Scroll bei Sender-Hotkeys**: Beim Schalten durch die Sender mit `Ctrl + Taste` oder den Next/Prev-Hotkeys wird die neu aktive Karte in der Rasteransicht nun sofort visuell grün hervorgehoben (`ring-4 ring-emerald-400`) und automatisch weich ins Blickfeld gescrollt.
+    - **Konfliktfreies Next/Prev-Routing**: Wenn der Radio-Tab geöffnet ist, schalten die globalen `Next`- und `Prev`-Hotkeys nun verlässlich die Radiosender weiter, statt unerwünscht den Haupt-Tab (z. B. auf Frachtauftrag) umzuschalten.
+  - **📻 Intelligente Audio-Quellensteuerung & Standby-Lockscreen Anzeige ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Radio-Anzeige im Zündungs-Standby Screen**: Die Medien-Pille unter der Uhr zeigt nun auch ETS2 Live-Radio mit grünem Radio-Icon, Sendernamen und Genre an (`📻 Sendername — Genre`), anstatt den Radiostream zu ignorieren.
+    - **Nahtlose SMTC Player-Steuerung für Radio**:
+      - Wenn das Radio läuft oder pausiert wurde, bleibt die Quelle auf Live-Radio fixiert (`lastAudioSource`).
+      - Drücken auf `Play/Pause` stoppt und reaktiviert verlässlich das Radio, anstatt Spotify unerwünscht im Hintergrund zu starten.
+      - Drücken auf `Nächster` / `Vorheriger` schaltet nun auch im SMTC-Fenster sowie im Home-Widget direkt zum nächsten bzw. vorherigen Radiosender weiter.
+      - Album-Art und Senderlogo bleiben auch während einer Radiopause erhalten.
+  - **✨ Optisch hervorgehobener Visualizer-Container ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Der SMTC Audio-Frequenz-Visualizer ist jetzt in einen edlen Glassmorphism-Container gebettet (`backdrop-blur-xl`, abgerundete Ecken, sanfter Rand und weicher Tiefenschatten).
+    - Hebt den Frequenzverlauf klar und kontrastreich vom Hintergrund und Album-Cover ab (im Darkmode tiefschwarzes 60 % Glass, im Lightmode helles 80 % Glass).
+  - **☀️ Lightmode-Fix für Lokale Musik ("Keine lokalen Songs geladen") ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Fehlerhafte weiße Schrift auf weißem Hintergrund im Lightmode behoben.
+    - Überschrift erstrahlt jetzt in gut lesbarem Slate-900, die Beschreibung in Slate-600 und der Disc-Icon-Hintergrund in dezenter blauer Tönung.
+    - Der Button `+ MUSIKDATEIEN AUSWÄHLEN` besitzt nun einen garantierten, kontrastreichen Blau/Indigo-Verlauf mit weißem Text und deutlicher Klick-Rückmeldung.
+  - **🌑 Garantierter Tiefschwarz-Hintergrund im Standby-Modus ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Wenn die Zündung aus ist oder das CarPlay in den Standby schaltet (`isCarPlaySleeping`), erzwingen HTML, Body, Root und das äußere Fenster-Layout nun ausnahmslos `#000000` (`bg-black`), völlig unabhängig davon, ob in den App-Einstellungen Light- oder Darkmode aktiv ist.
+    - Verhindert jegliche weiße Ränder, Letterbox-Kanten oder Hintergrunddurchscheinungen bei abgeschalteter Zündung.
+
+## [1.7.91] - 2026-10-11
+
+### 📻 CarPlay Radio-Lautstärkeregler, Hotkey-Steuerung & Animiertes Floating Volume HUD
+  - **🎛️ Stufenloser Lautstärkeregler & Audio-Synchronisation ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **Integrierter Schieberegler im Radio Player-Deck**: Im aktiven Radio-Deck gibt es nun einen stufenlosen Lautstärkeregler (0–100 % in 5 %-Schritten) inklusive Prozentanzeige, Stummschalt-Toggle (`Volume2`/`VolumeX`), Leiser-Taste (`Minus`) und Lauter-Taste (`Plus`).
+    - **Lautstärke-Persistenz & Initialisierung**: Die Radio-Lautstärke wird in `localStorage` (`opc_carplay_radio_volume`) dauerhaft gespeichert (Standard: 50 %). Beim Laden neuer Streams oder Senderwechsel wird die Lautstärke sofort auf das `<audio>`-Element synchronisiert, wodurch das Übersteuern/Starten auf 100 % voller Windows-Lautstärke verhindert wird.
+    - **Intelligentes Mute-Restore**: Beim Entstummen wird automatisch der vorherige Lautstärkewert wiederhergestellt, anstatt auf einen festen Standardwert zu springen.
+  - **⌨️ Umfassende Hotkey- & D-Pad-Steuerung ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx), [main.ts](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/electron/main.ts))**:
+    - **Direkte In-App-Hotkeys**:
+      - `PageUp` / `]` / `AudioVolumeUp`: Lautstärke um +5 % erhöhen.
+      - `PageDown` / `[` / `AudioVolumeDown`: Lautstärke um -5 % verringern.
+      - `M` / `AudioVolumeMute`: Stummschaltung umschalten.
+    - **Globale Tastenkombinationen während der Fahrt**:
+      - `Ctrl+Alt+PageUp`: Radio lauter (+5 %).
+      - `Ctrl+Alt+PageDown`: Radio leiser (-5 %).
+      - `Ctrl+Alt+M`: Radio stummschalten / entstummen.
+      - Diese Tastenkürzel greifen global über Electron auch dann, wenn ETS2 / ATS aktiv im Vordergrund läuft.
+    - **Tastatur-Navigation im Player-Deck**: Alle Steuerlemente im Radio-Deck (Vorheriger, Start/Pause, Nächster, Mute, Leiser, Slider, Lauter) sind mit den Pfeiltasten und `Enter` nahtlos erreichbar und visuell hervorgehoben (`ring-2 ring-emerald-400`).
+  - **🔊 Elegantes Floating Volume HUD (Apple CarPlay Style) ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - Bei jeder Lautstärkeänderung (per Hotkey, Slider oder Tasten) blendet sich am oberen Bildschirmrand ein sanft animiertes iOS/CarPlay-Volume-HUD (`AnimatePresence` mit Spring-Animation) ein.
+    - Zeigt das aktuelle Status-Icon (`Volume2` / `VolumeX`), den exakten Prozentwert bzw. "STUMMGESCHALTET" und einen zweifarbigen Fortschrittsbalken mit weichem Farbverlauf, bevor es sich nach 1,5 Sekunden automatisch wieder ausblendet.
+  - **🛠️ Audio-Stille bei Radio-Streams behoben ([CarPlay.tsx](file:///c:/Users/Ally/Documents/Open%20Pipe%20Club/opc-app/src/pages/CarPlay.tsx))**:
+    - **CORS-Stummschaltung in WebAudio beseitigt**: Durch die Anbindung von `createMediaElementSource()` an das Radio-Audioelement schaltete Chromium externe Internet-Streams ohne CORS-Header stumm. Die Anbindung wurde für Radio-Streams entfernt und durch eine Schutzweiche abgesichert, sodass die Streams direkt und störungsfrei über die Soundkarte ausgegeben werden.
+    - **Automatische Entstummung**: Beim Starten eines Senders wird die Lautstärke automatisch auf mindestens 50 % hochgesetzt, falls der Regler zuvor versehentlich auf 0 % stand.
+
 ## [1.7.90] - 2026-10-10
 
 ### 🎵 Songwechsel-Animationen, Ultra-Low-Power Visualizer & App-Hintergrund im CarPlay App-Raster

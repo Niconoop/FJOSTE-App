@@ -2503,7 +2503,7 @@
     "gameName": "paldiski",
     "realName": "Paldiski",
     "country": "estonia",
-    "x": 42570.0,
+    "x": 42570,
     "y": 30.896,
     "z": -50011.949,
     "lat": 59.349089,
@@ -2843,7 +2843,7 @@
     "gameName": "riga",
     "realName": "Rīga (Riga)",
     "country": "latvia",
-    "x": 44678.0,
+    "x": 44678,
     "y": 6.779,
     "z": -37089.681,
     "lat": 56.949398,
@@ -3205,7 +3205,7 @@
     "country": "hungary",
     "x": 36881.333,
     "y": 26.723,
-    "z": 24569.0,
+    "z": 24569,
     "lat": 46.254631,
     "lng": 20.148602
   },
@@ -3728,5 +3728,25 @@
     "z": 17643.093,
     "lat": 47.374449,
     "lng": 8.541042
+  },
+  {
+    "gameName": "tlmphq",
+    "realName": "Truckline HQ",
+    "country": "germany",
+    "x": -6440.94,
+    "y": 0,
+    "z": -1887.5,
+    "lat": 50.7633,
+    "lng": 8.6311
+  },
+  {
+    "gameName": "truckersmp",
+    "realName": "TruckersMP HQ",
+    "country": "poland",
+    "x": 20421.28,
+    "y": 0,
+    "z": -1241.91,
+    "lat": 51.11,
+    "lng": 17.03
   }
 ]

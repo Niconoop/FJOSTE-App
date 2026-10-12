@@ -291,6 +291,23 @@ namespace OpenPipeClub {
                                     AppendJsonProp(_sb, "jobCancelled", jobCancelled);
 
                                     _sb.Append(',');
+                                    string trlId = GetString(_rawBuffer, 6920, 64);
+                                    bool isTrailerAttached = (_rawBuffer.Length > 6080 && _rawBuffer[6080] > 0) || 
+                                                             (trlId.Trim().Length > 0) || 
+                                                             (_rawBuffer.Length > 1611 && _rawBuffer[1611] > 0) || 
+                                                             _rawBuffer[1564] > 0;
+                                    AppendJsonProp(_sb, "trailerAttached", isTrailerAttached);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "trailerId", trlId);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "trailerLiftAxle", _rawBuffer.Length > 1611 && _rawBuffer[1611] > 0);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "liftAxle", _rawBuffer.Length > 1609 && _rawBuffer[1609] > 0);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "wipers", _rawBuffer[1577] > 0);
+                                    _sb.Append(',');
+                                    AppendJsonProp(_sb, "lightsParking", _rawBuffer[1582] > 0);
+                                    _sb.Append(',');
                                     AppendJsonProp(_sb, "parkBrake", _rawBuffer[1566] > 0);
                                     _sb.Append(',');
                                     AppendJsonProp(_sb, "blinkerLeftActive", _rawBuffer[1578] > 0);

@@ -428,7 +428,79 @@ const createArrowImage = (map: maplibregl.Map) => {
   }
 };
 
-function createHqLayers(sourceId: string, prefix: string) {
+const HQ_MAP_POIS_GEOJSON: GeoJSON.FeatureCollection = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [8.6311, 50.7633] },
+      properties: {
+        hqId: 'truckline',
+        name: 'Truckline HQ',
+        subtitle: 'Dillenburg (B255/A45)',
+        sprite: 'company',
+        poiType: 'company',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [8.6335, 50.7642] },
+      properties: {
+        hqId: 'truckline',
+        name: 'Truckline Werkstatt',
+        subtitle: 'Service',
+        sprite: 'service',
+        poiType: 'service',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [8.6288, 50.7622] },
+      properties: {
+        hqId: 'truckline',
+        name: 'Truckline Tankstelle',
+        subtitle: 'Fuel',
+        sprite: 'gas',
+        poiType: 'gas',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [17.03, 51.11] },
+      properties: {
+        hqId: 'truckersmp',
+        name: 'TruckersMP HQ',
+        subtitle: 'Wrocław',
+        sprite: 'company',
+        poiType: 'company',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [17.033, 51.112] },
+      properties: {
+        hqId: 'truckersmp',
+        name: 'TMP Service',
+        subtitle: 'Werkstatt',
+        sprite: 'service',
+        poiType: 'service',
+      },
+    },
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [17.027, 51.108] },
+      properties: {
+        hqId: 'truckersmp',
+        name: 'TMP Tankstelle',
+        subtitle: 'Fuel',
+        sprite: 'gas',
+        poiType: 'gas',
+      },
+    },
+  ],
+};
+
+function createHqGroundLayers(sourceId: string, prefix: string, defaultVis: 'visible' | 'none' = 'visible') {
   return [
     {
       id: `${prefix}-areas`,
@@ -436,19 +508,7 @@ function createHqLayers(sourceId: string, prefix: string) {
       source: sourceId,
       'source-layer': 'ets2',
       filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'mapArea'], ['!=', ['get', 'hidden'], true]],
-      layout: { 'fill-sort-key': ['get', 'zIndex'], 'visibility': 'none' },
-      paint: {
-        'fill-color': '#1e293b',
-        'fill-opacity': 0.95,
-      },
-    },
-    {
-      id: `${prefix}-prefabs-base`,
-      type: 'fill',
-      source: sourceId,
-      'source-layer': 'ets2',
-      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
-      layout: { 'visibility': 'none' },
+      layout: { 'fill-sort-key': ['get', 'zIndex'], 'visibility': defaultVis },
       paint: {
         'fill-color': '#1e293b',
         'fill-opacity': 0.95,
@@ -466,9 +526,8 @@ function createHqLayers(sourceId: string, prefix: string) {
         ['!=', ['get', 'hidden'], true],
         ['!=', ['get', 'roadType'], 'train'],
         ['!=', ['get', 'roadType'], 'tram'],
-        ['!=', ['get', 'roadType'], 'unknown'],
       ],
-      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': 'none' },
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': defaultVis },
       paint: {
         'line-color': '#1e293b',
         'line-gap-width': [
@@ -483,12 +542,24 @@ function createHqLayers(sourceId: string, prefix: string) {
       },
     },
     {
+      id: `${prefix}-prefabs-base`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2',
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
+      layout: { 'visibility': defaultVis },
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': 0.95,
+      },
+    },
+    {
       id: `${prefix}-prefabs`,
       type: 'fill',
       source: sourceId,
       'source-layer': 'ets2',
       filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'prefab'], ['!=', ['get', 'hidden'], true]],
-      layout: { 'visibility': 'none' },
+      layout: { 'visibility': defaultVis },
       paint: {
         'fill-color': '#475569',
         'fill-opacity': 0.95,
@@ -506,9 +577,8 @@ function createHqLayers(sourceId: string, prefix: string) {
         ['!=', ['get', 'hidden'], true],
         ['!=', ['get', 'roadType'], 'train'],
         ['!=', ['get', 'roadType'], 'tram'],
-        ['!=', ['get', 'roadType'], 'unknown'],
       ],
-      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': 'none' },
+      layout: { 'line-cap': 'round', 'line-join': 'bevel', 'visibility': defaultVis },
       paint: {
         'line-color': [
           'match', ['get', 'roadType'],
@@ -525,19 +595,117 @@ function createHqLayers(sourceId: string, prefix: string) {
       },
     },
     {
-      id: `${prefix}-pois`,
+      id: `${prefix}-footprints`,
+      type: 'fill',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      layout: { 'visibility': defaultVis },
+      paint: {
+        'fill-color': '#1e293b',
+        'fill-opacity': ['step', ['zoom'], 1, 9, 0.85],
+      },
+    },
+    {
+      id: `${prefix}-extrusions`,
+      type: 'fill-extrusion',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8.5,
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['==', ['get', 'type'], 'footprint']],
+      layout: { 'visibility': defaultVis },
+      paint: {
+        'fill-extrusion-color': '#2b3648',
+        'fill-extrusion-height': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          9,
+          ['*', 10, ['get', 'height']],
+          13,
+          ['*', 20, ['get', 'height']],
+        ],
+        'fill-extrusion-opacity': 0.8,
+        'fill-extrusion-vertical-gradient': true,
+      },
+    },
+  ];
+}
+
+function createHqSymbolLayers(sourceId: string, prefix: string, defaultVis: 'visible' | 'none' = 'visible') {
+  return [
+    {
+      id: `${prefix}-traffic`,
       type: 'symbol',
       source: sourceId,
       'source-layer': 'ets2',
+      minzoom: 10,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['==', ['get', 'type'], 'traffic']
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': false,
+        'icon-ignore-placement': false,
+        'symbol-sort-key': [
+          'match', ['get', 'sprite'],
+          'railcrossing', 1,
+          'roadwork', 2,
+          'trafficlight', 3,
+          10
+        ],
+        'icon-padding': 2,
+        'icon-size': [
+          'interpolate', ['linear'], ['zoom'],
+          10, 0.55,
+          12, 0.85,
+          14, 1.2
+        ],
+        'visibility': defaultVis,
+      },
+    },
+    {
+      id: `${prefix}-pois`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
       minzoom: 8,
-      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi']],
+      filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'type'], 'poi'], ['!=', ['get', 'poiType'], 'company']],
       layout: {
         'icon-image': '{sprite}',
         'icon-allow-overlap': true,
         'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.65, 11, 1.0, 14, 1.4],
-        'visibility': 'none',
+        'visibility': defaultVis,
       },
     },
+    {
+      id: `${prefix}-companies`,
+      type: 'symbol',
+      source: sourceId,
+      'source-layer': 'ets2_hq',
+      minzoom: 8,
+      filter: [
+        'all',
+        ['==', ['geometry-type'], 'Point'],
+        ['any', ['==', ['get', 'type'], 'company'], ['==', ['get', 'poiType'], 'company']]
+      ],
+      layout: {
+        'icon-image': '{sprite}',
+        'icon-allow-overlap': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.7, 11, 1.1, 14, 1.5],
+        'visibility': defaultVis,
+      },
+    },
+  ];
+}
+
+function createHqLayers(sourceId: string, prefix: string, defaultVis: 'visible' | 'none' = 'visible') {
+  return [
+    ...createHqGroundLayers(sourceId, prefix, defaultVis),
+    ...createHqSymbolLayers(sourceId, prefix, defaultVis),
   ];
 }
 
@@ -564,10 +732,12 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
     'truckline-hq': {
       type: 'vector',
       url: `pmtiles://${tileRoot}/ets2-truckline-hq.pmtiles`,
+      maxzoom: 15,
     },
     'truckersmp-hq': {
       type: 'vector',
       url: `pmtiles://${tileRoot}/ets2-truckersmp-hq.pmtiles`,
+      maxzoom: 15,
     },
   };
 
@@ -816,6 +986,9 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
           'line-dasharray': [3, 2],
         },
       },
+      // HQ Ground Layers (Areas, Prefabs, 3D Buildings & Roads - rendered BEFORE POIs so roads never cover icons)
+      ...createHqGroundLayers('truckline-hq', 'tl'),
+      ...createHqGroundLayers('truckersmp-hq', 'tmp'),
       {
         id: 'ets2-pois',
         type: 'symbol',
@@ -862,6 +1035,9 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
           ]
         }
       },
+      // HQ Symbol Layers (Traffic, POIs, Companies - rendered alongside base map POIs/companies)
+      ...createHqSymbolLayers('truckline-hq', 'tl'),
+      ...createHqSymbolLayers('truckersmp-hq', 'tmp'),
       // Traffic Features (Ampeln / Traffic Lights, Baustellen, Bahnübergänge)
       {
         id: 'ets2-traffic',
@@ -915,8 +1091,6 @@ function createEts2Style(enableTerrain3D: boolean = false): maplibregl.StyleSpec
           'text-halo-width': 1.5,
         },
       },
-      ...createHqLayers('truckline-hq', 'tl'),
-      ...createHqLayers('truckersmp-hq', 'tmp'),
     ],
   } as any;
 }
@@ -1057,8 +1231,8 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
     if (!mapRef.current || !mapReady) return;
     const showTruckline = hqOverlay === 'truckline' || hqOverlay === 'all';
     const showTruckersmp = hqOverlay === 'truckersmp' || hqOverlay === 'all';
-    const tlLayers = ['tl-areas', 'tl-prefabs-base', 'tl-roads-casing', 'tl-prefabs', 'tl-roads', 'tl-pois'];
-    const tmpLayers = ['tmp-areas', 'tmp-prefabs-base', 'tmp-roads-casing', 'tmp-prefabs', 'tmp-roads', 'tmp-pois'];
+    const tlLayers = ['tl-areas', 'tl-prefabs-base', 'tl-roads-casing', 'tl-prefabs', 'tl-roads', 'tl-pois', 'tl-companies'];
+    const tmpLayers = ['tmp-areas', 'tmp-prefabs-base', 'tmp-roads-casing', 'tmp-prefabs', 'tmp-roads', 'tmp-pois', 'tmp-companies'];
     for (const lid of tlLayers) {
       if (mapRef.current.getLayer(lid)) {
         mapRef.current.setLayoutProperty(lid, 'visibility', showTruckline ? 'visible' : 'none');
@@ -1068,6 +1242,23 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       if (mapRef.current.getLayer(lid)) {
         mapRef.current.setLayoutProperty(lid, 'visibility', showTruckersmp ? 'visible' : 'none');
       }
+    }
+
+    const activeHqs: string[] = [];
+    if (showTruckline) activeHqs.push('truckline');
+    if (showTruckersmp) activeHqs.push('truckersmp');
+    const filter = activeHqs.length === 2
+      ? ['has', 'hqId']
+      : activeHqs.length === 1
+        ? ['==', ['get', 'hqId'], activeHqs[0]]
+        : ['==', ['get', 'hqId'], 'none'];
+
+    if (mapRef.current.getLayer('hq-pois-icons')) {
+      mapRef.current.setFilter('hq-pois-icons', filter as any);
+      mapRef.current.setLayoutProperty('hq-pois-icons', 'visibility', activeHqs.length > 0 ? 'visible' : 'none');
+    }
+    if (mapRef.current.getLayer('hq-pois-labels')) {
+      mapRef.current.removeLayer('hq-pois-labels');
     }
   }, [hqOverlay, mapReady]);
 
@@ -1344,7 +1535,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       center: [1.85, 50.95],
       zoom: currentZoomRef.current,
       minZoom: 4,
-      maxZoom: 13,
+      maxZoom: 16,
       bearing: 0,
       pitch: pitch ?? 38,
       attributionControl: false,
@@ -1360,7 +1551,7 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
       pixelRatio: Math.min(window.devicePixelRatio || 1, 1.25),
     });
     map.setMinZoom(4);
-    map.setMaxZoom(13);
+    map.setMaxZoom(16);
 
     map.on('load', () => {
       try {
@@ -1452,6 +1643,38 @@ const GameMapWidget = forwardRef<GameMapWidgetHandle, GameMapWidgetProps>(({
               'text-halo-blur': 0.5,
             },
           });
+        }
+
+        // Register HQ POIs & Companies source & symbol layers
+        if (!map.getSource('hq-pois-source')) {
+          map.addSource('hq-pois-source', {
+            type: 'geojson',
+            data: HQ_MAP_POIS_GEOJSON,
+          });
+
+          map.addLayer({
+            id: 'hq-pois-icons',
+            type: 'symbol',
+            source: 'hq-pois-source',
+            minzoom: 5.5,
+            layout: {
+              'icon-image': '{sprite}',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+              'icon-size': [
+                'interpolate', ['linear'], ['zoom'],
+                5.5, 0.65,
+                8, 0.95,
+                11, 1.3,
+                14, 1.6,
+              ],
+            },
+          });
+
+          // Remove legacy hq-pois-labels if previously cached in map style
+          if (map.getLayer('hq-pois-labels')) {
+            map.removeLayer('hq-pois-labels');
+          }
         }
 
         if (enableTerrain3D) {

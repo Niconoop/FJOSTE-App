@@ -16,6 +16,8 @@ let _allCities: Ets2City[] = Array.isArray(fullCitiesData) ? (fullCitiesData as 
 let _companies: any[] = Array.isArray(europeCompaniesData) ? (europeCompaniesData as any[]) : [];
 
 export const COMMON_CITIES: Ets2City[] = [
+  { gameName: "tlmphq", realName: "Truckline HQ", country: "germany", x: -6440.94, z: -1887.50, lat: 50.7633, lng: 8.6311 },
+  { gameName: "truckersmp", realName: "TruckersMP HQ", country: "poland", x: 20421.28, z: -1241.91, lat: 51.11, lng: 17.03 },
   { gameName: "berlin", realName: "Berlin", country: "germany", x: 10070.25, z: -9774.412, lat: 52.517389, lng: 13.395131 },
   { gameName: "hamburg", realName: "Hamburg", country: "germany", x: -1989.667, z: -17284.371, lat: 53.551086, lng: 9.993682 },
   { gameName: "munich", realName: "München", country: "germany", x: 1063.7, z: 12175.66, lat: 48.135124, lng: 11.581981 },
@@ -158,6 +160,58 @@ function normalizeCitySearchStr(s: string): string {
     .trim();
 }
 
+export interface HqDestination {
+  id: string;
+  type: 'city';
+  name: string;
+  realName: string;
+  gameName: string;
+  cityName: string;
+  companyName: string;
+  country: string;
+  x: number;
+  z: number;
+  lat: number;
+  lng: number;
+  subtitle: string;
+  keywords: string[];
+}
+
+export const HQ_DESTINATIONS: HqDestination[] = [
+  {
+    id: 'truckline_hq',
+    type: 'city',
+    name: 'Truckline HQ',
+    realName: 'Truckline HQ',
+    gameName: 'tlmphq',
+    cityName: 'Truckline HQ',
+    companyName: 'Truckline Logistik',
+    country: 'germany',
+    x: -6440.94,
+    z: -1887.50,
+    lat: 50.7633,
+    lng: 8.6311,
+    subtitle: 'Stadt • DEUTSCHLAND',
+    keywords: ['truckline', 'truckline hq', 'tlmp', 'tlmphq', 'dillenburg', 'truckline logistik', 'tl_dillenburg'],
+  },
+  {
+    id: 'truckersmp_hq',
+    type: 'city',
+    name: 'TruckersMP HQ',
+    realName: 'TruckersMP HQ',
+    gameName: 'truckersmp',
+    cityName: 'TruckersMP HQ',
+    companyName: 'TruckersMP HQ',
+    country: 'poland',
+    x: 20421.28,
+    z: -1241.91,
+    lat: 51.11,
+    lng: 17.03,
+    subtitle: 'Stadt • POLEN',
+    keywords: ['truckersmp', 'truckersmp hq', 'tmp', 'tmp hq', 'wroclaw', 'wrocław'],
+  },
+];
+
 /**
  * Find a city by name (case-insensitive, matches gameName OR realName, strips '(City)', '(Road)', '(Port)', '(POI)', '(HQ)').
  */
@@ -169,6 +223,25 @@ export function findCity(name: string): Ets2City | undefined {
   if (CITY_NAME_ALIASES[cleanName]) {
     cleanName = CITY_NAME_ALIASES[cleanName];
   }
+
+  // Check HQ destinations first
+  const hqMatch = HQ_DESTINATIONS.find(hq => 
+    hq.keywords.some(k => cleanName.includes(k) || k.includes(cleanName)) ||
+    cleanName === normalizeCitySearchStr(hq.cityName) ||
+    cleanName === normalizeCitySearchStr(hq.name)
+  );
+  if (hqMatch) {
+    return {
+      gameName: hqMatch.gameName,
+      realName: hqMatch.name,
+      country: hqMatch.country,
+      x: hqMatch.x,
+      z: hqMatch.z,
+      lat: hqMatch.lat,
+      lng: hqMatch.lng,
+    };
+  }
+
   const cleanWithUnderscore = cleanName.replace(/[\s-]+/g, '_');
 
   const pool = (_allCities && _allCities.length > 0) ? _allCities : COMMON_CITIES;
@@ -258,11 +331,38 @@ function normaliseCityName(input: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
+export const HQ_COMPANIES = [
+  { name: 'Truckline Logistik', token: 'truckline_logistik', city: 'tlmphq', cityName: 'Truckline HQ', x: -5911.0, z: -1160.0 },
+  { name: 'Sanbuilders Baustelle', token: 'sanbuild_bas', city: 'tlmphq', cityName: 'Truckline HQ', x: -5841.80, z: -1198.72 },
+  { name: 'EuroAcres Dillenburg', token: 'euroacres', city: 'tlmphq', cityName: 'Truckline HQ', x: -6361.72, z: -1127.11 },
+  { name: 'IKA Bohag Dillenburg', token: 'ika_bohag', city: 'tlmphq', cityName: 'Truckline HQ', x: -6182.49, z: -1301.98 },
+  { name: 'Sanbuilders Halle', token: 'sanbuild_hal', city: 'tlmphq', cityName: 'Truckline HQ', x: -8126.45, z: -3209.80 },
+  { name: 'Sanbuilders Zementwerk', token: 'sanbuild_cem', city: 'tlmphq', cityName: 'Truckline HQ', x: -5922.03, z: -4952.97 },
+  { name: 'Subse', token: 'subse', city: 'truckersmp', cityName: 'TruckersMP HQ', x: 20627.57, z: -1022.54 },
+  { name: 'ACC', token: 'acc', city: 'truckersmp', cityName: 'TruckersMP HQ', x: 20887.94, z: -1219.32 },
+  { name: 'Cargotras', token: 'cargotras', city: 'truckersmp', cityName: 'TruckersMP HQ', x: 21105.87, z: -846.07 },
+];
+
 export function findCompany(name: string, cityName?: string): { name: string; x: number; z: number } | undefined {
   const cleanName = normaliseCompanyName(name);
   const cleanCity = cityName ? normaliseCityName(cityName) : '';
 
   if (!cleanName) return undefined;
+
+  // Check HQ companies first
+  const hqComp = HQ_COMPANIES.find(c => {
+    const tokenClean = normaliseCompanyName(c.token);
+    const nameClean = normaliseCompanyName(c.name);
+    const cityMatches = !cleanCity || normaliseCityName(c.city) === cleanCity || normaliseCityName(c.cityName) === cleanCity;
+    return cityMatches && (cleanName === tokenClean || cleanName === nameClean || cleanName.includes(tokenClean) || tokenClean.includes(cleanName));
+  });
+  if (hqComp) {
+    return {
+      name: hqComp.name,
+      x: hqComp.x,
+      z: hqComp.z,
+    };
+  }
 
   const companies = _companies;
   if (!companies.length) return undefined;
@@ -316,6 +416,45 @@ export function searchDestinations(query: string): DestinationSearchResult[] {
   const results: DestinationSearchResult[] = [];
   const seen = new Set<string>();
 
+  // 0. Search HQs (Prioritized on top as cities)
+  for (const hq of HQ_DESTINATIONS) {
+    const matchesHq = hq.keywords.some(k => k.includes(q) || q.includes(k)) ||
+                      hq.name.toLowerCase().includes(q) ||
+                      hq.cityName.toLowerCase().includes(q) ||
+                      hq.subtitle.toLowerCase().includes(q);
+    if (matchesHq) {
+      const key = `city:${hq.gameName}`;
+      seen.add(key);
+      results.push({
+        type: 'city',
+        title: hq.name,
+        subtitle: hq.subtitle,
+        cityName: hq.name,
+        x: hq.x,
+        z: hq.z,
+      });
+    }
+  }
+
+  // 0.5. Search HQ Companies
+  for (const hc of HQ_COMPANIES) {
+    const hcKey = `company:${hc.token}:${hc.city}`;
+    if (seen.has(hcKey)) continue;
+    const fullStr = `${hc.name} ${hc.token} ${hc.cityName} ${hc.city}`.toLowerCase();
+    if (hc.name.toLowerCase().includes(q) || hc.token.toLowerCase().includes(q) || hc.cityName.toLowerCase().includes(q) || fullStr.includes(q)) {
+      seen.add(hcKey);
+      results.push({
+        type: 'company',
+        title: hc.name,
+        subtitle: `Firma in ${hc.cityName}`,
+        cityName: hc.cityName,
+        companyName: hc.token,
+        x: hc.x,
+        z: hc.z,
+      });
+    }
+  }
+
   // 1. Search Companies
   const companies = _companies;
   for (const comp of companies) {
@@ -327,12 +466,14 @@ export function searchDestinations(query: string): DestinationSearchResult[] {
     const fullStr = `${compToken} ${compCity}`.toLowerCase();
     if (compToken.toLowerCase().includes(q) || compCity.toLowerCase().includes(q) || fullStr.includes(q)) {
       seen.add(key);
-      const displayCity = compCity ? compCity.charAt(0).toUpperCase() + compCity.slice(1) : '';
+      let displayCity = compCity ? compCity.charAt(0).toUpperCase() + compCity.slice(1) : '';
+      if (compCity.toLowerCase() === 'tlmphq') displayCity = 'Truckline HQ';
+      if (compCity.toLowerCase() === 'truckersmp') displayCity = 'TruckersMP HQ';
       results.push({
         type: 'company',
         title: compToken.toUpperCase(),
         subtitle: displayCity ? `Firma in ${displayCity}` : 'Betrieb / Firma',
-        cityName: compCity,
+        cityName: displayCity || compCity,
         companyName: compToken,
         x: comp.x,
         z: comp.y ?? comp.z ?? 0,

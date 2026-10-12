@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { API_URL, getAvatarUrl } from '../config';
-import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon, ChevronLeft, ChevronRight, Activity, ShieldCheck, LayoutGrid, Send, Users, CalendarDays, ExternalLink, MessageCircle } from 'lucide-react';
+import { Home, Music, Briefcase, Truck, Settings, Play, Pause, SkipForward, SkipBack, Compass, AlertTriangle, Battery, Thermometer, Gauge, Fuel, MapPin, Navigation, Volume2, VolumeX, Info, Wifi, WifiOff, MessageSquare, Newspaper, Calendar, Clock, Zap, Wrench, Search, X, Check, CheckCircle, Monitor, Disc, Radio, Upload, ListMusic, Plus, Minus, RefreshCw, ArrowLeft, Keyboard, Delete, CornerDownLeft, Map as MapIcon, ChevronLeft, ChevronRight, Activity, ShieldCheck, LayoutGrid, Send, Users, CalendarDays, ExternalLink, MessageCircle, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import SpotifyWidget from '../components/SpotifyWidget';
 import GameMapWidget, { type GameMapWidgetHandle } from '../components/GameMapWidget';
+import { TruckSideView } from '../components/TruckSideView';
 import { searchDestinations, findCompany, findCity, type DestinationSearchResult } from '../data/ets2Cities';
 import { type SpeedcamAlertInfo } from '../data/ets2Speedcams';
 import { TrafficLightWidget } from '../components/TrafficLightWidget';
@@ -56,6 +57,8 @@ interface Telemetry {
   lightsBeamHigh?: boolean;
   lightsHazard?: boolean;
   lightsBeacon?: boolean;
+  lightsParking?: boolean;
+  wipers?: boolean;
   fuelWarning?: boolean;
   airPressureWarning?: boolean;
   oilPressureWarning?: boolean;
@@ -63,6 +66,7 @@ interface Telemetry {
   batteryVoltageWarning?: boolean;
   electricEnabled?: boolean;
   engineEnabled?: boolean;
+  trailerAttached?: boolean;
   routeWaypoints?: [number, number, number][] | [number, number][];
   nearbyVehicles?: any[];
   semaphores?: any[];
@@ -94,6 +98,9 @@ interface OverlaySettings {
     prev: string;
     home: string;
     playPause: string;
+    volumeUp?: string;
+    volumeDown?: string;
+    volumeMute?: string;
   };
   carPlayNotifySpeed?: boolean;
   carPlayNotifyFuel?: boolean;
@@ -120,11 +127,14 @@ const DEFAULT_SETTINGS: OverlaySettings = {
     next: 'Ctrl+Alt+Right',
     prev: 'Ctrl+Alt+Left',
     home: 'Ctrl+Alt+H',
-    playPause: 'Ctrl+Alt+Space'
+    playPause: 'Ctrl+Alt+Space',
+    volumeUp: 'Ctrl+Alt+PageUp',
+    volumeDown: 'Ctrl+Alt+PageDown',
+    volumeMute: 'Ctrl+Alt+M'
   }
 };
 
-const TABS = ['home', 'map', 'music', 'job', 'truck', 'settings', 'chat', 'events', 'apps'] as const;
+const TABS = ['home', 'map', 'music', 'job', 'truck', 'control', 'settings', 'chat', 'events', 'apps'] as const;
 type Tab = typeof TABS[number];
 export type RecentAppId = Tab | 'music-windows' | 'music-radio' | 'music-local';
 
@@ -407,6 +417,11 @@ export async function ensureSystemAudioVisualizerSource() {
 
 export function connectAudioElementToVisualizer(audio: HTMLAudioElement | null) {
   if (!audio || typeof window === 'undefined') return;
+  // CRITICAL: Cross-origin audio (e.g. internet radio streams) will be completely SILENCED
+  // by Chromium if passed to createMediaElementSource() without CORS headers from the stream host!
+  if (audio.src && (audio.src.startsWith('http://') || audio.src.startsWith('https://')) && !audio.src.startsWith(window.location.origin)) {
+    return;
+  }
   const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioCtxClass) return;
 
@@ -425,12 +440,131 @@ export function connectAudioElementToVisualizer(audio: HTMLAudioElement | null) 
     if (!attachedAudioNodes.has(audio)) {
       const source = globalAudioCtx.createMediaElementSource(audio);
       source.connect(globalAnalyser);
-      globalAnalyser.connect(globalAudioCtx.destination);
+      // Connect source directly to destination so audio plays without passing through the global analyser.
+      // NEVER connect globalAnalyser to destination, as systemAudioSourceNode connects to it and would create an echo!
+      source.connect(globalAudioCtx.destination);
       attachedAudioNodes.add(audio);
     }
   } catch (err) {
     // Already attached or cross-origin restrictions
   }
+}
+
+/**
+ * Extracts embedded album artwork (ID3v2 APIC for MP3, METADATA_BLOCK_PICTURE for FLAC) from audio files.
+ * Reads only the first 2MB for near-instant execution (<5ms per song).
+ */
+export async function extractAudioCover(file: File): Promise<string | undefined> {
+  try {
+    const slice = file.slice(0, 2 * 1024 * 1024);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    // 1. Check ID3v2 (MP3)
+    if (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+      const version = bytes[3];
+      const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+      let pos = 10;
+      const end = Math.min(tagSize + 10, bytes.length - 10);
+
+      while (pos < end) {
+        if (bytes[pos] === 0) break; // Padding
+        let frameId = '';
+        let frameSize = 0;
+        let headerSize = 10;
+
+        if (version >= 3) {
+          frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+          frameSize = version === 4
+            ? ((bytes[pos + 4] & 0x7f) << 21) | ((bytes[pos + 5] & 0x7f) << 14) | ((bytes[pos + 6] & 0x7f) << 7) | (bytes[9] & 0x7f)
+            : (bytes[pos + 4] << 24) | (bytes[pos + 5] << 16) | (bytes[pos + 6] << 8) | bytes[pos + 7];
+        } else if (version === 2) {
+          headerSize = 6;
+          frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2]);
+          frameSize = (bytes[pos + 3] << 16) | (bytes[pos + 4] << 8) | bytes[pos + 5];
+        }
+
+        if (frameSize <= 0 || pos + headerSize + frameSize > bytes.length) break;
+
+        if (frameId === 'APIC' || frameId === 'PIC') {
+          let p = pos + headerSize;
+          const frameEnd = p + frameSize;
+          const encoding = bytes[p++];
+          
+          let mime = 'image/jpeg';
+          if (frameId === 'APIC') {
+            let mimeStr = '';
+            while (p < frameEnd && bytes[p] !== 0) {
+              mimeStr += String.fromCharCode(bytes[p++]);
+            }
+            p++; // Skip null terminator
+            if (mimeStr) mime = mimeStr.toLowerCase();
+          } else {
+            // ID3v2.2 PIC format: 3-char image format
+            const fmt = String.fromCharCode(bytes[p++], bytes[p++], bytes[p++]).toLowerCase();
+            mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
+          }
+
+          p++; // Skip picture type (1 byte)
+
+          // Skip description null terminator based on encoding
+          if (encoding === 1 || encoding === 2) {
+            // UTF-16: terminated by 0x00 0x00
+            while (p + 1 < frameEnd && !(bytes[p] === 0 && bytes[p + 1] === 0)) p += 2;
+            p += 2;
+          } else {
+            // ISO-8859-1 or UTF-8: terminated by 0x00
+            while (p < frameEnd && bytes[p] !== 0) p++;
+            p++;
+          }
+
+          if (p < frameEnd) {
+            const picBytes = bytes.slice(p, frameEnd);
+            const blob = new Blob([picBytes], { type: mime });
+            return URL.createObjectURL(blob);
+          }
+        }
+
+        pos += headerSize + frameSize;
+      }
+    }
+
+    // 2. Check FLAC
+    if (bytes[0] === 0x66 && bytes[1] === 0x4c && bytes[2] === 0x61 && bytes[3] === 0x43) {
+      let offset = 4;
+      while (offset < bytes.length - 4) {
+        const header = bytes[offset];
+        const isLast = (header & 0x80) !== 0;
+        const blockType = header & 0x7f;
+        const blockSize = (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+
+        if (blockType === 6) { // PICTURE block
+          let p = offset + 4;
+          p += 4; // Skip picture type (4 bytes)
+          const mimeLen = (bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3];
+          p += 4;
+          let mime = '';
+          for (let i = 0; i < mimeLen; i++) mime += String.fromCharCode(bytes[p++]);
+          const descLen = (bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3];
+          p += 4 + descLen;
+          p += 16; // Skip width (4), height (4), depth (4), colors (4)
+          const dataLen = (bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3];
+          p += 4;
+          if (p + dataLen <= bytes.length) {
+            const picBytes = bytes.slice(p, p + dataLen);
+            const blob = new Blob([picBytes], { type: mime || 'image/jpeg' });
+            return URL.createObjectURL(blob);
+          }
+        }
+
+        offset += 4 + blockSize;
+        if (isLast) break;
+      }
+    }
+  } catch (err) {
+    console.warn('Cover extraction failed for file:', file.name, err);
+  }
+  return undefined;
 }
 
 // --- ULTRA-LIGHTWEIGHT GPU-ACCELERATED HTML5 CANVAS AUDIO VISUALIZER (0% CPU, 0 REACT RENDERS) ---
@@ -505,8 +639,9 @@ const SMTCVisualizer: React.FC<{ isPlaying: boolean; barsCount?: number; classNa
         return;
       }
 
-      // Throttle to ~32 fps for minimal CPU/GPU load
-      if (time - lastTime > 31) {
+      // Adaptive frame throttling: ~32 fps (31ms) during active playback, ~10 fps (95ms) when audio is idle/resting
+      const requiredDelta = isResting ? 95 : 31;
+      if (time - lastTime > requiredDelta) {
         lastTime = time;
 
         let hasRealAudio = false;
@@ -687,6 +822,8 @@ export default function CarPlayPage() {
   const [isBlackout, setIsBlackout] = useState<boolean>(false);
   const { appearance } = useTheme();
   const [telemetry, setTelemetry] = useState<Telemetry>({ connected: false } as Telemetry);
+  const telemetryRef = useRef<Telemetry>(telemetry);
+  telemetryRef.current = telemetry;
   const [media, setMedia] = useState<SmtcData | null>(null);
   const [settings, setSettings] = useState<OverlaySettings>(DEFAULT_SETTINGS);
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -730,7 +867,7 @@ export default function CarPlayPage() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const valid = parsed.filter(t => [
             'map', 'music', 'music-windows', 'music-radio', 'music-local',
-            'job', 'truck', 'settings', 'chat', 'events'
+            'job', 'truck', 'control', 'settings', 'chat', 'events'
           ].includes(t));
           if (valid.length >= 3) return valid.slice(0, 3) as RecentAppId[];
         }
@@ -770,6 +907,7 @@ export default function CarPlayPage() {
       } catch (e) {}
       return updated;
     });
+    setSidebarIndex(1);
   }, [musicSubTab]);
 
   const handleAndroidAutoMenuButton = useCallback(() => {
@@ -786,7 +924,6 @@ export default function CarPlayPage() {
     }
   }, [activeTab, openApp]);
   const [timeString, setTimeString] = useState('12:00');
-  const [standbyTick, setStandbyTick] = useState<number>(0);
 
   // Synchronized map zoom level across all CarPlay map views (persisted in localStorage)
   const [carPlayMapZoom, setCarPlayMapZoom] = useState<number>(() => {
@@ -892,7 +1029,7 @@ export default function CarPlayPage() {
       const saved = localStorage.getItem('opc_carplay_truck_page');
       if (saved) {
         const p = parseInt(saved, 10);
-        if (p >= 0 && p <= 2) return p;
+        if (p >= 0 && p <= 3) return p;
       }
     } catch (e) {}
     return 0;
@@ -923,7 +1060,7 @@ export default function CarPlayPage() {
   }, [settingsPage]);
 
   // Local Music Player State
-  const [localTracks, setLocalTracks] = useState<{ id: string; name: string; url: string; file: File }[]>([]);
+  const [localTracks, setLocalTracks] = useState<{ id: string; name: string; url: string; file: File; coverUrl?: string }[]>([]);
   const [currentLocalIndex, setCurrentLocalIndex] = useState<number>(0);
   const [isLocalPlaying, setIsLocalPlaying] = useState<boolean>(false);
   const [localProgress, setLocalProgress] = useState<number>(0);
@@ -937,7 +1074,61 @@ export default function CarPlayPage() {
   const [radioStations, setRadioStations] = useState<RadioStation[]>(DEFAULT_ETS2_STATIONS);
   const [activeRadio, setActiveRadio] = useState<RadioStation | null>(null);
   const [isRadioPlaying, setIsRadioPlaying] = useState<boolean>(false);
-  const [radioVolume, setRadioVolume] = useState<number>(0.8);
+  const [lastAudioSource, setLastAudioSource] = useState<'smtc' | 'radio' | 'local'>('smtc');
+  const [radioVolume, setRadioVolume] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('opc_carplay_radio_volume');
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+      }
+    } catch (e) {}
+    return 0.5;
+  });
+  const prevRadioVolumeRef = useRef<number>(0.5);
+  const [volumeHud, setVolumeHud] = useState<{ show: boolean; volume: number; isMuted: boolean } | null>(null);
+  const volumeHudTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerVolumeHud = useCallback((vol: number, isMuted: boolean) => {
+    setVolumeHud({ show: true, volume: vol, isMuted });
+    if (volumeHudTimerRef.current) clearTimeout(volumeHudTimerRef.current);
+    volumeHudTimerRef.current = setTimeout(() => {
+      setVolumeHud(null);
+    }, 1500);
+  }, []);
+
+  const adjustRadioVolume = useCallback((delta: number) => {
+    setRadioVolume((prev) => {
+      let next = Math.round((prev + delta) * 100) / 100;
+      next = Math.max(0, Math.min(1, next));
+      if (next > 0) prevRadioVolumeRef.current = next;
+      if (radioAudioRef.current) {
+        radioAudioRef.current.volume = next;
+      }
+      try { localStorage.setItem('opc_carplay_radio_volume', String(next)); } catch (e) {}
+      triggerVolumeHud(next, next === 0);
+      return next;
+    });
+  }, [triggerVolumeHud]);
+
+  const toggleMuteRadio = useCallback(() => {
+    setRadioVolume((prev) => {
+      let next: number;
+      if (prev > 0) {
+        prevRadioVolumeRef.current = prev;
+        next = 0;
+      } else {
+        next = prevRadioVolumeRef.current > 0 ? prevRadioVolumeRef.current : 0.5;
+      }
+      if (radioAudioRef.current) {
+        radioAudioRef.current.volume = next;
+      }
+      try { localStorage.setItem('opc_carplay_radio_volume', String(next)); } catch (e) {}
+      triggerVolumeHud(next, next === 0);
+      return next;
+    });
+  }, [triggerVolumeHud]);
+
   const [radioSearch, setRadioSearch] = useState<string>('');
   const [selectedRadioGenre, setSelectedRadioGenre] = useState<string>('all');
   const [radioSongTitle, setRadioSongTitle] = useState<string | null>(null);
@@ -954,6 +1145,7 @@ export default function CarPlayPage() {
 
     let isMounted = true;
     const updateMetadata = async () => {
+      if (isCarPlaySleepingRef.current) return;
       try {
         const api = (window as any).electronAPI;
         let res: any = null;
@@ -1052,19 +1244,27 @@ export default function CarPlayPage() {
   }, [contentIndex, activeTab, focusZone]);
 
   // Local Audio Handlers
-  const handleLocalFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLocalFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const files = Array.from(e.target.files);
-    const newTracks = files.map((file, idx) => ({
-      id: `${Date.now()}-${idx}`,
-      name: file.name.replace(/\.[^/.]+$/, ""),
-      url: URL.createObjectURL(file),
-      file,
-    }));
+    e.target.value = '';
+    const newTracks = await Promise.all(
+      files.map(async (file, idx) => {
+        const coverUrl = await extractAudioCover(file);
+        return {
+          id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+          name: file.name.replace(/\.[^/.]+$/, ""),
+          url: URL.createObjectURL(file),
+          file,
+          coverUrl,
+        };
+      })
+    );
     setLocalTracks((prev) => [...prev, ...newTracks]);
   };
 
   const togglePlayLocal = () => {
+    setLastAudioSource('local');
     if (!localAudioRef.current || localTracks.length === 0) return;
     if (isLocalPlaying) {
       localAudioRef.current.pause();
@@ -1078,6 +1278,7 @@ export default function CarPlayPage() {
 
   const playLocalTrack = (index: number) => {
     if (index < 0 || index >= localTracks.length) return;
+    setLastAudioSource('local');
     setCurrentLocalIndex(index);
     setIsLocalPlaying(true);
     setTimeout(() => {
@@ -1090,14 +1291,19 @@ export default function CarPlayPage() {
 
   // Radio Audio Handlers & Playback Engine
   useEffect(() => {
-    if (!radioAudioRef.current) return;
-    if (isRadioPlaying && activeRadio) {
-      connectAudioElementToVisualizer(radioAudioRef.current);
-      radioAudioRef.current.src = activeRadio.url;
-      radioAudioRef.current.load();
-      const playPromise = radioAudioRef.current.play();
+    const audio = radioAudioRef.current;
+    if (!audio) return;
+
+    if (isRadioPlaying && activeRadio?.url) {
+      if (audio.src !== activeRadio.url) {
+        audio.src = activeRadio.url;
+      }
+      const effectiveVol = radioVolume > 0 ? radioVolume : 0.5;
+      audio.volume = Math.max(0, Math.min(1, effectiveVol));
+      const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
+          if (err.name === 'AbortError') return;
           console.warn('Radio stream playback failed:', err);
           setIsRadioPlaying(false);
           showNotification({
@@ -1110,34 +1316,75 @@ export default function CarPlayPage() {
         });
       }
     } else {
-      radioAudioRef.current.pause();
+      audio.pause();
     }
-  }, [activeRadio, isRadioPlaying]);
+  }, [activeRadio?.url, isRadioPlaying]);
+
+  useEffect(() => {
+    if (radioAudioRef.current) {
+      radioAudioRef.current.volume = Math.max(0, Math.min(1, radioVolume));
+    }
+  }, [radioVolume]);
+
+  useEffect(() => {
+    if (isRadioPlaying) setLastAudioSource('radio');
+  }, [isRadioPlaying]);
+
+  useEffect(() => {
+    if (isLocalPlaying) setLastAudioSource('local');
+  }, [isLocalPlaying]);
+
+  useEffect(() => {
+    if (media?.isPlaying && !isRadioPlaying && !isLocalPlaying) setLastAudioSource('smtc');
+  }, [media?.isPlaying, isRadioPlaying, isLocalPlaying]);
 
   const togglePlayRadio = (station?: RadioStation) => {
+    setLastAudioSource('radio');
     const target = station || activeRadio || radioStations[0];
     if (!target) return;
 
     if (activeRadio?.id === target.id && isRadioPlaying) {
       setIsRadioPlaying(false);
     } else {
+      if (radioVolume === 0) {
+        const restored = prevRadioVolumeRef.current > 0 ? prevRadioVolumeRef.current : 0.5;
+        setRadioVolume(restored);
+        if (radioAudioRef.current) radioAudioRef.current.volume = restored;
+        try { localStorage.setItem('opc_carplay_radio_volume', String(restored)); } catch (e) {}
+      }
       setActiveRadio(target);
       setIsRadioPlaying(true);
     }
   };
 
   const playPrevRadioStation = () => {
+    setLastAudioSource('radio');
     if (filteredRadioStations.length === 0) return;
     const curIdx = activeRadio ? filteredRadioStations.findIndex(s => s.id === activeRadio.id) : 0;
     const prevIdx = (curIdx - 1 + filteredRadioStations.length) % filteredRadioStations.length;
-    togglePlayRadio(filteredRadioStations[prevIdx]);
+    const target = filteredRadioStations[prevIdx];
+    if (target) {
+      togglePlayRadio(target);
+      if (musicSubTab === 'radio') {
+        setContentIndex(prevIdx + 3);
+        setFocusZone('content');
+      }
+    }
   };
 
   const playNextRadioStation = () => {
+    setLastAudioSource('radio');
     if (filteredRadioStations.length === 0) return;
     const curIdx = activeRadio ? filteredRadioStations.findIndex(s => s.id === activeRadio.id) : -1;
     const nextIdx = (curIdx + 1) % filteredRadioStations.length;
-    togglePlayRadio(filteredRadioStations[nextIdx]);
+    const target = filteredRadioStations[nextIdx];
+    if (target) {
+      togglePlayRadio(target);
+      if (musicSubTab === 'radio') {
+        setContentIndex(nextIdx + 3);
+        setFocusZone('content');
+      }
+    }
   };
 
   const autoLoadSii = useCallback(async () => {
@@ -1192,15 +1439,25 @@ export default function CarPlayPage() {
   };
 
   // Custom Navigation Destination state (Company & City Search)
-  const [customDest, setCustomDest] = useState<{ dest: string; destCompany?: string; title: string } | null>(null);
+  const [customDest, setCustomDest] = useState<{ dest: string; destCompany?: string; title: string; x?: number; z?: number } | null>(null);
   const [customRouteInfo, setCustomRouteInfo] = useState<{ distanceMeters: number; durationSeconds: number } | null>(null);
-  const [pendingDest, setPendingDest] = useState<{ dest: string; destCompany?: string; title: string } | null>(null);
+  const [pendingDest, setPendingDest] = useState<{ dest: string; destCompany?: string; title: string; x?: number; z?: number } | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilter, setSearchFilter] = useState<'all' | 'companies' | 'cities'>('all');
   const [searchSelectedIndex, setSearchSelectedIndex] = useState(0);
   const [maxMapFocus, setMaxMapFocus] = useState<'map' | 'search' | 'bottom-nav'>('map');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto scroll map search item when navigated via hotkeys/keyboard/controller
+  useEffect(() => {
+    if (searchQuery.trim().length > 0) {
+      const selectedEl = document.querySelector('[data-search-selected="true"]');
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [searchSelectedIndex, searchQuery, searchFilter]);
 
   // Route active state: true if custom navigation destination, active event route, or active in-game telemetry route
   const [activeEventRoute, setActiveEventRouteState] = useState<ActiveEventRoute | null>(() => getActiveEventRoute());
@@ -1217,6 +1474,25 @@ export default function CarPlayPage() {
       ))
     ))
   );
+
+  const startPendingRoute = useCallback(() => {
+    if (!pendingDest) return;
+    const dest = pendingDest;
+    setCustomDest(dest);
+    setPendingDest(null);
+    setMapTabFocus('map');
+    setMaxMapFocus('map');
+    showNotification({
+      title: 'Route gestartet',
+      message: `Navigation zu ${dest.title} gestartet!`,
+      icon: <Navigation size={18} />,
+      color: '#3b82f6',
+    });
+    setTimeout(() => {
+      mapWidgetRef.current?.recenter();
+      maxMapWidgetRef.current?.recenter();
+    }, 100);
+  }, [pendingDest]);
 
   useEffect(() => {
     const handleActiveRouteChange = (e: any) => {
@@ -1436,13 +1712,15 @@ export default function CarPlayPage() {
   }, [activeTab, loadChatChannels]);
 
   useEffect(() => {
-    if (activeTab !== 'chat' || !activeChatChannel?.id) return;
+    if (activeTab !== 'chat' || !activeChatChannel?.id || isCarPlaySleeping) return;
     loadChatMessages();
     const interval = setInterval(() => {
-      loadChatMessages();
+      if (!isCarPlaySleepingRef.current) {
+        loadChatMessages();
+      }
     }, 3500);
     return () => clearInterval(interval);
-  }, [activeTab, activeChatChannel?.id, loadChatMessages]);
+  }, [activeTab, activeChatChannel?.id, isCarPlaySleeping, loadChatMessages]);
 
   useEffect(() => {
     if (activeTab === 'chat') {
@@ -1569,12 +1847,13 @@ export default function CarPlayPage() {
 
   // Helper to calculate realistic, stable remaining driving seconds based strictly on allowed speed
   const calculateRemainingSeconds = () => {
-    const isATS = (telemetry as any)?.gameType === 2;
+    const curTel = telemetryRef.current;
+    const isATS = (curTel as any)?.gameType === 2;
     const highwayScale = isATS ? 20 : 19;
 
     // Erlaubte Geschwindigkeit (speed limit) exclusively - NEVER momentary driving speed
-    const allowedSpeedKmh = telemetry.speedLimit && telemetry.speedLimit >= 20
-      ? Math.max(30, Math.min(130, telemetry.speedLimit))
+    const allowedSpeedKmh = curTel.speedLimit && curTel.speedLimit >= 20
+      ? Math.max(30, Math.min(130, curTel.speedLimit))
       : 80; // Standard Truck Legal Limit (80 km/h in Europe / default highway)
 
     // In ETS2/ATS, cities have 1:3 scale (speed limit <= 50 km/h) while highways have 1:19/1:20 scale (speed limit >= 80 km/h)
@@ -1585,12 +1864,14 @@ export default function CarPlayPage() {
     // Case 1: Custom Destination
     if (customDest) {
       let remMeters = customRouteInfo?.distanceMeters || 0;
-      const destCoords = customDest.destCompany
-        ? (findCompany(customDest.destCompany, customDest.dest) || findCity(customDest.dest))
-        : findCity(customDest.dest);
+      const destCoords = (customDest.x != null && customDest.z != null)
+        ? { x: customDest.x, z: customDest.z }
+        : (customDest.destCompany
+          ? (findCompany(customDest.destCompany, customDest.dest) || findCity(customDest.dest))
+          : findCity(customDest.dest));
 
-      const pX = (telemetry as any)?.posX;
-      const pZ = (telemetry as any)?.posZ;
+      const pX = (curTel as any)?.posX;
+      const pZ = (curTel as any)?.posZ;
 
       if (destCoords && pX != null && pZ != null) {
         const dx = destCoords.x - pX;
@@ -1600,8 +1881,8 @@ export default function CarPlayPage() {
           const estimatedRoadDist = directDist * 1.25;
           remMeters = remMeters > 0 ? Math.min(remMeters, estimatedRoadDist) : estimatedRoadDist;
         }
-      } else if (telemetry.navDistance && telemetry.navDistance > 0) {
-        remMeters = telemetry.navDistance;
+      } else if (curTel.navDistance && curTel.navDistance > 0) {
+        remMeters = curTel.navDistance;
       }
 
       if (remMeters > 0) {
@@ -1612,13 +1893,13 @@ export default function CarPlayPage() {
 
     // Case 2: In-Game SCS Navigation
     // Calculate ETA strictly based on remaining distance and the legal allowed speed
-    if (telemetry.navDistance && telemetry.navDistance > 0) {
-      return Math.max(10, Math.round(telemetry.navDistance / (allowedSpeedMps * dynamicScale)));
+    if (curTel.navDistance && curTel.navDistance > 0) {
+      return Math.max(10, Math.round(curTel.navDistance / (allowedSpeedMps * dynamicScale)));
     }
 
     // Fallback: If navDistance is not available, scale navTime from game
-    if (telemetry.navTime && telemetry.navTime > 0) {
-      return Math.max(10, Math.round(telemetry.navTime / dynamicScale));
+    if (curTel.navTime && curTel.navTime > 0) {
+      return Math.max(10, Math.round(curTel.navTime / dynamicScale));
     }
 
     return null;
@@ -1665,7 +1946,7 @@ export default function CarPlayPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [telemetry.connected, telemetry.navDistance, telemetry.navTime, telemetry.speedLimit, (telemetry as any).posX, (telemetry as any).posZ, customDest, customRouteInfo]);
+  }, [telemetry.connected, Boolean(telemetry.navDistance && telemetry.navDistance > 0), Boolean(telemetry.navTime && telemetry.navTime > 0), Boolean(customDest), customRouteInfo]);
 
   const pendingTelemetry = useRef<Telemetry | null>(null);
   const handleNavRef = useRef<(dir: string) => void>(() => {});
@@ -1688,11 +1969,12 @@ export default function CarPlayPage() {
   const getContentElementsCount = () => {
     if (activeTab === 'home') return 2;
     if (activeTab === 'music') {
-      if (musicSubTab === 'radio') return 3 + filteredRadioStations.length + (activeRadio ? 4 : 0);
+      if (musicSubTab === 'radio') return 3 + filteredRadioStations.length + (activeRadio ? 7 : 0);
       if (musicSubTab === 'local') return 1 + localTracks.length;
       return 3;
     }
     if (activeTab === 'truck') return 3;
+    if (activeTab === 'control') return 8;
     if (activeTab === 'settings') {
       if (settingsPage === 0) return 14;
       if (settingsPage === 1) return 5;
@@ -1700,7 +1982,7 @@ export default function CarPlayPage() {
       return 14;
     }
     if (activeTab === 'map') return 1;
-    if (activeTab === 'apps') return 9; // 9 apps in Android Auto app grid drawer
+    if (activeTab === 'apps') return 10; // 10 apps in Android Auto app grid drawer
     if (activeTab === 'chat') return Math.max(chatChannels.length, 1) + 4;
     if (activeTab === 'events') return Math.max(carPlayEvents.length, 1) + 2;
     if (activeTab === 'job') return 1;
@@ -1754,6 +2036,31 @@ export default function CarPlayPage() {
       return;
     }
 
+    if (dir === 'radio-next') {
+      playNextRadioStation();
+      return;
+    }
+
+    if (dir === 'radio-prev') {
+      playPrevRadioStation();
+      return;
+    }
+
+    if (dir === 'volume-up') {
+      adjustRadioVolume(0.05);
+      return;
+    }
+
+    if (dir === 'volume-down') {
+      adjustRadioVolume(-0.05);
+      return;
+    }
+
+    if (dir === 'volume-mute') {
+      toggleMuteRadio();
+      return;
+    }
+
     if (isVirtualKbOpen) {
       const rows = kbMode === 'abc' ? KB_ROWS_ABC : KB_ROWS_123;
       const currentRow = rows[kbRow] || [];
@@ -1804,11 +2111,11 @@ export default function CarPlayPage() {
           searchInputRef.current?.blur();
           return;
         }
-        if (dir === 'up') {
+        if (dir === 'up' || dir === 'prev') {
           setSearchSelectedIndex((prev) => Math.max(0, prev - 1));
           return;
         }
-        if (dir === 'down') {
+        if (dir === 'down' || dir === 'next') {
           setSearchSelectedIndex((prev) => Math.min(Math.max(0, results.length - 1), prev + 1));
           return;
         }
@@ -1829,20 +2136,26 @@ export default function CarPlayPage() {
               dest: item.cityName,
               destCompany: item.companyName,
               title: item.title,
+              x: item.x,
+              z: item.z,
             };
             setPendingDest(dest);
             setSearchQuery('');
             searchInputRef.current?.blur();
             setTimeout(() => {
-              const map = maxMapWidgetRef.current as any;
+              const map = (maxMapWidgetRef.current || mapWidgetRef.current) as any;
               if (map && 'focusDestinationByGameCoords' in map) {
-                const company = findCompany(dest.destCompany || '', dest.dest);
-                if (company) {
-                  map.focusDestinationByGameCoords(company.x, company.z);
+                if (item.x != null && item.z != null) {
+                  map.focusDestinationByGameCoords(item.x, item.z);
                 } else {
-                  const city = findCity(dest.dest);
-                  if (city) {
-                    map.focusDestination(city.lng, city.lat);
+                  const company = findCompany(dest.destCompany || '', dest.dest);
+                  if (company) {
+                    map.focusDestinationByGameCoords(company.x, company.z);
+                  } else {
+                    const city = findCity(dest.dest);
+                    if (city) {
+                      map.focusDestination(city.lng, city.lat);
+                    }
                   }
                 }
               }
@@ -2035,6 +2348,7 @@ export default function CarPlayPage() {
           else if (targetApp === 'music-radio') openApp('music', 'radio');
           else if (targetApp === 'music-local') openApp('music', 'local');
           else openApp(targetApp as Tab);
+          setSidebarIndex(1);
         }
       }
       return;
@@ -2047,24 +2361,86 @@ export default function CarPlayPage() {
         else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
         else if (dir === 'left') { setFocusZone('sidebar'); setSidebarIndex(0); }
         else if (dir === 'right') { setContentIndex(1); }
-        else if (dir === 'enter') { setActiveTab('map'); setSidebarIndex(5); }
+        else if (dir === 'enter') { openApp('map'); setSidebarIndex(1); }
       } else if (contentIndex === 1) {
         if (dir === 'left') setContentIndex(0);
         else if (dir === 'up' || dir === 'down') setContentIndex(0);
         else if (dir === 'enter') {
-          setActiveTab('music');
-          setMusicSubTab('windows');
+          openApp('music', 'windows');
           setSidebarIndex(1);
         }
       }
     } else if (activeTab === 'map') {
+      const isSearching = searchQuery.trim().length > 0;
+      if (isSearching) {
+        const allResults = searchDestinations(searchQuery);
+        const filtered = allResults.filter((r) => {
+          if (searchFilter === 'companies') return r.type === 'company';
+          if (searchFilter === 'cities') return r.type === 'city';
+          return true;
+        });
+
+        if (dir === 'back') {
+          setSearchQuery('');
+          searchInputRef.current?.blur();
+          setMapTabFocus('map');
+          return;
+        }
+        if (dir === 'up' || dir === 'prev') {
+          setSearchSelectedIndex((prev) => Math.max(0, prev - 1));
+          return;
+        }
+        if (dir === 'down' || dir === 'next') {
+          setSearchSelectedIndex((prev) => Math.min(Math.max(0, filtered.length - 1), prev + 1));
+          return;
+        }
+        if (dir === 'left') {
+          setSearchFilter((prev) => (prev === 'cities' ? 'companies' : prev === 'companies' ? 'all' : 'cities'));
+          setSearchSelectedIndex(0);
+          return;
+        }
+        if (dir === 'right') {
+          setSearchFilter((prev) => (prev === 'all' ? 'companies' : prev === 'companies' ? 'cities' : 'all'));
+          setSearchSelectedIndex(0);
+          return;
+        }
+        if (dir === 'enter') {
+          if (filtered.length > 0 && searchSelectedIndex >= 0 && searchSelectedIndex < filtered.length) {
+            const item = filtered[searchSelectedIndex];
+            const dest = { dest: item.cityName, destCompany: item.companyName, title: item.title, x: item.x, z: item.z };
+            setPendingDest(dest);
+            setSearchQuery('');
+            searchInputRef.current?.blur();
+            setMapTabFocus('bottom-nav');
+            setTimeout(() => {
+              const map = (maxMapWidgetRef.current || mapWidgetRef.current) as any;
+              if (map && 'focusDestinationByGameCoords' in map) {
+                if (item.x != null && item.z != null) {
+                  map.focusDestinationByGameCoords(item.x, item.z);
+                } else {
+                  const company = findCompany(dest.destCompany || '', dest.dest);
+                  if (company) { map.focusDestinationByGameCoords(company.x, company.z); }
+                  else { const city = findCity(dest.dest); if (city) map.focusDestination(city.lng, city.lat); }
+                }
+              }
+            }, 50);
+          }
+          return;
+        }
+        return;
+      }
+
       if (mapTabFocus === 'search') {
         if (dir === 'left' || dir === 'back') {
           setMapTabFocus('map');
           return;
         }
         if (dir === 'down') {
-          setMapTabFocus('map');
+          if (pendingDest || customDest || isRouteActive) {
+            setMapTabFocus('bottom-nav');
+          } else {
+            setMapTabFocus('map');
+          }
           return;
         }
         if (dir === 'up') {
@@ -2080,11 +2456,24 @@ export default function CarPlayPage() {
       }
 
       if (mapTabFocus === 'bottom-nav') {
-        if (dir === 'up' || dir === 'right' || dir === 'back') {
+        if (dir === 'up' || dir === 'right') {
+          setMapTabFocus('map');
+          return;
+        }
+        if (dir === 'back') {
+          if (pendingDest) {
+            setPendingDest(null);
+            setMapTabFocus('map');
+            return;
+          }
           setMapTabFocus('map');
           return;
         }
         if (dir === 'enter') {
+          if (pendingDest && !customDest) {
+            startPendingRoute();
+            return;
+          }
           handleNavRef.current('cancel-route');
           setMapTabFocus('map');
           return;
@@ -2093,11 +2482,38 @@ export default function CarPlayPage() {
       }
 
       // mapTabFocus === 'map'
+      if (dir === 'enter') {
+        if (pendingDest && !customDest) {
+          startPendingRoute();
+          return;
+        }
+      }
       if (dir === 'up') setCarPlayMapZoom(prev => Math.min(prev + 1, 16));
-      else if (dir === 'down') setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
-      else if (dir === 'left' || dir === 'back') { setFocusZone('sidebar'); setSidebarIndex(1); }
+      else if (dir === 'down') {
+        if (pendingDest || customDest || isRouteActive) {
+          setMapTabFocus('bottom-nav');
+        } else {
+          setCarPlayMapZoom(prev => Math.max(prev - 1, 4));
+        }
+      }
+      else if (dir === 'left') {
+        if (pendingDest || customDest || isRouteActive) {
+          setMapTabFocus('bottom-nav');
+        } else {
+          setFocusZone('sidebar');
+          setSidebarIndex(1);
+        }
+      }
+      else if (dir === 'back') {
+        if (pendingDest) {
+          setPendingDest(null);
+          return;
+        }
+        setFocusZone('sidebar');
+        setSidebarIndex(1);
+      }
       else if (dir === 'right') {
-        if (isRouteActive) {
+        if (pendingDest || isRouteActive) {
           setMapTabFocus('bottom-nav');
         } else {
           setMapTabFocus('search');
@@ -2154,19 +2570,29 @@ export default function CarPlayPage() {
           const col = sIdx % 2;
 
           if (dir === 'left') {
-            if (col === 0) { setFocusZone('sidebar'); setSidebarIndex(1); }
-            else setContentIndex(prev => prev - 1);
+            if (sIdx === 0) {
+              setFocusZone('sidebar');
+              setSidebarIndex(1);
+            } else {
+              setContentIndex(prev => prev - 1);
+            }
           } else if (dir === 'right') {
-            if (col === 0 && contentIndex + 1 < deckStart) setContentIndex(prev => prev + 1);
+            if (contentIndex + 1 < deckStart) {
+              setContentIndex(prev => prev + 1);
+            }
           } else if (dir === 'up') {
-            if (sIdx === 0) setContentIndex(0);
-            else if (sIdx === 1) setContentIndex(1);
-            else setContentIndex(prev => prev - 2);
+            if (sIdx === 0) {
+              setContentIndex(0); // Search
+            } else if (sIdx === 1) {
+              setContentIndex(1); // Auto-Scan
+            } else {
+              setContentIndex(prev => Math.max(3, prev - 2)); // 1 row up
+            }
           } else if (dir === 'down') {
             if (contentIndex + 2 < deckStart) {
-              setContentIndex(prev => prev + 2);
+              setContentIndex(prev => prev + 2); // 1 row down
             } else if (contentIndex + 1 < deckStart && col === 0) {
-              setContentIndex(prev => prev + 1);
+              setContentIndex(prev => prev + 1); // Last card if odd count
             } else if (activeRadio) {
               setContentIndex(deckStart + 1); // Play/pause button in player deck
             }
@@ -2174,27 +2600,35 @@ export default function CarPlayPage() {
             const targetStation = filteredRadioStations[sIdx];
             if (targetStation) togglePlayRadio(targetStation);
           }
-        } else if (contentIndex >= deckStart && contentIndex < deckStart + 4) {
-          // Bottom Player Deck (deckStart+0: Prev, +1: Play/Pause, +2: Next, +3: Mute)
+        } else if (contentIndex >= deckStart && contentIndex < deckStart + 7) {
+          // Bottom Player Deck (deckStart+0: Prev, +1: Play/Pause, +2: Next, +3: Mute, +4: Vol-, +5: Slider, +6: Vol+)
           const bIdx = contentIndex - deckStart;
 
           if (dir === 'left') {
             if (bIdx === 0) { setFocusZone('sidebar'); setSidebarIndex(1); }
+            else if (bIdx === 5) {
+              if (radioVolume <= 0.05) setContentIndex(deckStart + 4);
+              else adjustRadioVolume(-0.05);
+            }
             else setContentIndex(prev => prev - 1);
           } else if (dir === 'right') {
-            if (bIdx < 3) setContentIndex(prev => prev + 1);
+            if (bIdx === 5) {
+              if (radioVolume >= 0.95) setContentIndex(deckStart + 6);
+              else adjustRadioVolume(0.05);
+            }
+            else if (bIdx < 6) setContentIndex(prev => prev + 1);
           } else if (dir === 'up') {
             if (totalStations > 0) setContentIndex(deckStart - 1);
             else setContentIndex(1);
+          } else if (dir === 'down') {
+            if (bIdx === 5) setContentIndex(deckStart + 3);
           } else if (dir === 'enter') {
             if (bIdx === 0) playPrevRadioStation();
             else if (bIdx === 1) togglePlayRadio();
             else if (bIdx === 2) playNextRadioStation();
-            else if (bIdx === 3) {
-              const nextVol = radioVolume > 0 ? 0 : 0.8;
-              setRadioVolume(nextVol);
-              if (radioAudioRef.current) radioAudioRef.current.volume = nextVol;
-            }
+            else if (bIdx === 3 || bIdx === 5) toggleMuteRadio();
+            else if (bIdx === 4) adjustRadioVolume(-0.05);
+            else if (bIdx === 6) adjustRadioVolume(0.05);
           }
         }
       } else if (musicSubTab === 'local') {
@@ -2228,14 +2662,16 @@ export default function CarPlayPage() {
           setContentIndex(1);
         } else if (dir === 'enter') {
           if (contentIndex === 0) {
-            if (isLocalPlaying) playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length);
+            if (lastAudioSource === 'local') playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length);
+            else if (lastAudioSource === 'radio') playPrevRadioStation();
             else sendMediaAction('prev');
           } else if (contentIndex === 1) {
-            if (isLocalPlaying) togglePlayLocal();
-            else if (isRadioPlaying) togglePlayRadio();
+            if (lastAudioSource === 'local') togglePlayLocal();
+            else if (lastAudioSource === 'radio') togglePlayRadio();
             else sendMediaAction('play-pause');
           } else if (contentIndex === 2) {
-            if (isLocalPlaying) playLocalTrack((currentLocalIndex + 1) % localTracks.length);
+            if (lastAudioSource === 'local') playLocalTrack((currentLocalIndex + 1) % localTracks.length);
+            else if (lastAudioSource === 'radio') playNextRadioStation();
             else sendMediaAction('next');
           }
         }
@@ -2243,19 +2679,26 @@ export default function CarPlayPage() {
     } else if (activeTab === 'truck') {
       if (dir === 'left') {
         if (truckPage > 0) setTruckPage(prev => prev - 1);
-        else { setFocusZone('sidebar'); setSidebarIndex(4); }
+        else { setFocusZone('sidebar'); setSidebarIndex(1); }
       } else if (dir === 'right') {
         if (truckPage < 2) setTruckPage(prev => prev + 1);
       } else if (dir === 'enter') {
         setTruckPage(prev => (prev + 1) % 3);
       } else if (dir === 'back') {
         setFocusZone('sidebar');
-        setSidebarIndex(4);
+        setSidebarIndex(1);
+      }
+    } else if (activeTab === 'control') {
+      const detail: { dir: string; handled: boolean } = { dir, handled: false };
+      window.dispatchEvent(new CustomEvent('truck-nav', { detail }));
+      if (!detail.handled && (dir === 'left' || dir === 'back')) {
+        setFocusZone('sidebar');
+        setSidebarIndex(1);
       }
     } else if (activeTab === 'settings') {
       if (dir === 'back') {
         setFocusZone('sidebar');
-        setSidebarIndex(4);
+        setSidebarIndex(1);
         return;
       }
 
@@ -2274,7 +2717,7 @@ export default function CarPlayPage() {
       if (contentIndex === -1) {
         if (dir === 'left') {
           if (settingsPage > 0) setSettingsPage(prev => prev - 1);
-          else { setFocusZone('sidebar'); setSidebarIndex(4); }
+          else { setFocusZone('sidebar'); setSidebarIndex(1); }
         } else if (dir === 'right') {
           if (settingsPage < 2) setSettingsPage(prev => prev + 1);
         } else if (dir === 'down' || dir === 'enter') {
@@ -2288,7 +2731,7 @@ export default function CarPlayPage() {
         if (dir === 'left') {
           if (contentIndex === 0 || contentIndex === 6 || contentIndex === 13) {
             setFocusZone('sidebar');
-            setSidebarIndex(4);
+            setSidebarIndex(1);
           } else {
             setContentIndex(prev => prev - 1);
           }
@@ -2341,7 +2784,7 @@ export default function CarPlayPage() {
         if (dir === 'left') {
           if (contentIndex % 2 === 0) {
             setFocusZone('sidebar');
-            setSidebarIndex(4);
+            setSidebarIndex(1);
           } else {
             setContentIndex(prev => prev - 1);
           }
@@ -2374,7 +2817,7 @@ export default function CarPlayPage() {
         ];
         if (dir === 'left') {
           setFocusZone('sidebar');
-          setSidebarIndex(4);
+          setSidebarIndex(1);
         } else if (dir === 'down') {
           setContentIndex(prev => Math.min(4, prev + 1));
         } else if (dir === 'up') {
@@ -2398,11 +2841,12 @@ export default function CarPlayPage() {
         () => openApp('music', 'local'),
         () => openApp('job'),
         () => openApp('truck'),
+        () => openApp('control'),
         () => openApp('chat'),
         () => openApp('events'),
         () => openApp('settings'),
       ];
-      const totalApps = appLaunchers.length; // 9
+      const totalApps = appLaunchers.length; // 10
       const cols = appGridColsRef.current || appGridCols || 5;
       const currentCol = contentIndex % cols;
       const currentRow = Math.floor(contentIndex / cols);
@@ -2671,6 +3115,57 @@ export default function CarPlayPage() {
         return;
       }
 
+      // Direct CarPlay Audio & Radio Hotkeys
+      if (!isInput) {
+        // Ctrl + In-Game ETS2 Radio Hotkeys (Sender vor/zurück, Lautstärke +/-)
+        if (e.ctrlKey) {
+          if (e.code === 'PageDown' || e.key === 'PageDown' || e.code === 'BracketLeft' || e.key === '[' || e.key === 'ü' || e.key === 'Ü') {
+            e.preventDefault();
+            playNextRadioStation();
+            return;
+          }
+          if (e.code === 'PageUp' || e.key === 'PageUp' || e.code === 'Quote' || e.key === "'" || e.key === 'ä' || e.key === 'Ä') {
+            e.preventDefault();
+            playPrevRadioStation();
+            return;
+          }
+          if (e.code === 'BracketRight' || e.key === ']' || e.key === '+' || e.code === 'NumpadAdd' || e.key === '*' || e.key === '=') {
+            e.preventDefault();
+            adjustRadioVolume(0.05);
+            return;
+          }
+          if (e.code === 'Backslash' || e.key === '\\' || e.key === '#' || e.code === 'NumpadSubtract' || e.key === '-') {
+            e.preventDefault();
+            adjustRadioVolume(-0.05);
+            return;
+          }
+        }
+
+        if (activeTab === 'control') {
+          if (e.key === 'Tab') {
+            handleNavRef.current(e.shiftKey ? 'prev-tab' : 'next-tab');
+            e.preventDefault();
+            return;
+          }
+        }
+
+        if (e.key === 'PageUp' || e.key === ']' || e.key === 'AudioVolumeUp') {
+          handleNavRef.current('volume-up');
+          e.preventDefault();
+          return;
+        }
+        if (e.key === 'PageDown' || e.key === '[' || e.key === 'AudioVolumeDown') {
+          handleNavRef.current('volume-down');
+          e.preventDefault();
+          return;
+        }
+        if (e.key === 'm' || e.key === 'M' || e.key === 'AudioVolumeMute') {
+          handleNavRef.current('volume-mute');
+          e.preventDefault();
+          return;
+        }
+      }
+
       const isArrowUp = e.key === 'ArrowUp';
       const isArrowDown = e.key === 'ArrowDown';
       const isArrowLeft = e.key === 'ArrowLeft';
@@ -2689,12 +3184,12 @@ export default function CarPlayPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSearchOpen, maximizedWidget]);
 
-  // Digital clock update - live 1-second pulse for real-time standby clock & active DWM presentation
+  // Digital clock update - live minute updates without redundant per-second root component re-renders
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setTimeString(now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
-      setStandbyTick(t => (t + 1) % 60);
+      const nextTime = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      setTimeString(prev => prev === nextTime ? prev : nextTime);
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -2966,6 +3461,22 @@ export default function CarPlayPage() {
         setFocusZone('sidebar');
         setSidebarIndex(0);
       } else if (action === 'next') {
+        if (searchQuery.trim().length > 0 && (activeTab === 'map' || maximizedWidget === 'map')) {
+          handleNavRef.current('next');
+          return;
+        }
+        if (activeTab === 'control') {
+          handleNavRef.current('next-tab');
+          return;
+        }
+        if (activeTab === 'music' && musicSubTab === 'radio') {
+          playNextRadioStation();
+          return;
+        }
+        if (activeTab === 'music' && musicSubTab === 'local') {
+          playLocalTrack((currentLocalIndex + 1) % Math.max(1, localTracks.length));
+          return;
+        }
         setActiveTab(prev => {
           const idx = TABS.indexOf(prev);
           const nextTab = TABS[(idx + 1) % TABS.length];
@@ -2974,6 +3485,22 @@ export default function CarPlayPage() {
           return nextTab;
         });
       } else if (action === 'prev') {
+        if (searchQuery.trim().length > 0 && (activeTab === 'map' || maximizedWidget === 'map')) {
+          handleNavRef.current('prev');
+          return;
+        }
+        if (activeTab === 'control') {
+          handleNavRef.current('prev-tab');
+          return;
+        }
+        if (activeTab === 'music' && musicSubTab === 'radio') {
+          playPrevRadioStation();
+          return;
+        }
+        if (activeTab === 'music' && musicSubTab === 'local') {
+          playLocalTrack((currentLocalIndex - 1 + localTracks.length) % Math.max(1, localTracks.length));
+          return;
+        }
         setActiveTab(prev => {
           const idx = TABS.indexOf(prev);
           const prevTab = TABS[(idx - 1 + TABS.length) % TABS.length];
@@ -2983,7 +3510,7 @@ export default function CarPlayPage() {
         });
       } else if (action === 'toggle-blackout') {
         handleToggleBlackout();
-      } else if (['up', 'down', 'left', 'right', 'enter', 'back'].includes(action)) {
+      } else if (['up', 'down', 'left', 'right', 'enter', 'back', 'volume-up', 'volume-down', 'volume-mute', 'radio-next', 'radio-prev'].includes(action)) {
         handleNavRef.current(action);
       }
     };
@@ -3071,6 +3598,30 @@ export default function CarPlayPage() {
         return;
       }
 
+      // Ctrl + In-Game ETS2 Radio Hotkeys (Sender vor/zurück, Lautstärke +/-)
+      if (e.ctrlKey && !isInput) {
+        if (e.code === 'PageDown' || e.key === 'PageDown' || e.code === 'BracketLeft' || e.key === '[' || e.key === 'ü' || e.key === 'Ü') {
+          e.preventDefault();
+          handleNavRef.current('radio-next');
+          return;
+        }
+        if (e.code === 'PageUp' || e.key === 'PageUp' || e.code === 'Quote' || e.key === "'" || e.key === 'ä' || e.key === 'Ä') {
+          e.preventDefault();
+          handleNavRef.current('radio-prev');
+          return;
+        }
+        if (e.code === 'BracketRight' || e.key === ']' || e.key === '+' || e.code === 'NumpadAdd' || e.key === '*' || e.key === '=') {
+          e.preventDefault();
+          handleNavRef.current('volume-up');
+          return;
+        }
+        if (e.code === 'Backslash' || e.key === '\\' || e.key === '#' || e.code === 'NumpadSubtract' || e.key === '-') {
+          e.preventDefault();
+          handleNavRef.current('volume-down');
+          return;
+        }
+      }
+
       if (e.key === 'ArrowUp' || e.key === 'Up') {
         e.preventDefault();
         handleNavRef.current('up');
@@ -3089,6 +3640,15 @@ export default function CarPlayPage() {
       } else if (e.key === 'Backspace' && !isInput) {
         e.preventDefault();
         handleNavRef.current('back');
+      } else if (e.key === 'PageUp' || e.key === ']' || e.key === 'AudioVolumeUp') {
+        e.preventDefault();
+        handleNavRef.current('volume-up');
+      } else if (e.key === 'PageDown' || e.key === '[' || e.key === 'AudioVolumeDown') {
+        e.preventDefault();
+        handleNavRef.current('volume-down');
+      } else if ((e.key === 'm' || e.key === 'M' || e.key === 'AudioVolumeMute') && !isInput) {
+        e.preventDefault();
+        handleNavRef.current('volume-mute');
       } else if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
         handleNavRef.current('zoom-in');
       } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
@@ -3363,9 +3923,9 @@ export default function CarPlayPage() {
           exit={{ opacity: 0, y: 10, scale: 0.96 }}
           transition={{ type: 'spring', duration: 0.25, bounce: 0.1 }}
           onClick={(e) => e.stopPropagation()}
-           className={`absolute ${isHome ? 'bottom-2.5 left-2.5 max-w-[95%] p-2 gap-2 rounded-xl text-xs' : 'bottom-3 left-3 p-3 gap-3 rounded-2xl text-sm'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all ${
-             focused || (!isHome && maxMapFocus === 'bottom-nav') ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_var(--primary-glow)]' : ''
-           }`}
+          className={`absolute ${isHome ? 'bottom-2.5 left-2.5 max-w-[95%] p-2 gap-2 rounded-xl text-xs' : 'bottom-3 left-3 p-3 gap-3 rounded-2xl text-sm'} flex items-center z-40 shadow-xl backdrop-blur-md transition-all ${
+            focused || (!isHome && (maxMapFocus === 'bottom-nav' || mapTabFocus === 'bottom-nav')) ? 'ring-4 ring-amber-500 scale-[1.02] shadow-[0_0_25px_var(--primary-glow)]' : ''
+          }`}
           style={{ background: bgStyle, border: borderStyle }}
         >
           <div className="flex items-center gap-2 min-w-0">
@@ -3386,21 +3946,11 @@ export default function CarPlayPage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              const dest = pendingDest;
-              setCustomDest(dest);
-              setPendingDest(null);
-              showNotification({
-                title: 'Route gestartet',
-                message: `Navigation zu ${dest.title} gestartet!`,
-                icon: <Navigation size={18} />,
-                color: '#3b82f6',
-              });
-              setTimeout(() => {
-                mapWidgetRef.current?.recenter();
-                maxMapWidgetRef.current?.recenter();
-              }, 100);
+              startPendingRoute();
             }}
-            className={`shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-bold ${isHome ? 'px-2.5 py-1 text-xs rounded-lg' : 'px-4 py-2 text-sm rounded-xl'} shadow-md transition-all cursor-pointer`}
+            className={`shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-bold ${isHome ? 'px-2.5 py-1 text-xs rounded-lg' : 'px-4 py-2 text-sm rounded-xl'} shadow-md transition-all cursor-pointer ${
+              focused || (!isHome && (maxMapFocus === 'bottom-nav' || mapTabFocus === 'bottom-nav')) ? 'ring-2 ring-white scale-105 shadow-[0_0_15px_rgba(59,130,246,0.8)]' : ''
+            }`}
           >
             Route starten
           </button>
@@ -3540,15 +4090,17 @@ export default function CarPlayPage() {
     return Math.min(100, Math.max(0, isNaN(pct) ? 0 : pct));
   };
 
-  // Unified Active Cover Art (Handles SMTC Windows Media/Spotify base64, ETS2 Live Radio covers & station logos)
+  // Unified Active Cover Art (Handles SMTC Windows Media/Spotify base64, ETS2 Live Radio covers & station logos, and Local Music covers)
   const albumArtSrc = useMemo(() => {
-    if (isLocalPlaying) return null;
-    if (isRadioPlaying && activeRadio) return radioCoverUrl || getRadioLogoUrl(activeRadio);
+    if (lastAudioSource === 'local' || isLocalPlaying) {
+      return localTracks[currentLocalIndex]?.coverUrl || null;
+    }
+    if ((lastAudioSource === 'radio' || isRadioPlaying) && activeRadio) return radioCoverUrl || getRadioLogoUrl(activeRadio);
     if (!media?.thumb) return null;
     if (media.thumb.startsWith('data:') || media.thumb.startsWith('http')) return media.thumb;
     const mime = media.thumb.startsWith('iVBOR') ? 'image/png' : 'image/jpeg';
     return `data:${mime};base64,${media.thumb}`;
-  }, [isLocalPlaying, isRadioPlaying, activeRadio, radioCoverUrl, media?.thumb]);
+  }, [lastAudioSource, isLocalPlaying, isRadioPlaying, activeRadio, radioCoverUrl, media?.thumb, localTracks, currentLocalIndex]);
 
   // Theme styling logic
   const getThemeClasses = () => {
@@ -3885,8 +4437,6 @@ export default function CarPlayPage() {
       />
       <audio
         ref={radioAudioRef}
-        src={activeRadio?.url}
-        onPlay={() => connectAudioElementToVisualizer(radioAudioRef.current)}
         onError={() => {
           setIsRadioPlaying(false);
           showNotification({
@@ -3900,14 +4450,15 @@ export default function CarPlayPage() {
       />
       <style>{`
         html, body, #root {
-          background-color: ${isLight ? '#eef2f6' : '#000000'} !important;
-          background: ${isLight ? '#eef2f6' : '#000000'} !important;
+          background-color: ${isCarPlaySleeping ? '#000000' : isLight ? '#eef2f6' : '#000000'} !important;
+          background: ${isCarPlaySleeping ? '#000000' : isLight ? '#eef2f6' : '#000000'} !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
         }
         .carplay-standby-overlay {
-          background-color: #020408 !important;
+          background-color: #000000 !important;
+          background: #000000 !important;
           z-index: 9999990 !important;
           position: fixed !important;
           top: 0 !important;
@@ -3950,7 +4501,7 @@ export default function CarPlayPage() {
         .carplay-root .text-5xl { font-size: calc(48px * var(--cp-scale)) !important; }
         .carplay-root .text-6xl { font-size: calc(60px * var(--cp-scale)) !important; }
       `}</style>
-      <div className={`w-screen h-screen ${isLight ? 'bg-[#eef2f6]' : 'bg-black'} overflow-hidden flex items-center justify-center p-0 m-0 relative`}>
+      <div className={`w-screen h-screen ${isCarPlaySleeping ? 'bg-black' : isLight ? 'bg-[#eef2f6]' : 'bg-black'} overflow-hidden flex items-center justify-center p-0 m-0 relative`}>
         <div 
           data-aspect={aspectCategory}
           data-taskbar-pos={taskbarPosition}
@@ -4018,6 +4569,46 @@ export default function CarPlayPage() {
             </motion.div>
           );
         })()}
+      </AnimatePresence>
+
+      {/* CarPlay Floating Volume HUD Indicator */}
+      <AnimatePresence>
+        {volumeHud?.show && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 16, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+            style={{ x: '-50%', left: '50%' }}
+            className="absolute top-0 z-[99998] min-w-[280px] sm:min-w-[340px] rounded-2xl bg-[#0d1117]/95 backdrop-blur-2xl border border-emerald-500/30 px-4 py-3 flex items-center gap-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.85)] pointer-events-none"
+          >
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+              volumeHud.isMuted || volumeHud.volume === 0
+                ? 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+            }`}>
+              {volumeHud.isMuted || volumeHud.volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px] font-mono font-black">
+                <span className="text-zinc-400 tracking-wider">RADIO LAUTSTÄRKE</span>
+                <span className={volumeHud.isMuted || volumeHud.volume === 0 ? 'text-rose-400' : 'text-emerald-400'}>
+                  {volumeHud.isMuted || volumeHud.volume === 0 ? 'STUMMGESCHALTET' : `${Math.round(volumeHud.volume * 100)}%`}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
+                <div
+                  className={`h-full rounded-full transition-all duration-100 ${
+                    volumeHud.isMuted || volumeHud.volume === 0
+                      ? 'w-0 bg-rose-500'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                  }`}
+                  style={{ width: `${Math.round(volumeHud.volume * 100)}%` }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Titanium brushed pattern if titan theme active */}
@@ -4103,6 +4694,7 @@ export default function CarPlayPage() {
               'music-local': { icon: ListMusic, label: 'Lokale Musik', tab: 'music', subMode: 'local' },
               job: { icon: Briefcase, label: 'Fracht & Auftrag', tab: 'job' },
               truck: { icon: Truck, label: 'LKW Diagnose', tab: 'truck' },
+              control: { icon: Sliders, label: 'LKW-Steuerung', tab: 'control' },
               settings: { icon: Settings, label: 'Einstellungen', tab: 'settings' },
               chat: { icon: MessageSquare, label: 'Funk & Chat', tab: 'chat' },
               events: { icon: Calendar, label: 'Events & Konvois', tab: 'events' },
@@ -4126,7 +4718,7 @@ export default function CarPlayPage() {
                 key={tabId}
                 onClick={() => {
                   openApp(meta.tab, meta.subMode);
-                  setSidebarIndex(idx + 1);
+                  setSidebarIndex(1);
                   setFocusZone('sidebar');
                 }}
                 title={meta.label}
@@ -4219,6 +4811,13 @@ export default function CarPlayPage() {
                       icon: Truck,
                       iconBg: 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-orange-500/25',
                       action: () => openApp('truck'),
+                    },
+                    {
+                      id: 'control',
+                      title: 'LKW-Steuerung',
+                      icon: Sliders,
+                      iconBg: 'bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/25',
+                      action: () => openApp('control'),
                     },
                     {
                       id: 'chat',
@@ -4432,25 +5031,37 @@ export default function CarPlayPage() {
 
                       {/* TOP ROW & ACTIVE MEDIA DISPLAY (Unified for SMTC, Local Music & ETS2 Live Radio) */}
                       {(() => {
-                        const activeTitle = isLocalPlaying && localTracks[currentLocalIndex]
+                        const activeTitle = (lastAudioSource === 'local' && localTracks[currentLocalIndex])
+                          ? localTracks[currentLocalIndex].name
+                          : (lastAudioSource === 'radio' && activeRadio)
+                          ? (radioSongTitle || activeRadio.name)
+                          : isLocalPlaying && localTracks[currentLocalIndex]
                           ? localTracks[currentLocalIndex].name
                           : isRadioPlaying && activeRadio
                           ? (radioSongTitle || activeRadio.name)
                           : media?.title;
 
-                        const activeArtist = isLocalPlaying
+                        const activeArtist = (lastAudioSource === 'local')
+                          ? 'Lokale Audiodatei'
+                          : (lastAudioSource === 'radio' && activeRadio)
+                          ? (radioSongTitle ? `${activeRadio.name} • ${activeRadio.genre}` : `${activeRadio.genre} • ${activeRadio.bitrate} kbps`)
+                          : isLocalPlaying
                           ? 'Lokale Audiodatei'
                           : isRadioPlaying && activeRadio
                           ? (radioSongTitle ? `${activeRadio.name} • ${activeRadio.genre}` : `${activeRadio.genre} • ${activeRadio.bitrate} kbps`)
                           : media?.artist;
 
-                        const activeSource = isLocalPlaying
+                        const activeSource = (lastAudioSource === 'local' || isLocalPlaying)
                           ? 'LOKALE MUSIK'
-                          : isRadioPlaying
+                          : (lastAudioSource === 'radio' || isRadioPlaying)
                           ? 'ETS2 LIVE-RADIO'
                           : (media?.source || 'SPOTIFY');
 
-                        const isAnyActive = isLocalPlaying || isRadioPlaying || Boolean(media?.isPlaying);
+                        const isAnyActive = lastAudioSource === 'radio'
+                          ? isRadioPlaying
+                          : lastAudioSource === 'local'
+                          ? isLocalPlaying
+                          : (isLocalPlaying || isRadioPlaying || Boolean(media?.isPlaying));
 
                         return (
                           <>
@@ -4503,16 +5114,16 @@ export default function CarPlayPage() {
                                     <span className={`text-[10px] font-mono font-black shrink-0 ${
                                       coverIsDark ? 'text-primary drop-shadow-[0_2px_4px_rgba(0,0,0,1)]' : 'text-slate-900 drop-shadow-none'
                                     }`}>
-                                      {isLocalPlaying ? formatMediaTime(localProgress) : isRadioPlaying ? 'LIVE' : formatMediaTime(media?.progress, media?.duration)}
+                                      {(lastAudioSource === 'local' || isLocalPlaying) ? formatMediaTime(localProgress) : (lastAudioSource === 'radio' || isRadioPlaying) ? 'LIVE' : formatMediaTime(media?.progress, media?.duration)}
                                     </span>
                                     <div className={`h-2 flex-1 rounded-full overflow-hidden ${isLight ? 'bg-slate-200 border border-slate-300' : 'bg-black/80 border border-white/15'} relative shadow-md`}>
                                       <div
                                         className="h-full rounded-full transition-all duration-300 bg-primary shadow-[0_0_10px_var(--primary-glow)]"
                                         style={{
-                                          width: isLocalPlaying && localDuration > 0
+                                          width: (lastAudioSource === 'local' || isLocalPlaying) && localDuration > 0
                                             ? `${(localProgress / localDuration) * 100}%`
-                                            : isRadioPlaying
-                                            ? '100%'
+                                            : (lastAudioSource === 'radio' || isRadioPlaying)
+                                            ? (isRadioPlaying ? '100%' : '0%')
                                             : media
                                             ? `${getProgressPercent(media.progress, media.duration)}%`
                                             : '0%',
@@ -4523,7 +5134,7 @@ export default function CarPlayPage() {
                                     <span className={`text-[10px] font-mono font-bold shrink-0 ${
                                       coverIsDark ? 'text-zinc-300 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]' : 'text-slate-700 drop-shadow-none'
                                     }`}>
-                                      {isLocalPlaying ? formatMediaTime(localDuration) : isRadioPlaying ? 'STREAM' : media?.duration ? formatMediaTime(media.duration) : '--:--'}
+                                      {(lastAudioSource === 'local' || isLocalPlaying) ? formatMediaTime(localDuration) : (lastAudioSource === 'radio' || isRadioPlaying) ? 'STREAM' : media?.duration ? formatMediaTime(media.duration) : '--:--'}
                                     </span>
                                   </div>
 
@@ -4532,7 +5143,9 @@ export default function CarPlayPage() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (isLocalPlaying) togglePlayLocal();
+                                        if (lastAudioSource === 'local') togglePlayLocal();
+                                        else if (lastAudioSource === 'radio') togglePlayRadio();
+                                        else if (isLocalPlaying) togglePlayLocal();
                                         else if (isRadioPlaying) togglePlayRadio();
                                         else sendMediaAction('play-pause');
                                       }}
@@ -4756,25 +5369,37 @@ export default function CarPlayPage() {
                   <div className="flex-1 flex flex-col min-h-0">
                     {/* Unified Active Track Display */}
                     {(() => {
-                      const displayTitle = isLocalPlaying && localTracks[currentLocalIndex]
+                      const displayTitle = (lastAudioSource === 'local' && localTracks[currentLocalIndex])
+                        ? localTracks[currentLocalIndex].name
+                        : (lastAudioSource === 'radio' && activeRadio)
+                        ? (radioSongTitle || activeRadio.name)
+                        : isLocalPlaying && localTracks[currentLocalIndex]
                         ? localTracks[currentLocalIndex].name
                         : isRadioPlaying && activeRadio
                         ? (radioSongTitle || activeRadio.name)
                         : media?.title;
 
-                      const displayArtist = isLocalPlaying
+                      const displayArtist = (lastAudioSource === 'local')
+                        ? 'Lokale Audiodatei'
+                        : (lastAudioSource === 'radio' && activeRadio)
+                        ? (radioSongTitle ? `${activeRadio.name} • ${activeRadio.genre}` : `${activeRadio.genre} • ${activeRadio.bitrate} kbps`)
+                        : isLocalPlaying
                         ? 'Lokale Audiodatei'
                         : isRadioPlaying && activeRadio
                         ? (radioSongTitle ? `${activeRadio.name} • ${activeRadio.genre}` : `${activeRadio.genre} • ${activeRadio.bitrate} kbps`)
                         : media?.artist;
 
-                      const displaySource = isLocalPlaying
+                      const displaySource = (lastAudioSource === 'local' || isLocalPlaying)
                         ? 'LOKALE MUSIK'
-                        : isRadioPlaying
+                        : (lastAudioSource === 'radio' || isRadioPlaying)
                         ? 'ETS2 LIVE-RADIO'
                         : (media?.source || 'SPOTIFY');
 
-                      const isAnyPlaying = isLocalPlaying || isRadioPlaying || media?.isPlaying;
+                      const isAnyPlaying = lastAudioSource === 'radio'
+                        ? isRadioPlaying
+                        : lastAudioSource === 'local'
+                        ? isLocalPlaying
+                        : (isLocalPlaying || isRadioPlaying || media?.isPlaying);
 
                       if (!displayTitle) {
                         return (
@@ -4830,7 +5455,7 @@ export default function CarPlayPage() {
                                   />
                                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40 pointer-events-none" />
                                 </motion.div>
-                              ) : isRadioPlaying && activeRadio ? (
+                              ) : ((lastAudioSource === 'radio' || isRadioPlaying) && activeRadio) ? (
                                 <motion.div
                                   key={activeRadio.id}
                                   initial={{ opacity: 0, scale: 0.94 }}
@@ -4839,7 +5464,7 @@ export default function CarPlayPage() {
                                   transition={{ duration: 0.25 }}
                                   className="relative h-full aspect-square flex items-center justify-center p-4"
                                 >
-                                  <RadioLogoImage src={null} name={activeRadio.name} size="lg" />
+                                  <RadioLogoImage src={getRadioLogoUrl(activeRadio)} name={activeRadio.name} size="lg" />
                                 </motion.div>
                               ) : (
                                 <motion.div
@@ -4884,8 +5509,14 @@ export default function CarPlayPage() {
                                   </p>
                                 </motion.div>
                               </AnimatePresence>
-                              {/* Live Audio Spectrum Visualizer */}
-                              <SMTCVisualizer isPlaying={Boolean(isAnyPlaying)} isDark={coverIsDark} className="w-full max-w-md mt-1" />
+                              {/* Live Audio Spectrum Visualizer - in an elevated glass container */}
+                              <div className={`mt-2.5 px-3 py-1.5 rounded-2xl border backdrop-blur-xl transition-all shadow-xl flex items-center justify-center w-full max-w-md ${
+                                coverIsDark
+                                  ? 'bg-black/60 border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.6)]'
+                                  : 'bg-white/80 border-slate-200/90 shadow-[0_8px_24px_rgba(0,0,0,0.08)]'
+                              }`}>
+                                <SMTCVisualizer isPlaying={Boolean(isAnyPlaying)} isDark={coverIsDark} className="w-full" />
+                              </div>
                             </div>
                           </div>
 
@@ -4894,7 +5525,10 @@ export default function CarPlayPage() {
                             <div className="flex items-center justify-center gap-5">
                               <button
                                 onClick={() => {
-                                  if (isLocalPlaying) playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length);
+                                  if (lastAudioSource === 'local') playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length);
+                                  else if (lastAudioSource === 'radio') playPrevRadioStation();
+                                  else if (isLocalPlaying) playLocalTrack((currentLocalIndex - 1 + localTracks.length) % localTracks.length);
+                                  else if (isRadioPlaying) playPrevRadioStation();
                                   else sendMediaAction('prev');
                                 }}
                                 className={`w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center border backdrop-blur-md active:scale-90 transition-all cursor-pointer shadow-lg ${
@@ -4908,7 +5542,9 @@ export default function CarPlayPage() {
 
                               <button
                                 onClick={() => {
-                                  if (isLocalPlaying) togglePlayLocal();
+                                  if (lastAudioSource === 'local') togglePlayLocal();
+                                  else if (lastAudioSource === 'radio') togglePlayRadio();
+                                  else if (isLocalPlaying) togglePlayLocal();
                                   else if (isRadioPlaying) togglePlayRadio();
                                   else sendMediaAction('play-pause');
                                 }}
@@ -4927,7 +5563,10 @@ export default function CarPlayPage() {
 
                               <button
                                 onClick={() => {
-                                  if (isLocalPlaying) playLocalTrack((currentLocalIndex + 1) % localTracks.length);
+                                  if (lastAudioSource === 'local') playLocalTrack((currentLocalIndex + 1) % localTracks.length);
+                                  else if (lastAudioSource === 'radio') playNextRadioStation();
+                                  else if (isLocalPlaying) playLocalTrack((currentLocalIndex + 1) % localTracks.length);
+                                  else if (isRadioPlaying) playNextRadioStation();
                                   else sendMediaAction('next');
                                 }}
                                 className={`w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center border backdrop-blur-md active:scale-90 transition-all cursor-pointer shadow-lg ${
@@ -4943,7 +5582,7 @@ export default function CarPlayPage() {
                             {/* Timeline Slider */}
                             <div className="flex items-center gap-3 w-full">
                               <span className="text-[11px] font-mono font-black text-amber-400 shrink-0 min-w-[36px] text-left drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                                {isLocalPlaying ? formatMediaTime(localProgress) : media ? formatMediaTime(media.progress, media.duration) : 'LIVE'}
+                                {(lastAudioSource === 'local' || isLocalPlaying) ? formatMediaTime(localProgress) : (lastAudioSource === 'radio' || isRadioPlaying) ? 'LIVE' : media ? formatMediaTime(media.progress, media.duration) : 'LIVE'}
                               </span>
 
                               <div className="relative flex-1 h-3 flex items-center">
@@ -4951,10 +5590,10 @@ export default function CarPlayPage() {
                                   <div
                                     className="h-full rounded-full transition-all duration-300 bg-primary shadow-[0_0_12px_var(--primary-glow)]"
                                     style={{
-                                      width: isLocalPlaying && localDuration > 0
+                                      width: (lastAudioSource === 'local' || isLocalPlaying) && localDuration > 0
                                         ? `${(localProgress / localDuration) * 100}%`
-                                        : isRadioPlaying
-                                        ? '100%'
+                                        : (lastAudioSource === 'radio' || isRadioPlaying)
+                                        ? (isRadioPlaying ? '100%' : '0%')
                                         : media
                                         ? `${getProgressPercent(media.progress, media.duration)}%`
                                         : '0%',
@@ -4965,7 +5604,7 @@ export default function CarPlayPage() {
                               </div>
 
                               <span className="text-[11px] font-mono font-bold text-zinc-300 shrink-0 min-w-[36px] text-right drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                                {isLocalPlaying ? formatMediaTime(localDuration) : isRadioPlaying ? 'STREAM' : media?.duration ? formatMediaTime(media.duration) : '--:--'}
+                                {(lastAudioSource === 'local' || isLocalPlaying) ? formatMediaTime(localDuration) : (lastAudioSource === 'radio' || isRadioPlaying) ? 'STREAM' : media?.duration ? formatMediaTime(media.duration) : '--:--'}
                               </span>
                             </div>
                           </div>
@@ -4977,43 +5616,37 @@ export default function CarPlayPage() {
 
                 {/* --- MODE 2: LOKALE MUSIK PLAYER --- */}
                 {musicSubTab === 'local' && (
-                  <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-0 flex flex-col">
+                  <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                     {/* App Wallpaper Background from OPC Main App */}
                     {renderCarPlayWallpaper()}
 
-                    <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
+                    <div className={`flex-1 flex flex-col p-3.5 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5 min-h-0`}>
                       {/* Header */}
-                      <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-white/[0.08] shrink-0 gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 shrink-0 relative z-20 gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                             isLight
                               ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                              : 'bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-xl shadow-blue-500/25 text-white'
+                              : 'bg-gradient-to-tr from-pink-600 to-rose-500 shadow-md shadow-pink-500/25 text-white'
                           }`}>
-                            <Disc size={22} className="stroke-[2.2]" />
+                            <Disc size={18} className="stroke-[2.2] drop-shadow-md" />
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h2 className={`text-base sm:text-lg font-black tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>Lokaler Musik-Player</h2>
-                              <span className="text-[10px] font-mono font-bold text-blue-300 bg-blue-500/20 border border-blue-500/30 px-2 py-0.5 rounded-full shrink-0">
-                                {localTracks.length} Songs
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest mt-0.5 font-mono truncate">
-                              OFFLINE AUDIOPLAYER • MP3, FLAC & WAV
-                            </p>
-                          </div>
+                          <span className="text-[10px] font-mono font-bold text-pink-300 bg-pink-500/20 border border-pink-500/30 px-2.5 py-1 rounded-full shrink-0">
+                            {localTracks.length} Songs
+                          </span>
                         </div>
 
-                        <label className={`px-3.5 py-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-mono font-black uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-600/30 transition-all shrink-0 border border-blue-400/30 ${
-                          focusZone === 'content' && contentIndex === 0
-                            ? 'ring-4 ring-blue-400 scale-105 shadow-[0_0_20px_rgba(59,130,246,0.6)]'
-                            : ''
-                        }`}>
-                          <Plus size={14} />
-                          <span className="hidden sm:inline">Musik laden</span>
-                          <input ref={localFileInputRef} type="file" multiple accept="audio/*" onChange={handleLocalFilesSelect} className="hidden" />
-                        </label>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className={`px-3 py-1.5 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 active:scale-95 text-white text-xs font-mono font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-pink-600/30 transition-all shrink-0 border border-pink-400/30 ${
+                            focusZone === 'content' && contentIndex === 0
+                              ? 'ring-4 ring-pink-400 scale-105 shadow-[0_0_20px_rgba(244,63,94,0.6)]'
+                              : ''
+                          }`}>
+                            <Plus size={13} />
+                            <span className="hidden sm:inline">Laden</span>
+                            <input ref={localFileInputRef} type="file" multiple accept="audio/*" onChange={handleLocalFilesSelect} className="hidden" />
+                          </label>
+                        </div>
                       </div>
 
                       {localTracks.length > 0 ? (
@@ -5047,9 +5680,13 @@ export default function CarPlayPage() {
                                     }`}
                                   >
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                      <span className={`text-xs font-mono font-bold w-5 shrink-0 ${isCurrent ? 'text-amber-400' : 'text-zinc-500'}`}>
-                                        {idx + 1}.
-                                      </span>
+                                      {t.coverUrl ? (
+                                        <img src={t.coverUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0 border border-white/10" />
+                                      ) : (
+                                        <span className={`text-xs font-mono font-bold w-5 shrink-0 ${isCurrent ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                          {idx + 1}.
+                                        </span>
+                                      )}
                                       <span className="text-xs font-semibold truncate text-zinc-100">
                                         {t.name}
                                       </span>
@@ -5065,9 +5702,13 @@ export default function CarPlayPage() {
                               })}
                             </div>
 
-                            <div className="mt-2 pt-2 border-t border-white/10 shrink-0">
-                              <label className="w-full py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-zinc-300 hover:text-white text-xs font-mono font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98">
-                                <Plus size={13} /> Mehr Songs hinzufügen
+                            <div className={`mt-2 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-white/10'} shrink-0`}>
+                              <label className={`w-full py-2.5 rounded-xl border text-xs font-mono font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 ${
+                                isLight
+                                  ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500 shadow-md shadow-blue-600/25'
+                                  : 'bg-white/[0.08] hover:bg-white/[0.15] border-white/15 text-white shadow-md'
+                              }`}>
+                                <Plus size={14} className="stroke-[2.5]" /> Mehr Songs hinzufügen
                                 <input type="file" multiple accept="audio/*" onChange={handleLocalFilesSelect} className="hidden" />
                               </label>
                             </div>
@@ -5077,9 +5718,24 @@ export default function CarPlayPage() {
                           <div className="col-span-7 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl p-4 sm:p-5 flex flex-col justify-between min-h-0 shadow-xl">
                             {/* Track Artwork & Info Deck */}
                             <div className="flex items-center gap-4">
-                              <div className={`w-24 h-24 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-2xl shadow-blue-500/30 border border-white/10 ${isLocalPlaying ? 'ring-2 ring-blue-400/50' : ''}`}>
-                                <Disc size={46} className={`drop-shadow-lg ${isLocalPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '5s' }} />
-                              </div>
+                              {localTracks[currentLocalIndex]?.coverUrl ? (
+                                <div className={`w-24 h-24 rounded-2xl overflow-hidden shrink-0 shadow-2xl shadow-blue-500/30 border border-white/20 relative group ${isLocalPlaying ? 'ring-2 ring-blue-400/80 shadow-[0_0_20px_rgba(59,130,246,0.5)]' : ''}`}>
+                                  <img
+                                    src={localTracks[currentLocalIndex].coverUrl}
+                                    alt={localTracks[currentLocalIndex].name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {isLocalPlaying && (
+                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
+                                      <Disc size={28} className="text-white drop-shadow-md animate-spin" style={{ animationDuration: '4s' }} />
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className={`w-24 h-24 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-2xl shadow-blue-500/30 border border-white/10 ${isLocalPlaying ? 'ring-2 ring-blue-400/50' : ''}`}>
+                                  <Disc size={46} className={`drop-shadow-lg ${isLocalPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '5s' }} />
+                                </div>
+                              )}
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="text-[9px] font-mono font-black uppercase tracking-widest text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md">
@@ -5168,15 +5824,19 @@ export default function CarPlayPage() {
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                          <div className="w-20 h-20 rounded-3xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4 shadow-xl">
+                          <div className={`w-20 h-20 rounded-3xl ${isLight ? 'bg-blue-50 border border-blue-200 text-blue-600 shadow-sm' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-xl'} flex items-center justify-center mb-4`}>
                             <Disc size={42} />
                           </div>
-                          <h3 className="text-lg font-black text-white mb-2">Keine lokalen Songs geladen</h3>
-                          <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
+                          <h3 className={`text-lg font-black ${isLight ? 'text-slate-900' : 'text-white'} mb-2`}>Keine lokalen Songs geladen</h3>
+                          <p className={`text-xs ${isLight ? 'text-slate-600 font-medium' : 'text-zinc-400'} max-w-sm mb-6 leading-relaxed`}>
                             Wähle Musikdateien (.mp3, .flac, .wav) von deiner Festplatte aus, um deine persönliche Musiksammlung direkt im Cockpit abzuspielen.
                           </p>
-                          <label className="px-5 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-mono font-black uppercase text-xs tracking-wider cursor-pointer shadow-xl shadow-blue-500/30 transition-all flex items-center gap-2 active:scale-95">
-                            <Plus size={16} /> Musikdateien auswählen
+                          <label 
+                            style={{ backgroundColor: '#2563eb', backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)', color: '#ffffff' }}
+                            className="px-6 py-3.5 rounded-2xl font-mono font-black uppercase text-xs tracking-wider cursor-pointer shadow-xl shadow-blue-600/40 hover:opacity-95 transition-all flex items-center gap-2.5 active:scale-95 border border-blue-400/40 text-white select-none z-20"
+                          >
+                            <Plus size={18} className="text-white shrink-0 stroke-[2.5]" />
+                            <span className="text-white font-black tracking-wider">Musikdateien auswählen</span>
                             <input type="file" multiple accept="audio/*" onChange={handleLocalFilesSelect} className="hidden" />
                           </label>
                         </div>
@@ -5187,82 +5847,74 @@ export default function CarPlayPage() {
 
                 {/* --- MODE 3: ETS2 LIVE-RADIO STREAMS --- */}
                 {musicSubTab === 'radio' && (
-                  <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-0 flex flex-col">
+                  <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                     {/* App Wallpaper Background from OPC Main App */}
                     {renderCarPlayWallpaper()}
 
-                    <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
+                    <div className={`flex-1 flex flex-col p-3.5 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5 min-h-0`}>
                       {/* Header */}
-                      <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-white/[0.08] shrink-0 gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 shrink-0 relative z-20 gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                             isLight
                               ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                              : 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/25 text-white'
+                              : 'bg-gradient-to-tr from-violet-600 to-purple-500 shadow-md shadow-violet-500/25 text-white'
                           }`}>
-                            <Radio size={22} className="stroke-[2.2]" />
+                            <Radio size={18} className="stroke-[2.2] drop-shadow-md" />
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h2 className={`text-base sm:text-lg font-black tracking-tight truncate ${isLight ? 'text-slate-900' : 'text-white'}`}>ETS2 Live-Radio</h2>
-                              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
-                                {filteredRadioStations.length} Sender
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest mt-0.5 font-mono truncate">
-                              WEB-STREAMS & SII-SENDER
-                            </p>
-                          </div>
+                          <span className="text-[10px] font-mono font-bold text-violet-300 bg-violet-500/20 border border-violet-500/30 px-2.5 py-1 rounded-full shrink-0">
+                            {filteredRadioStations.length} Sender
+                          </span>
                         </div>
 
                         {/* Search & Actions */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <div
                             onClick={() => openVirtualKeyboard('radio')}
-                            className={`relative min-w-[180px] sm:min-w-[220px] rounded-xl transition-all ${
+                            className={`relative min-w-[130px] sm:min-w-[180px] rounded-xl transition-all ${
                               focusZone === 'content' && contentIndex === 0
-                                ? 'ring-4 ring-emerald-400 scale-105 shadow-[0_0_20px_rgba(16,185,129,0.5)]'
+                                ? 'ring-4 ring-violet-400 scale-105 shadow-[0_0_20px_rgba(139,92,246,0.5)]'
                                 : ''
                             }`}
                           >
-                            <Search size={14} className="absolute left-3.5 top-2.5 text-zinc-400" />
+                            <Search size={13} className="absolute left-2.5 top-2 text-zinc-400" />
                             <input
                               type="text"
                               value={radioSearch}
                               onFocus={() => openVirtualKeyboard('radio')}
                               onChange={(e) => setRadioSearch(e.target.value)}
                               placeholder="Sender / Genre..."
-                              className="w-full bg-black/50 border border-white/15 focus:border-emerald-400 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:outline-none font-mono shadow-inner cursor-pointer"
+                              className="w-full bg-black/50 border border-white/15 focus:border-violet-400 rounded-xl py-1.5 pl-7 pr-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none font-mono shadow-inner cursor-pointer"
                             />
                           </div>
 
                           <button
                             onClick={autoLoadSii}
-                            className={`px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-mono font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-600/30 transition-all shrink-0 border border-emerald-400/30 ${
+                            className={`px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 active:scale-95 text-white text-xs font-mono font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer shadow-lg shadow-violet-600/30 transition-all shrink-0 border border-violet-400/30 ${
                               focusZone === 'content' && contentIndex === 1
-                                ? 'ring-4 ring-emerald-400 scale-105 shadow-[0_0_20px_rgba(16,185,129,0.5)]'
+                                ? 'ring-4 ring-violet-400 scale-105 shadow-[0_0_20px_rgba(139,92,246,0.5)]'
                                 : ''
                             }`}
                             title="live_streams.sii aus ETS2 Ordner automatisch auslesen"
                           >
-                            <RefreshCw size={13} />
+                            <RefreshCw size={12} />
                             <span className="hidden md:inline">Auto-Scan</span>
                           </button>
 
-                          <label className={`px-3 py-2 rounded-xl bg-primary hover:bg-primary/90 active:scale-95 text-[var(--primary-foreground)] text-xs font-mono font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-[var(--primary-glow)] transition-all shrink-0 border border-primary/40 ${
+                          <label className={`px-2.5 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] active:scale-95 text-white text-xs font-mono font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shrink-0 border border-white/15 ${
                             focusZone === 'content' && contentIndex === 2
                               ? 'ring-4 ring-inset ring-primary scale-105 shadow-[0_0_20px_var(--primary-glow)]'
                               : ''
                           }`}>
-                            <Upload size={13} />
-                            <span className="hidden md:inline">Importieren</span>
+                            <Upload size={12} />
+                            <span className="hidden md:inline">Import</span>
                             <input ref={siiFileInputRef} type="file" accept=".sii,.txt" onChange={handleSiiFileUpload} className="hidden" />
                           </label>
                         </div>
                       </div>
 
                       {/* Station Grid */}
-                      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar grid grid-cols-2 lg:grid-cols-3 gap-2.5 p-0.5">
+                      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar grid grid-cols-2 gap-2.5 p-0.5">
                         {filteredRadioStations.map((st, idx) => {
                           const isCurrent = activeRadio?.id === st.id;
                           const stLogo = getRadioLogoUrl(st);
@@ -5396,15 +6048,12 @@ export default function CarPlayPage() {
                               <SkipForward size={16} />
                             </button>
 
+                            {/* Mute Button (deckStart + 3) */}
                             <button
                               type="button"
                               data-item-focused={focusZone === 'content' && contentIndex === deckStart + 3 ? "true" : undefined}
-                              onClick={() => {
-                                const nextVol = radioVolume > 0 ? 0 : 0.8;
-                                setRadioVolume(nextVol);
-                                if (radioAudioRef.current) radioAudioRef.current.volume = nextVol;
-                              }}
-                              className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all ${
+                              onClick={toggleMuteRadio}
+                              className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
                                 isLight
                                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-700'
                                   : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white'
@@ -5413,9 +6062,81 @@ export default function CarPlayPage() {
                                   ? 'ring-2 ring-emerald-400 text-white bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
                                   : ''
                               }`}
-                              title={radioVolume === 0 ? "Stummschaltung aufheben" : "Stummschalten"}
+                              title={radioVolume === 0 ? "Stummschaltung aufheben" : "Stummschalten (M)"}
                             >
                               {radioVolume === 0 ? <VolumeX size={15} className="text-rose-400" /> : <Volume2 size={15} className="text-emerald-500" />}
+                            </button>
+
+                            {/* Volume Down Button (deckStart + 4) */}
+                            <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 4 ? "true" : undefined}
+                              onClick={() => adjustRadioVolume(-0.05)}
+                              className={`w-8 h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-700'
+                                  : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 4
+                                  ? 'ring-2 ring-emerald-400 text-white bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                                  : ''
+                              }`}
+                              title="Lautstärke verringern (-5%)"
+                            >
+                              <Minus size={13} />
+                            </button>
+
+                            {/* Volume Slider Control (deckStart + 5) */}
+                            <div
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 5 ? "true" : undefined}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+                                isLight
+                                  ? 'bg-slate-100/90 border-slate-250 text-slate-800'
+                                  : 'bg-black/50 border-white/10 text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 5
+                                  ? 'ring-2 ring-emerald-400 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.5)] border-emerald-400'
+                                  : ''
+                              }`}
+                              title="Lautstärke anpassen (Hotkeys: [ / ] oder BildAuf/BildAb)"
+                            >
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={radioVolume}
+                                onChange={(e) => {
+                                  const v = parseFloat(e.target.value);
+                                  setRadioVolume(v);
+                                  if (radioAudioRef.current) radioAudioRef.current.volume = v;
+                                  try { localStorage.setItem('opc_carplay_radio_volume', String(v)); } catch (err) {}
+                                  triggerVolumeHud(v, v === 0);
+                                }}
+                                className="w-16 sm:w-24 accent-emerald-500 cursor-pointer h-1.5 bg-white/20 rounded-lg"
+                              />
+                              <span className="text-[10px] font-mono font-bold w-7 text-right text-zinc-300">
+                                {Math.round(radioVolume * 100)}%
+                              </span>
+                            </div>
+
+                            {/* Volume Up Button (deckStart + 6) */}
+                            <button
+                              type="button"
+                              data-item-focused={focusZone === 'content' && contentIndex === deckStart + 6 ? "true" : undefined}
+                              onClick={() => adjustRadioVolume(0.05)}
+                              className={`w-8 h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                                isLight
+                                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-250 text-slate-700'
+                                  : 'bg-black/50 border-white/10 text-zinc-400 hover:text-white'
+                              } ${
+                                focusZone === 'content' && contentIndex === deckStart + 6
+                                  ? 'ring-2 ring-emerald-400 text-white bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                                  : ''
+                              }`}
+                              title="Lautstärke erhöhen (+5%)"
+                            >
+                              <Plus size={13} />
                             </button>
                           </div>
                         </div>
@@ -5428,25 +6149,24 @@ export default function CarPlayPage() {
             )}
             {/* --- JOB INFO TAB --- */}
             {activeTab === 'job' && (
-              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                 {/* App Wallpaper Background from OPC Main App */}
                 {renderCarPlayWallpaper()}
 
                 <div className={`flex-1 flex flex-col p-4 sm:p-5 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Header */}
-                  <div className="flex items-center justify-between mb-3.5 border-b border-white/[0.08] pb-3 shrink-0 relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 shrink-0 relative z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         isLight
                           ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                          : 'bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-xl shadow-sky-500/25 text-white'
+                          : 'bg-gradient-to-tr from-sky-600 to-cyan-500 shadow-md shadow-sky-500/25 text-white'
                       }`}>
-                        <Briefcase size={22} className="stroke-[2.2] drop-shadow-md" />
+                        <Briefcase size={18} className="stroke-[2.2] drop-shadow-md" />
                       </div>
-                      <div>
-                        <h2 className={`text-base font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>AKTIVER FRACHTBRIEF</h2>
-                        <p className="text-[10px] font-extrabold uppercase tracking-widest font-mono mt-0.5 text-primary">Echtzeit-Logistikdaten</p>
-                      </div>
+                      <span className="text-[10px] font-mono font-bold text-sky-300 bg-sky-500/20 border border-sky-500/30 px-2.5 py-1 rounded-full">
+                        {data.cargo && data.cargo.toLowerCase() !== 'none' ? 'FRACHT AKTIV' : 'KEIN AUFTRAG'}
+                      </span>
                     </div>
                     {data.income > 0 && (
                       <div className="text-right bg-emerald-500/15 border border-emerald-500/30 px-4 py-1.5 rounded-2xl shadow-lg backdrop-blur-md">
@@ -5574,7 +6294,7 @@ export default function CarPlayPage() {
 
             {/* --- TRUCK DIAGNOSTICS & MULTI-PAGE COCKPIT TAB --- */}
             {activeTab === 'truck' && (
-              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                 {/* App Wallpaper Background from OPC Main App */}
                 {renderCarPlayWallpaper()}
 
@@ -5584,35 +6304,33 @@ export default function CarPlayPage() {
                   <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
 
                   {/* Header: Title, Page Switcher and LKW Status */}
-                  <div className="flex items-center justify-between mb-3 border-b border-white/[0.08] pb-2.5 shrink-0 relative z-20">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                  <div className="flex items-center justify-between mb-2 border-b border-white/10 pb-2 shrink-0 relative z-20">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         isLight
                           ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                          : 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-xl shadow-orange-500/25 text-white'
+                          : 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-md shadow-orange-500/25 text-white'
                       }`}>
-                        <Truck size={22} className="stroke-[2.2] drop-shadow-md" />
+                        <Truck size={18} className="stroke-[2.2] drop-shadow-md" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h2 className={`text-sm font-black tracking-tight font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                            {telemetry.connected ? `${data.brand || 'LKW'} ${data.model || ''}` : 'FAHRZEUG-TELEMETRIE'}
-                          </h2>
-                          {telemetry.connected ? (
-                            <span className="flex items-center gap-1 text-[8.5px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
-                            </span>
-                          ) : (
-                            <span className="text-[8.5px] font-mono font-bold text-zinc-500 bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 rounded-md">
-                              STANDBY
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] font-extrabold uppercase tracking-widest font-mono text-primary">
-                          {telemetry.connected
-                            ? `${data.odometer ? `${Math.round(data.odometer).toLocaleString('de-DE')} KM` : 'LKW BEREIT'} • TANK: ${Math.round(data.fuel || 0)}L • ZUSTAND: ${(100 - (data.wearTruck || 0)).toFixed(0)}%`
-                            : 'FAHRZEUG IM STANDBY'}
-                        </p>
+                      <div className="flex items-center gap-2">
+                        {telemetry.connected ? (
+                          <span className="flex items-center gap-1 text-[8.5px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
+                          </span>
+                        ) : (
+                          <span className="text-[8.5px] font-mono font-bold text-zinc-500 bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 rounded-full">
+                            STANDBY
+                          </span>
+                        )}
+                        <span className="text-[10px] font-mono font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full shrink-0">
+                          {truckPage + 1}/3
+                        </span>
+                        {telemetry.connected && data.brand && (
+                          <span className="text-[10px] font-mono text-zinc-300 font-bold hidden sm:inline-block">
+                            {data.brand} {data.model || ''}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -6180,7 +6898,7 @@ export default function CarPlayPage() {
                         {[
                           { id: 0, label: 'Cockpit & Antrieb' },
                           { id: 1, label: 'Bordcomputer & Tank' },
-                          { id: 2, label: 'Diagnose & Zustand' }
+                          { id: 2, label: 'Diagnose & Zustand' },
                         ].map((item) => {
                           const isActive = truckPage === item.id;
                           return (
@@ -6203,35 +6921,48 @@ export default function CarPlayPage() {
               </div>
             )}
 
-            {/* --- SETTINGS TAB (MULTI-PAGE AUTOMOTIVE COCKPIT DESIGN) --- */}
-            {activeTab === 'settings' && (
-              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
+            {/* --- LKW-STEUERUNG & ADAPTIVE SEITENANSICHT STANDALONE APP ('control') --- */}
+            {activeTab === 'control' && (
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                 {/* App Wallpaper Background from OPC Main App */}
                 {renderCarPlayWallpaper()}
 
-                <div className={`flex-1 flex flex-col p-2.5 sm:p-3 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/45 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
+                <div className={`flex-1 flex flex-col p-3.5 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/45 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
+                  <TruckSideView
+                    telemetry={telemetry}
+                    isLight={isLight}
+                    focusZone={focusZone}
+                    contentIndex={contentIndex}
+                    showHeader={true}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* --- SETTINGS TAB (MULTI-PAGE AUTOMOTIVE COCKPIT DESIGN) --- */}
+            {activeTab === 'settings' && (
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
+                {/* App Wallpaper Background from OPC Main App */}
+                {renderCarPlayWallpaper()}
+
+                <div className={`flex-1 flex flex-col p-3.5 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/45 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
                   {/* Settings Header with Segmented Page Switcher Dock */}
-                  <div className="flex items-center justify-between mb-2 border-b border-white/10 pb-2 shrink-0 relative z-10 gap-2">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 shrink-0 relative z-20 gap-3">
                     <div className="flex items-center gap-2.5 min-w-0 shrink-0">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         isLight
                           ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                          : 'bg-gradient-to-tr from-zinc-700 to-slate-600 shadow-md text-white'
+                          : 'bg-gradient-to-tr from-zinc-700 to-slate-600 shadow-md shadow-zinc-600/25 text-white'
                       }`}>
-                        <Settings size={16} className="drop-shadow-sm" />
+                        <Settings size={18} className="stroke-[2.2] drop-shadow-md" />
                       </div>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h2 className={`text-sm sm:text-base font-black tracking-tight whitespace-nowrap ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                          Einstellungen
-                        </h2>
-                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-primary bg-primary/15 border border-primary/30 px-1.5 py-0.5 rounded shrink-0">
-                          {settingsPage + 1}/3
-                        </span>
-                      </div>
+                      <span className="text-[10px] font-mono font-bold text-primary bg-primary/15 border border-primary/30 px-2.5 py-1 rounded-full shrink-0">
+                        {settingsPage + 1}/3
+                      </span>
                     </div>
 
                     {/* Segmented Page Switcher */}
-                    <div className="flex items-center gap-1 bg-black/60 border border-white/10 p-0.5 sm:p-1 rounded-xl backdrop-blur-xl shrink-0">
+                    <div className={`flex items-center gap-1.5 ${isLight ? 'bg-slate-100/90 border-slate-250 shadow-md text-slate-800' : 'bg-black/50 border-white/10 shadow-2xl text-white'} backdrop-blur-md border p-1 rounded-2xl shrink-0`}>
                       <button
                         onClick={() => setSettingsPage(prev => (prev - 1 + 3) % 3)}
                         className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-primary/20 active:scale-95 border border-white/[0.08] hover:border-primary/40 flex items-center justify-center text-zinc-300 hover:text-primary transition-all cursor-pointer group shrink-0"
@@ -6703,7 +7434,11 @@ export default function CarPlayPage() {
             )}
             {/* --- MAP TAB --- */}
             {activeTab === 'map' && (
-              <div className={`w-full h-full relative overflow-hidden rounded-2xl bg-neutral-950 ${c.card}`}>
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
+                {/* App Wallpaper Background from OPC Main App */}
+                {renderCarPlayWallpaper()}
+
+                <div className={`flex-1 w-full h-full relative overflow-hidden rounded-3xl ${isLight ? 'bg-slate-200 border-slate-300 shadow-xl' : 'bg-neutral-950 border-white/10 shadow-2xl'} border relative z-10 m-0.5`}>
                 {/* Top Search Bar */}
                 <AnimatePresence>
                   {!isRouteActive && (
@@ -6765,20 +7500,30 @@ export default function CarPlayPage() {
                               return (
                                 <div
                                   key={idx}
+                                  data-search-selected={isSelected ? "true" : undefined}
                                   onClick={() => {
-                                    const dest = { dest: item.cityName, destCompany: item.companyName, title: item.title };
+                                    const dest = { dest: item.cityName, destCompany: item.companyName, title: item.title, x: item.x, z: item.z };
                                     setPendingDest(dest);
                                     setSearchQuery('');
+                                    setMapTabFocus('bottom-nav');
                                     setTimeout(() => {
-                                      const map = maxMapWidgetRef.current as any;
+                                      const map = (maxMapWidgetRef.current || mapWidgetRef.current) as any;
                                       if (map && 'focusDestinationByGameCoords' in map) {
-                                        const company = findCompany(dest.destCompany || '', dest.dest);
-                                        if (company) { map.focusDestinationByGameCoords(company.x, company.z); }
-                                        else { const city = findCity(dest.dest); if (city) map.focusDestination(city.lng, city.lat); }
+                                        if (item.x != null && item.z != null) {
+                                          map.focusDestinationByGameCoords(item.x, item.z);
+                                        } else {
+                                          const company = findCompany(dest.destCompany || '', dest.dest);
+                                          if (company) { map.focusDestinationByGameCoords(company.x, company.z); }
+                                          else { const city = findCity(dest.dest); if (city) map.focusDestination(city.lng, city.lat); }
+                                        }
                                       }
                                     }, 50);
                                   }}
-                                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all ${isSelected ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'}`}
+                                  className={`flex items-center gap-3 px-3.5 py-3 cursor-pointer transition-all ${
+                                    isSelected
+                                      ? 'bg-blue-600/35 border-l-4 border-l-blue-400 ring-2 ring-inset ring-blue-400 font-bold text-white shadow-lg'
+                                      : 'hover:bg-white/[0.04]'
+                                  }`}
                                 >
                                   <CompanyIcon companyName={item.type === 'company' ? item.companyName : undefined} title={item.title} type={item.type} size="md" />
                                   <div className="flex-1 min-w-0">
@@ -6905,49 +7650,40 @@ export default function CarPlayPage() {
                 <AnimatePresence>
                   {renderBottomNavHud(false, mapTabFocus === 'bottom-nav')}
                 </AnimatePresence>
+                </div>
               </div>
             )}
 
             {/* --- IN-CAR CHAT & FUNK APP TAB (DRIVING OPTIMIZED) --- */}
             {activeTab === 'chat' && (
-              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                 {/* App Wallpaper Background from OPC Main App */}
                 {renderCarPlayWallpaper()}
 
-                <div className={`flex-1 flex flex-col p-3 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
-                  {/* Header: Title, Driver Callsign & Top Channel Switcher */}
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 shrink-0 relative z-10 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                <div className={`flex-1 flex flex-col p-3.5 sm:p-4 rounded-3xl ${isLight ? 'bg-white/90 border-slate-250 shadow-xl text-slate-900' : 'bg-black/40 border-white/10 shadow-2xl text-white'} backdrop-blur-md overflow-hidden justify-between relative z-10 m-0.5`}>
+                  {/* Header: Driver Callsign & Top Channel Switcher */}
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 shrink-0 relative z-10 gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         isLight
                           ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                          : 'bg-primary text-[var(--primary-foreground)] shadow-xl shadow-primary/25'
+                          : 'bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-md shadow-purple-500/20 text-white'
                       }`}>
-                        <MessageSquare size={24} className="drop-shadow-md" />
+                        <MessageSquare size={17} className="stroke-[2.2] drop-shadow-md" />
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h2 className={`text-base font-black tracking-tight ${isLight ? 'text-slate-900' : 'text-white'}`}>Funk & Team-Chat</h2>
-                          {activeChatChannel && (
-                            <span className="text-[10px] font-mono font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full">
-                              #{activeChatChannel.name || 'allgemein'}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-primary font-extrabold uppercase tracking-widest font-mono">
-                            CB-FUNK
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        {activeChatChannel && (
+                          <span className="text-[10px] font-mono font-bold text-primary bg-primary/15 border border-primary/30 px-2.5 py-0.5 rounded-full shrink-0">
+                            #{activeChatChannel.name || 'allgemein'}
                           </span>
-                          <span className="text-zinc-600">•</span>
-                          <span className="text-[10px] font-mono text-zinc-300 font-bold truncate">
-                            Rufname: <strong className={`${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.username || 'OPC Driver'}</strong>
-                          </span>
-                          <span className="text-zinc-600">•</span>
-                          <span className="text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            {telemetry.connected ? `${Math.round(telemetry.speed || 0)} km/h` : 'Bereit'}
-                          </span>
-                        </div>
+                        )}
+                        <span className="text-[10px] font-mono text-zinc-300 font-semibold truncate bg-white/5 border border-white/10 px-2.5 py-0.5 rounded-full shrink-0">
+                          Rufname: <strong className={`${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.username || 'OPC Driver'}</strong>
+                        </span>
+                        <span className="text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {telemetry.connected ? `${Math.round(telemetry.speed || 0)} km/h` : 'Bereit'}
+                        </span>
                       </div>
                     </div>
 
@@ -7280,7 +8016,7 @@ export default function CarPlayPage() {
 
             {/* --- IN-CAR EVENTS & KONVOIS APP TAB (COCKPIT THEMED) --- */}
             {activeTab === 'events' && (
-              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col">
+              <div className="w-full h-full relative rounded-2xl sm:rounded-3xl overflow-hidden p-1 sm:p-1.5 flex flex-col font-['Outfit',sans-serif]">
                 {/* Background Wallpaper matching App Raster */}
                 {renderCarPlayWallpaper()}
 
@@ -7289,26 +8025,20 @@ export default function CarPlayPage() {
                   <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                  {/* Header: Title, Count, Refresh */}
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10 shrink-0 relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                  {/* Header: Status Pill & Refresh */}
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10 shrink-0 relative z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                         isLight
                           ? 'bg-slate-100 border border-slate-200 text-slate-800 shadow-sm'
-                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-xl shadow-teal-500/25 text-white'
+                          : 'bg-gradient-to-tr from-teal-600 to-emerald-500 shadow-md shadow-teal-500/20 text-white'
                       }`}>
-                        <Calendar size={24} />
+                        <Calendar size={17} className="stroke-[2.2] drop-shadow-md" />
                       </div>
-                      <div>
-                        <h2 className={`text-base font-black tracking-tight flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                          <span>Events & Konvois</span>
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-md">
-                            {carPlayEvents.length} Anstehend
-                          </span>
-                        </h2>
-                        <p className={`text-[10px] font-extrabold uppercase tracking-widest mt-0.5 font-mono ${isLight ? 'text-primary' : 'text-amber-400'}`}>
-                          OFFIZIELLE VTC-FAHRTEN & COMMUNITY-TOUREN
-                        </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono font-bold text-teal-300 bg-teal-500/20 border border-teal-500/30 px-2.5 py-0.5 rounded-full shrink-0">
+                          {carPlayEvents.length} Anstehende Events
+                        </span>
                       </div>
                     </div>
 
@@ -7620,32 +8350,39 @@ export default function CarPlayPage() {
                         return (
                           <div
                             key={idx}
+                            data-search-selected={isSelected ? "true" : undefined}
                             onClick={() => {
                               const dest = {
                                 dest: item.cityName,
                                 destCompany: item.companyName,
                                 title: item.title,
+                                x: item.x,
+                                z: item.z,
                               };
                               setPendingDest(dest);
                               setSearchQuery('');
                               setTimeout(() => {
-                                const map = maxMapWidgetRef.current as any;
+                                const map = (maxMapWidgetRef.current || mapWidgetRef.current) as any;
                                 if (map && 'focusDestinationByGameCoords' in map) {
-                                  const company = findCompany(dest.destCompany || '', dest.dest);
-                                  if (company) {
-                                    map.focusDestinationByGameCoords(company.x, company.z);
+                                  if (item.x != null && item.z != null) {
+                                    map.focusDestinationByGameCoords(item.x, item.z);
                                   } else {
-                                    const city = findCity(dest.dest);
-                                    if (city) {
-                                      map.focusDestination(city.lng, city.lat);
+                                    const company = findCompany(dest.destCompany || '', dest.dest);
+                                    if (company) {
+                                      map.focusDestinationByGameCoords(company.x, company.z);
+                                    } else {
+                                      const city = findCity(dest.dest);
+                                      if (city) {
+                                        map.focusDestination(city.lng, city.lat);
+                                      }
                                     }
                                   }
                                 }
                               }, 50);
                             }}
-                            className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all ${
+                            className={`flex items-center gap-3 px-3.5 py-3 cursor-pointer transition-all ${
                               isSelected
-                                ? 'bg-white/[0.08]'
+                                ? 'bg-blue-600/35 border-l-4 border-l-blue-400 ring-2 ring-inset ring-blue-400 font-bold text-white shadow-lg'
                                 : 'hover:bg-white/[0.04]'
                             }`}
                           >
@@ -8150,23 +8887,25 @@ export default function CarPlayPage() {
               }
             }}
             style={{
-              position: 'absolute',
+              position: 'fixed',
               top: 0,
               left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: '#020408',
-              zIndex: 9999990,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              backgroundColor: '#000000',
+              background: '#000000',
+              zIndex: 9999999,
             }}
-            className="flex flex-col items-center justify-between p-8 select-none cursor-pointer overflow-hidden font-['Outfit',sans-serif]"
+            className="flex flex-col items-center justify-between p-8 select-none cursor-pointer overflow-hidden font-['Outfit',sans-serif] bg-black"
           >
 
             {/* Ambient Background Aura with gentle breathing pulse */}
             <div
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-primary/[0.04] rounded-full blur-3xl pointer-events-none transition-transform duration-1000"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-primary/[0.04] rounded-full blur-3xl pointer-events-none animate-pulse"
               style={{
                 zIndex: 1,
-                transform: `translate(-50%, -50%) scale(${standbyTick % 2 === 0 ? '1.04' : '0.96'})`,
               }}
             />
 
@@ -8198,21 +8937,57 @@ export default function CarPlayPage() {
             <div className="flex flex-col items-center justify-center text-center my-auto z-10">
               <div className="text-7xl sm:text-8xl md:text-9xl font-black font-mono text-white/90 tracking-tight drop-shadow-[0_0_40px_rgba(255,255,255,0.12)] flex items-center justify-center">
                 <span>{timeString.split(':')[0] || '12'}</span>
-                <span className={`inline-block transition-opacity duration-200 mx-1 ${standbyTick % 2 === 0 ? 'opacity-100 text-white/90' : 'opacity-20 text-white/40'}`}>:</span>
+                <span className="inline-block animate-pulse duration-1000 mx-1 text-white/80">:</span>
                 <span>{timeString.split(':')[1] || '00'}</span>
               </div>
               <div className="mt-3 text-xs sm:text-sm font-mono uppercase tracking-[0.25em] text-zinc-500 font-bold">
                 {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
               </div>
 
-              {media && media.title && (
-                <div className="mt-7 flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/[0.04] border border-white/10 max-w-md shadow-xl backdrop-blur-md">
-                  <Music size={16} className="text-primary shrink-0" />
-                  <span className="text-xs font-mono text-zinc-300 truncate">
-                    {media.title} <span className="text-zinc-500">— {media.artist}</span>
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const standbyMedia = (() => {
+                  if ((lastAudioSource === 'radio' || isRadioPlaying) && activeRadio) {
+                    return {
+                      icon: <Radio size={16} className="text-emerald-400 shrink-0" />,
+                      title: radioSongTitle || activeRadio.name,
+                      subtitle: radioSongTitle ? `${activeRadio.name} • ${activeRadio.genre}` : (activeRadio.genre || 'ETS2 Live-Radio')
+                    };
+                  }
+                  if ((lastAudioSource === 'local' || isLocalPlaying) && localTracks[currentLocalIndex]) {
+                    return {
+                      icon: <Disc size={16} className="text-blue-400 shrink-0" />,
+                      title: localTracks[currentLocalIndex].name,
+                      subtitle: 'Lokale Musik'
+                    };
+                  }
+                  if (media && media.title) {
+                    return {
+                      icon: <Music size={16} className="text-primary shrink-0" />,
+                      title: media.title,
+                      subtitle: media.artist
+                    };
+                  }
+                  if (activeRadio) {
+                    return {
+                      icon: <Radio size={16} className="text-emerald-400 shrink-0" />,
+                      title: radioSongTitle || activeRadio.name,
+                      subtitle: activeRadio.genre || 'ETS2 Live-Radio'
+                    };
+                  }
+                  return null;
+                })();
+
+                if (!standbyMedia) return null;
+
+                return (
+                  <div className="mt-7 flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/[0.04] border border-white/10 max-w-md shadow-xl backdrop-blur-md">
+                    {standbyMedia.icon}
+                    <span className="text-xs font-mono text-zinc-300 truncate">
+                      {standbyMedia.title} {standbyMedia.subtitle && <span className="text-zinc-500">— {standbyMedia.subtitle}</span>}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Bottom Footer: Wake Hint - hidden */}

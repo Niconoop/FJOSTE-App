@@ -173,7 +173,10 @@ let overlaySettings: any = {
     next: 'Ctrl+Alt+Right',
     prev: 'Ctrl+Alt+Left',
     home: 'Ctrl+Alt+H',
-    playPause: 'Ctrl+Alt+Space'
+    playPause: 'Ctrl+Alt+Space',
+    volumeUp: 'Ctrl+Alt+PageUp',
+    volumeDown: 'Ctrl+Alt+PageDown',
+    volumeMute: 'Ctrl+Alt+M'
   }
 };
 
@@ -545,7 +548,10 @@ async function loadSettings(isAppStart = false) {
             next: 'Ctrl+Alt+Right',
             prev: 'Ctrl+Alt+Left',
             home: 'Ctrl+Alt+H',
-            playPause: 'Ctrl+Alt+Space'
+            playPause: 'Ctrl+Alt+Space',
+            volumeUp: 'Ctrl+Alt+PageUp',
+            volumeDown: 'Ctrl+Alt+PageDown',
+            volumeMute: 'Ctrl+Alt+M'
           },
           ...saved.overlaySettings
         };
@@ -1611,11 +1617,11 @@ let isQuitting = false;
 const rpcInterval = setInterval(updateRpc, 15000);
 
 // Named Pipe Helper to send commands to OPCGameBridge plugin
-function sendToPluginPipe(messageText: string): Promise<boolean> {
+function sendPluginCommand(cmdObj: Record<string, any>): Promise<boolean> {
   return new Promise((resolve) => {
     const pipePath = '\\\\.\\pipe\\OPCCommandPipe';
     const client = net.connect(pipePath, () => {
-      const payload = JSON.stringify({ text: messageText }) + '\n';
+      const payload = JSON.stringify(cmdObj) + '\n';
       client.write(payload, () => {
         client.end();
         resolve(true);
@@ -1624,11 +1630,15 @@ function sendToPluginPipe(messageText: string): Promise<boolean> {
     client.on('error', () => {
       resolve(false);
     });
-    client.setTimeout(1500, () => {
+    client.setTimeout(1200, () => {
       client.destroy();
       resolve(false);
     });
   });
+}
+
+function sendToPluginPipe(messageText: string): Promise<boolean> {
+  return sendPluginCommand({ text: messageText });
 }
 
 // Telemetry Polling
@@ -1765,7 +1775,16 @@ public class SCSTelemetry {
                         result["jobMarket"] = GetString(raw, 3404, 32);
 
                         // Turn indicators, parking brake, lights, and system warnings from Zone 5 (booleans)
+                        string trlId = GetString(raw, 6920, 64);
+                        result["trailerAttached"] = (raw.Length > 6080 && raw[6080] > 0) || (trlId.Trim().Length > 0) || (raw.Length > 1611 && raw[1611] > 0) || raw[1564] > 0;
+                        result["trailerId"] = trlId;
+                        result["trailerLiftAxle"] = raw.Length > 1611 && raw[1611] > 0;
+                        result["liftAxle"] = raw.Length > 1609 && raw[1609] > 0;
                         result["parkBrake"] = raw[1566] > 0;
+                        result["electricEnabled"] = raw[1575] > 0;
+                        result["engineEnabled"] = raw[1576] > 0;
+                        result["wipers"] = raw[1577] > 0;
+                        result["lightsParking"] = raw[1582] > 0;
                         result["blinkerLeftActive"] = raw[1578] > 0;
                         result["blinkerRightActive"] = raw[1579] > 0;
                         result["blinkerLeftOn"] = raw[1580] > 0;
@@ -3197,6 +3216,337 @@ try {
   });
 }
 
+const truckKeyTempPath = path.join(app.getPath('temp'), 'openpipeclub_truckkey.ps1');
+
+function sendTruckKeyDirect(vkCode: number, holdMs: number = 70) {
+  const scriptContent = `param([int]$vkCode, [int]$holdMs)
+$source = @"
+using System;
+using System.Runtime.InteropServices;
+public class TruckKeyHelper {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KEYBDINPUT {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+    [StructLayout(LayoutKind.Explicit)]
+    public struct INPUT {
+        [FieldOffset(0)] public int type;
+        [FieldOffset(8)] public KEYBDINPUT ki;
+    }
+    [DllImport("user32.dll")] public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+    [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+
+    public static void SendKey(IntPtr hwnd, int vk, int hold) {
+        if (hwnd != IntPtr.Zero && GetForegroundWindow() != hwnd) {
+            SetForegroundWindow(hwnd);
+            System.Threading.Thread.Sleep(30);
+        }
+        uint scan = MapVirtualKey((uint)vk, 0);
+        uint ext = 0;
+        if (vk >= 0x21 && vk <= 0x28) ext = 0x0001; // PageUp, PageDown, Home, End, Arrows
+        INPUT[] d = new INPUT[1];
+        d[0].type = 1;
+        d[0].ki.wVk = (ushort)vk;
+        d[0].ki.wScan = (ushort)scan;
+        d[0].ki.dwFlags = ext;
+        SendInput(1, d, Marshal.SizeOf(typeof(INPUT)));
+
+        System.Threading.Thread.Sleep(hold);
+
+        INPUT[] u = new INPUT[1];
+        u[0].type = 1;
+        u[0].ki.wVk = (ushort)vk;
+        u[0].ki.wScan = (ushort)scan;
+        u[0].ki.dwFlags = ext | 0x0002;
+        SendInput(1, u, Marshal.SizeOf(typeof(INPUT)));
+    }
+}
+"@
+try { Add-Type -TypeDefinition $source -ErrorAction SilentlyContinue } catch {}
+
+$p = Get-Process -Name eurotrucks2, amtrucks -ErrorAction SilentlyContinue | Select-Object -First 1
+$hwnd = [IntPtr]::Zero
+if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) { $hwnd = $p.MainWindowHandle }
+[TruckKeyHelper]::SendKey($hwnd, $vkCode, $holdMs)
+`;
+  try {
+    fs.writeFileSync(truckKeyTempPath, scriptContent, 'utf8');
+  } catch (e) {}
+
+  exec(`powershell -NoProfile -ExecutionPolicy Bypass -File "${truckKeyTempPath}" ${vkCode} ${holdMs}`, (error) => {
+    if (error) writeToLog(`Failed to send truck key ${vkCode}: ${error.message}`);
+  });
+}
+
+function sendTruckKey(vkCode: number, holdMs: number = 70) {
+  sendTruckKeyDirect(vkCode, holdMs);
+}
+
+const scsToVkMap: Record<string, { vk: number; label: string }> = {
+  'a': { vk: 0x41, label: 'A' },
+  'b': { vk: 0x42, label: 'B' },
+  'c': { vk: 0x43, label: 'C' },
+  'd': { vk: 0x44, label: 'D' },
+  'e': { vk: 0x45, label: 'E' },
+  'f': { vk: 0x46, label: 'F' },
+  'g': { vk: 0x47, label: 'G' },
+  'h': { vk: 0x48, label: 'H' },
+  'i': { vk: 0x49, label: 'I' },
+  'j': { vk: 0x4A, label: 'J' },
+  'k': { vk: 0x4B, label: 'K' },
+  'l': { vk: 0x4C, label: 'L' },
+  'm': { vk: 0x4D, label: 'M' },
+  'n': { vk: 0x4E, label: 'N' },
+  'o': { vk: 0x4F, label: 'O' },
+  'p': { vk: 0x50, label: 'P' },
+  'q': { vk: 0x51, label: 'Q' },
+  'r': { vk: 0x52, label: 'R' },
+  's': { vk: 0x53, label: 'S' },
+  't': { vk: 0x54, label: 'T' },
+  'u': { vk: 0x55, label: 'U' },
+  'v': { vk: 0x56, label: 'V' },
+  'w': { vk: 0x57, label: 'W' },
+  'x': { vk: 0x58, label: 'X' },
+  'y': { vk: 0x59, label: 'Y' },
+  'z': { vk: 0x5A, label: 'Z' },
+  '0': { vk: 0x30, label: '0' },
+  '1': { vk: 0x31, label: '1' },
+  '2': { vk: 0x32, label: '2' },
+  '3': { vk: 0x33, label: '3' },
+  '4': { vk: 0x34, label: '4' },
+  '5': { vk: 0x35, label: '5' },
+  '6': { vk: 0x36, label: '6' },
+  '7': { vk: 0x37, label: '7' },
+  '8': { vk: 0x38, label: '8' },
+  '9': { vk: 0x39, label: '9' },
+  'space': { vk: 0x20, label: 'Space' },
+  'pgup': { vk: 0x21, label: 'PageUp' },
+  'pageup': { vk: 0x21, label: 'PageUp' },
+  'pgdn': { vk: 0x22, label: 'PageDown' },
+  'pagedown': { vk: 0x22, label: 'PageDown' },
+  'end': { vk: 0x23, label: 'End' },
+  'home': { vk: 0x24, label: 'Home' },
+  'left': { vk: 0x25, label: '←' },
+  'up': { vk: 0x26, label: '↑' },
+  'right': { vk: 0x27, label: '→' },
+  'down': { vk: 0x28, label: '↓' },
+  'ins': { vk: 0x2D, label: 'Einfg' },
+  'insert': { vk: 0x2D, label: 'Einfg' },
+  'del': { vk: 0x2E, label: 'Entf' },
+  'delete': { vk: 0x2E, label: 'Entf' },
+  'tab': { vk: 0x09, label: 'Tab' },
+  'enter': { vk: 0x0D, label: 'Enter' },
+  'return': { vk: 0x0D, label: 'Enter' },
+  'num0': { vk: 0x60, label: 'Num 0' },
+  'num1': { vk: 0x61, label: 'Num 1' },
+  'num2': { vk: 0x62, label: 'Num 2' },
+  'num3': { vk: 0x63, label: 'Num 3' },
+  'num4': { vk: 0x64, label: 'Num 4' },
+  'num5': { vk: 0x65, label: 'Num 5' },
+  'num6': { vk: 0x66, label: 'Num 6' },
+  'num7': { vk: 0x67, label: 'Num 7' },
+  'num8': { vk: 0x68, label: 'Num 8' },
+  'num9': { vk: 0x69, label: 'Num 9' },
+};
+
+const defaultTruckBindings: Record<string, { vk: number; label: string }> = {
+  light: { vk: 0x4C, label: 'L' },
+  highbeam: { vk: 0x4B, label: 'K' },
+  flasher: { vk: 0x4A, label: 'J' },
+  beacon: { vk: 0x4F, label: 'O' },
+  hazard: { vk: 0x46, label: 'F' },
+  liftaxle_truck: { vk: 0x55, label: 'U' },
+  liftaxle_trailer: { vk: 0x55, label: 'U' },
+  susp_up: { vk: 0x21, label: 'PageUp' },
+  susp_down: { vk: 0x22, label: 'PageDown' },
+  susp_reset: { vk: 0x24, label: 'Home' },
+  trl_susp_up: { vk: 0x21, label: 'PageUp' },
+  trl_susp_down: { vk: 0x22, label: 'PageDown' },
+  trl_susp_reset: { vk: 0x24, label: 'Home' },
+  parkingbrake: { vk: 0x20, label: 'Space' },
+  wipers: { vk: 0x50, label: 'P' },
+  engine: { vk: 0x45, label: 'E' },
+  trailer_coupling: { vk: 0x54, label: 'T' },
+};
+
+function getEts2TruckKeyBindings(): Record<string, { vk: number; label: string }> {
+  const result: Record<string, { vk: number; label: string }> = { ...defaultTruckBindings };
+
+  try {
+    const userDocs = app.getPath('documents');
+    const etsPaths = [
+      path.join(userDocs, 'Euro Truck Simulator 2'),
+      path.join(userDocs, 'American Truck Simulator'),
+      ...(process.env.USERPROFILE ? [
+        path.join(process.env.USERPROFILE, 'Documents', 'Euro Truck Simulator 2'),
+        path.join(process.env.USERPROFILE, 'Documents', 'American Truck Simulator'),
+        path.join(process.env.USERPROFILE, 'OneDrive', 'Dokumente', 'Euro Truck Simulator 2'),
+        path.join(process.env.USERPROFILE, 'OneDrive', 'Documents', 'Euro Truck Simulator 2'),
+      ] : [])
+    ];
+
+    let newestFile: { file: string; mtime: number } | null = null;
+    for (const basePath of etsPaths) {
+      for (const sub of ['steam_profiles', 'profiles']) {
+        const p = path.join(basePath, sub);
+        if (fs.existsSync(p)) {
+          for (const dir of fs.readdirSync(p)) {
+            const ctrl = path.join(p, dir, 'controls.sii');
+            if (fs.existsSync(ctrl)) {
+              const mtime = fs.statSync(ctrl).mtimeMs;
+              if (!newestFile || mtime > newestFile.mtime) {
+                newestFile = { file: ctrl, mtime };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (newestFile) {
+      const content = fs.readFileSync(newestFile.file, 'utf8');
+
+      const parseMixKey = (mixName: string): { key: string | null; joy: string | null; isUnbound: boolean } => {
+        const re = new RegExp(`mix\\s+${mixName}\\s+\`([^\`]+)\``, 'i');
+        const m = content.match(re);
+        if (!m || !m[1]) return { key: null, joy: null, isUnbound: true };
+        const raw = m[1];
+        const keyMatch = raw.match(/keyboard\.([a-z0-9_]+)/i);
+        const joyMatch = raw.match(/(?:joy|joy\d*|ui_joy)\.([a-z0-9_]+)/i);
+        return {
+          key: keyMatch ? keyMatch[1].toLowerCase() : null,
+          joy: joyMatch ? joyMatch[0] : null,
+          isUnbound: !keyMatch,
+        };
+      };
+
+      const resolveBinding = (parsed: { key: string | null; joy: string | null; isUnbound: boolean }, fallback: { vk: number; label: string }) => {
+        if (!parsed.key) {
+          return {
+            ...fallback,
+            isUnboundOnKeyboard: parsed.isUnbound,
+            joyBinding: parsed.joy || undefined,
+          };
+        }
+        const mapped = scsToVkMap[parsed.key];
+        if (mapped) {
+          return {
+            ...mapped,
+            isUnboundOnKeyboard: false,
+            joyBinding: parsed.joy || undefined,
+          };
+        }
+        if (parsed.key.length === 1 && /[a-z0-9]/i.test(parsed.key)) {
+          return {
+            vk: parsed.key.toUpperCase().charCodeAt(0),
+            label: parsed.key.toUpperCase(),
+            isUnboundOnKeyboard: false,
+            joyBinding: parsed.joy || undefined,
+          };
+        }
+        return {
+          ...fallback,
+          isUnboundOnKeyboard: parsed.isUnbound,
+          joyBinding: parsed.joy || undefined,
+        };
+      };
+
+      // Extract each action from user's active controls.sii
+      const lightKey = parseMixKey('light') || parseMixKey('lighton');
+      if (lightKey) result.light = resolveBinding(lightKey, defaultTruckBindings.light);
+
+      const hbKey = parseMixKey('hblight');
+      if (hbKey) result.highbeam = resolveBinding(hbKey, defaultTruckBindings.highbeam);
+
+      const flashKey = parseMixKey('lighthorn') || parseMixKey('flasher');
+      if (flashKey) result.flasher = resolveBinding(flashKey, defaultTruckBindings.flasher);
+
+      const beaconKey = parseMixKey('beacon');
+      if (beaconKey) result.beacon = resolveBinding(beaconKey, defaultTruckBindings.beacon);
+
+      const hazardKey = parseMixKey('flasher4way') || parseMixKey('hazard');
+      if (hazardKey) result.hazard = resolveBinding(hazardKey, defaultTruckBindings.hazard);
+
+      const liftTruckKey = parseMixKey('liftaxle');
+      if (liftTruckKey) result.liftaxle_truck = resolveBinding(liftTruckKey, defaultTruckBindings.liftaxle_truck);
+
+      const liftTrlKey = parseMixKey('liftaxlet') || parseMixKey('trailer_liftaxle') || parseMixKey('trlifaxle');
+      if (liftTrlKey) result.liftaxle_trailer = resolveBinding(liftTrlKey, defaultTruckBindings.liftaxle_trailer);
+
+      // Suspension LKW (Front/Rear/Combined)
+      const suspUpKey = parseMixKey('frontsuspup') || parseMixKey('rearsuspup') || parseMixKey('susp_up') || parseMixKey('suspfront_up');
+      if (suspUpKey) result.susp_up = resolveBinding(suspUpKey, defaultTruckBindings.susp_up);
+
+      const suspDwnKey = parseMixKey('frontsuspdwn') || parseMixKey('rearsuspdwn') || parseMixKey('susp_down') || parseMixKey('suspfront_down');
+      if (suspDwnKey) result.susp_down = resolveBinding(suspDwnKey, defaultTruckBindings.susp_down);
+
+      const suspResetKey = parseMixKey('suspreset') || parseMixKey('susp_reset');
+      if (suspResetKey) result.susp_reset = resolveBinding(suspResetKey, defaultTruckBindings.susp_reset);
+
+      // Suspension Trailer
+      const trlSuspUpKey = parseMixKey('trlrsuspup') || parseMixKey('trl_susp_up');
+      if (trlSuspUpKey) result.trl_susp_up = resolveBinding(trlSuspUpKey, defaultTruckBindings.trl_susp_up);
+
+      const trlSuspDwnKey = parseMixKey('trlrsuspdwn') || parseMixKey('trl_susp_down');
+      if (trlSuspDwnKey) result.trl_susp_down = resolveBinding(trlSuspDwnKey, defaultTruckBindings.trl_susp_down);
+
+      const trlSuspResetKey = parseMixKey('trlrsuspreset') || parseMixKey('trl_susp_reset') || suspResetKey;
+      if (trlSuspResetKey) result.trl_susp_reset = resolveBinding(trlSuspResetKey, defaultTruckBindings.trl_susp_reset);
+
+      const parkKey = parseMixKey('parkingbrake');
+      if (parkKey) result.parkingbrake = resolveBinding(parkKey, defaultTruckBindings.parkingbrake);
+
+      const wiperKey = parseMixKey('wipers') || parseMixKey('wipers1');
+      if (wiperKey) result.wipers = resolveBinding(wiperKey, defaultTruckBindings.wipers);
+
+      const engKey = parseMixKey('engine') || parseMixKey('engineelect');
+      if (engKey) result.engine = resolveBinding(engKey, defaultTruckBindings.engine);
+
+      const attachKey = parseMixKey('attach');
+      if (attachKey) result.trailer_coupling = resolveBinding(attachKey, defaultTruckBindings.trailer_coupling);
+
+      writeToLog(`[Controls.sii Truck Keybindings Active] Light: ${result.light.label}${result.light.isUnboundOnKeyboard ? ' (UNBOUND/JOY)' : ''} | HB: ${result.highbeam.label} | Beacon: ${result.beacon.label} | Lift LKW: ${result.liftaxle_truck.label} | Lift Trl: ${result.liftaxle_trailer.label} | Susp: ${result.susp_up.label}/${result.susp_down.label} | TrlSusp: ${result.trl_susp_up.label}/${result.trl_susp_down.label} | Park: ${result.parkingbrake.label}`);
+    }
+  } catch (err) {
+    writeToLog(`[Controls.sii Truck Parser] Error: ${err}`);
+  }
+
+  return result;
+}
+
+async function handleTruckAction(action: string) {
+  const bindings = getEts2TruckKeyBindings();
+  const binding = bindings[action] || { vk: 0, label: action };
+
+  writeToLog(`[Truck Control] Action: ${action} -> Dispatching via SCS Input SDK & OPCGameBridge`);
+
+  // 1. Send directly to OPCGameBridge plugin which triggers the SCS Input SDK semantical device!
+  const pluginDispatched = await sendPluginCommand({
+    cmd: 'truck_action',
+    action,
+    vk: binding.vk ? String(binding.vk) : '0',
+    holdMs: '75',
+  });
+
+  if (pluginDispatched) {
+    writeToLog(`[Truck Control] Action ${action} executed directly via SCS Input SDK (semantical.${action})!`);
+    return;
+  }
+
+  // 2. Fallback: If plugin pipe is not active, use SendInput with hardware scancode
+  if (binding.vk) {
+    sendTruckKeyDirect(binding.vk, 75);
+  } else {
+    writeToLog(`[Truck Control] Action ${action} cannot be dispatched via fallback (no keyboard key bound)`);
+  }
+}
+
 let lastCarPlayHotkeys: Record<string, string> = {};
 
 function unregisterCarPlayHotkeys() {
@@ -3212,6 +3562,101 @@ function unregisterCarPlayHotkeys() {
   lastCarPlayHotkeys = {};
 }
 
+function getEts2RadioAccelerators(): { next: string[]; prev: string[]; volUp: string[]; volDown: string[] } {
+  const result = {
+    next: ['Control+PageDown', 'Control+['],
+    prev: ['Control+PageUp', 'Control+\''],
+    volUp: ['Control+]', 'Control+PageUp', 'Control++'],
+    volDown: ['Control+\\', 'Control+PageDown', 'Control+-']
+  };
+
+  try {
+    const userDocs = app.getPath('documents');
+    const etsPaths = [
+      path.join(userDocs, 'Euro Truck Simulator 2'),
+      path.join(userDocs, 'American Truck Simulator'),
+      ...(process.env.USERPROFILE ? [
+        path.join(process.env.USERPROFILE, 'Documents', 'Euro Truck Simulator 2'),
+        path.join(process.env.USERPROFILE, 'Documents', 'American Truck Simulator'),
+        path.join(process.env.USERPROFILE, 'OneDrive', 'Dokumente', 'Euro Truck Simulator 2'),
+        path.join(process.env.USERPROFILE, 'OneDrive', 'Documents', 'Euro Truck Simulator 2'),
+      ] : [])
+    ];
+
+    let newestFile: { file: string; mtime: number } | null = null;
+    for (const basePath of etsPaths) {
+      for (const sub of ['steam_profiles', 'profiles']) {
+        const p = path.join(basePath, sub);
+        if (fs.existsSync(p)) {
+          for (const dir of fs.readdirSync(p)) {
+            const ctrl = path.join(p, dir, 'controls.sii');
+            if (fs.existsSync(ctrl)) {
+              const mtime = fs.statSync(ctrl).mtimeMs;
+              if (!newestFile || mtime > newestFile.mtime) {
+                newestFile = { file: ctrl, mtime };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (newestFile) {
+      const content = fs.readFileSync(newestFile.file, 'utf8');
+      const scsToElectronKey: Record<string, string> = {
+        'keyboard.pgdn': 'PageDown',
+        'keyboard.pgup': 'PageUp',
+        'keyboard.lbracket': '[',
+        'keyboard.rbracket': ']',
+        'keyboard.apostrophe': '\'',
+        'keyboard.bslash': '\\',
+        'keyboard.slash': '/',
+        'keyboard.semicolon': ';',
+        'keyboard.equal': '=',
+        'keyboard.minus': '-',
+        'keyboard.home': 'Home',
+        'keyboard.end': 'End',
+        'keyboard.insert': 'Insert',
+        'keyboard.delete': 'Delete'
+      };
+
+      const parseMix = (mixName: string): string[] => {
+        const re = new RegExp(`mix\\s+${mixName}\\s+\`([^\`]+)\``, 'i');
+        const m = content.match(re);
+        if (!m || !m[1]) return [];
+        const tokens = m[1].split('|').map(t => t.trim().split('?')[0]);
+        const keys: string[] = [];
+        for (const tok of tokens) {
+          const mapped = scsToElectronKey[tok.toLowerCase()];
+          if (mapped) keys.push(`Control+${mapped}`);
+          else if (tok.startsWith('keyboard.')) {
+            const rawKey = tok.replace(/^keyboard\./, '');
+            if (rawKey.length === 1 && /[a-z0-9]/i.test(rawKey)) {
+              keys.push(`Control+${rawKey.toUpperCase()}`);
+            }
+          }
+        }
+        return keys;
+      };
+
+      const customNext = parseMix('radionext');
+      const customPrev = parseMix('radioprev');
+      const customVolUp = parseMix('radioup');
+      const customVolDown = parseMix('radiodown');
+
+      if (customNext.length > 0) result.next = Array.from(new Set([...customNext, ...result.next]));
+      if (customPrev.length > 0) result.prev = Array.from(new Set([...customPrev, ...result.prev]));
+      if (customVolUp.length > 0) result.volUp = Array.from(new Set([...customVolUp, ...result.volUp]));
+      if (customVolDown.length > 0) result.volDown = Array.from(new Set([...customVolDown, ...result.volDown]));
+      writeToLog(`[ETS2 Controls Synced] Next: ${result.next.join(', ')} | Prev: ${result.prev.join(', ')} | VolUp: ${result.volUp.join(', ')} | VolDown: ${result.volDown.join(', ')}`);
+    }
+  } catch (err) {
+    writeToLog(`[Controls.sii Parser] Error: ${err}`);
+  }
+
+  return result;
+}
+
 function registerCarPlayHotkeys() {
   unregisterCarPlayHotkeys();
 
@@ -3223,6 +3668,9 @@ function registerCarPlayHotkeys() {
     prev: 'Ctrl+Alt+Left',
     home: 'Ctrl+Alt+H',
     playPause: 'Ctrl+Alt+Space',
+    volumeUp: 'Ctrl+Alt+PageUp',
+    volumeDown: 'Ctrl+Alt+PageDown',
+    volumeMute: 'Ctrl+Alt+M',
     navUp: 'Ctrl+Alt+Up',
     navDown: 'Ctrl+Alt+Down',
     navLeft: 'Ctrl+Alt+Left',
@@ -3241,6 +3689,29 @@ function registerCarPlayHotkeys() {
       writeToLog(`Failed to register hotkey ${keyName} (${accelerator}): ${err}`);
     }
   };
+
+  // Synchronize ETS2 in-game radio keys with Control modifier (e.g. Ctrl + [, Ctrl + ', Ctrl + ], Ctrl + \)
+  const etsHotkeys = getEts2RadioAccelerators();
+  etsHotkeys.next.forEach((acc, idx) => {
+    registerSafe(`ets_radio_next_${idx}`, acc, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'radio-next');
+    });
+  });
+  etsHotkeys.prev.forEach((acc, idx) => {
+    registerSafe(`ets_radio_prev_${idx}`, acc, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'radio-prev');
+    });
+  });
+  etsHotkeys.volUp.forEach((acc, idx) => {
+    registerSafe(`ets_radio_volup_${idx}`, acc, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'volume-up');
+    });
+  });
+  etsHotkeys.volDown.forEach((acc, idx) => {
+    registerSafe(`ets_radio_voldown_${idx}`, acc, () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'volume-down');
+    });
+  });
 
   if (isCarPlayMode) {
     // Registrations for the CarPlay overlay window itself
@@ -3261,6 +3732,21 @@ function registerCarPlayHotkeys() {
     });
     registerSafe('playPause', keys.playPause, () => {
       sendMediaKey(0xB3);
+    });
+    registerSafe('volumeUp', keys.volumeUp || 'Ctrl+Alt+PageUp', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'volume-up');
+      }
+    });
+    registerSafe('volumeDown', keys.volumeDown || 'Ctrl+Alt+PageDown', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'volume-down');
+      }
+    });
+    registerSafe('volumeMute', keys.volumeMute || 'Ctrl+Alt+M', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) {
+        carplayWin.webContents.send('carplay-action', 'volume-mute');
+      }
     });
     registerSafe('navUp', keys.navUp || 'Ctrl+Alt+Up', () => {
       if (carplayWin && !carplayWin.isDestroyed()) {
@@ -3307,6 +3793,15 @@ function registerCarPlayHotkeys() {
     });
     registerSafe('playPause', keys.playPause, () => {
       sendMediaKey(0xB3);
+    });
+    registerSafe('volumeUp', keys.volumeUp || 'Ctrl+Alt+PageUp', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'volume-up');
+    });
+    registerSafe('volumeDown', keys.volumeDown || 'Ctrl+Alt+PageDown', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'volume-down');
+    });
+    registerSafe('volumeMute', keys.volumeMute || 'Ctrl+Alt+M', () => {
+      if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'volume-mute');
     });
     registerSafe('navUp', keys.navUp || 'Ctrl+Alt+Up', () => {
       if (carplayWin && !carplayWin.isDestroyed()) carplayWin.webContents.send('carplay-action', 'up');
@@ -3507,6 +4002,19 @@ ipcMain.on('carplay-media-control', (_, action) => {
   } else if (action === 'prev') {
     sendMediaKey(0xB1);
   }
+});
+
+ipcMain.handle('truck-control-action', async (_, action) => {
+  if (action) handleTruckAction(action);
+  return { success: true };
+});
+
+ipcMain.on('truck-control-action', (_, action) => {
+  if (action) handleTruckAction(action);
+});
+
+ipcMain.handle('get-truck-bindings', () => {
+  return getEts2TruckKeyBindings();
 });
 
 ipcMain.on('overlay-settings-changed', (_, settings) => {
@@ -4380,6 +4888,33 @@ function handleCarPlayHttpRequest(req: http.IncomingMessage, res: http.ServerRes
         res.end(JSON.stringify({ success: false, error: err.message }));
       }
     });
+    return;
+  }
+
+  // 5b. Truck control action (POST)
+  if (urlPath === '/api/carplay/truck-action' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        if (parsed.action) {
+          handleTruckAction(parsed.action);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, action: parsed.action }));
+      } catch (err: any) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 5c. Get truck bindings (GET)
+  if (urlPath === '/api/carplay/truck-bindings' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, bindings: getEts2TruckKeyBindings() }));
     return;
   }
 

@@ -18438,5 +18438,104 @@
     "cityToken": "alesund",
     "prefabUid": "568952c54c1d0001",
     "nodeUid": "63ae997244066a90"
+  },
+  {
+    "uid": "5005090850913405125",
+    "type": 6,
+    "x": 20627.572265625,
+    "y": -1022.5386352539062,
+    "token": "subse",
+    "cityToken": "truckersmp",
+    "cityName": "TruckersMP HQ",
+    "prefabUid": "4275158907225112577",
+    "nodeUid": "5005090851106343108"
+  },
+  {
+    "uid": "5005090851886483673",
+    "type": 6,
+    "x": 20887.9375,
+    "y": -1219.3203125,
+    "token": "acc",
+    "cityToken": "truckersmp",
+    "cityName": "TruckersMP HQ",
+    "prefabUid": "4276337826221522945",
+    "nodeUid": "5005090849999046872"
+  },
+  {
+    "uid": "5005090853023140027",
+    "type": 6,
+    "x": 21105.8671875,
+    "y": -846.0732421875,
+    "token": "cargotras",
+    "cityToken": "truckersmp",
+    "cityName": "TruckersMP HQ",
+    "prefabUid": "4275152636564471809",
+    "nodeUid": "5005090851567716538"
+  },
+  {
+    "uid": "7070408777000000001",
+    "type": 6,
+    "x": -5911,
+    "y": -1160,
+    "token": "truckline_logistik",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7070408774309117953",
+    "nodeUid": "7070408782806777864"
+  },
+  {
+    "uid": "7070408777370959881",
+    "type": 6,
+    "x": -5841.796875,
+    "y": -1198.71875,
+    "token": "sanbuild_bas",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7070408774309117953",
+    "nodeUid": "7070408782806777864"
+  },
+  {
+    "uid": "7073311853895483398",
+    "type": 6,
+    "x": -6361.71875,
+    "y": -1127.10546875,
+    "token": "euroacres",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7073311848451276801",
+    "nodeUid": "7073311852721078277"
+  },
+  {
+    "uid": "7156030476824608781",
+    "type": 6,
+    "x": -6182.49365234375,
+    "y": -1301.98046875,
+    "token": "ika_bohag",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7156030471011303425",
+    "nodeUid": "7156030479165030412"
+  },
+  {
+    "uid": "7061223474563383308",
+    "type": 6,
+    "x": -8126.44921875,
+    "y": -3209.80078125,
+    "token": "sanbuild_hal",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7061223468842352641",
+    "nodeUid": "7061223479504273419"
+  },
+  {
+    "uid": "7104521696995966983",
+    "type": 6,
+    "x": -5922.03125,
+    "y": -4952.96875,
+    "token": "sanbuild_cem",
+    "cityToken": "tlmphq",
+    "cityName": "Truckline HQ",
+    "prefabUid": "7104521691350433793",
+    "nodeUid": "7104521689521717254"
   }
 ]
